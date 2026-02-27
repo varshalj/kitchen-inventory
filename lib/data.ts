@@ -12,6 +12,10 @@ export interface InventoryItem {
   consumedOn?: string
   wastedOn?: string
   partiallyConsumed?: boolean
+  // Backward-compatible aliases used by some UI components
+  partiallyUsed?: boolean
+  used?: boolean
+  lastUsedOn?: string
   notes?: string
   price?: string
   brand?: string
