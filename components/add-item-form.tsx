@@ -189,23 +189,19 @@ export function AddItemForm() {
         addedOn: new Date().toISOString(),
       })
     } else if (extractedItems.length > 0) {
-      extractedItems
-        .filter((item) => item.decision === "confirmed" || item.decision === "edited")
-        .forEach((item) => {
-          addInventoryItem({
-      for (const item of extractedItems.filter((entry) => entry.selected)) {
+      for (const item of extractedItems.filter((entry) => entry.decision === "confirmed" || entry.decision === "edited")) {
         await addInventoryItem({
-            id: Date.now() + Math.random().toString(),
-            name: item.name,
-            category: item.category,
-            expiryDate: new Date(item.expiryDate).toISOString(),
-            location: formData.location || "Refrigerator",
-            quantity: item.quantity,
-            addedOn: new Date().toISOString(),
-            notes: formData.notes,
-            price: item.price || formData.price,
-            brand: formData.brand,
-            orderedFrom: formData.orderedFrom || undefined,
+          id: Date.now() + Math.random().toString(),
+          name: item.name,
+          category: item.category,
+          expiryDate: new Date(item.expiryDate).toISOString(),
+          location: formData.location || "Refrigerator",
+          quantity: item.quantity,
+          addedOn: new Date().toISOString(),
+          notes: formData.notes,
+          price: item.price || formData.price,
+          brand: formData.brand,
+          orderedFrom: formData.orderedFrom || undefined,
         })
       }
     }

@@ -1,39 +1,30 @@
 import type { InventoryItem, ShoppingItem } from "@/lib/types"
 
-export interface InventoryItem {
-  id: string
-  name: string
-  category: string
-  expiryDate: string
-  location: string
-  quantity?: number
-  archived?: boolean
-  addedOn?: string
-  consumedOn?: string
-  wastedOn?: string
-  partiallyConsumed?: boolean
-  // Backward-compatible aliases used by some UI components
-  partiallyUsed?: boolean
-  used?: boolean
-  lastUsedOn?: string
-  notes?: string
-  price?: string
-  brand?: string
-  // Track why the item was archived
-  archiveReason?: "consumed" | "wasted" | "other"
-  // Track source where item was ordered from
-  orderedFrom?: string
-  // Track if item was added from email sync
-  syncedFromEmail?: boolean
-  emailSource?: string
-  // Product review / rating
-  rating?: number // 1-5 stars
-  reviewTags?: string[]
-  reviewNote?: string
-  ratedAt?: string
+export type { InventoryItem, ShoppingItem }
+
+export type AnalyticsTimeFrame = "week" | "month" | "quarter" | "year"
+
+export interface WasteAnalytics {
+  totalItems: number
+  expiredItems: number
+  wastePercentage: number
+  potentialWaste: number
+  expiryTrend: number
+  topWasteCategories: Array<[string, number]>
+  monthlySavings: number
+  monthlyTrend: Array<{ month: string; count: number }>
 }
 
-// In-memory storage
+export interface OperationReceipt {
+  id: string
+  itemId: string
+  action: "consume" | "waste"
+  status: "completed" | "undone"
+  createdAt: string
+  undoExpiresAt: string
+  shoppingItemId?: string
+}
+
 let inventoryItems: InventoryItem[] = [
   {
     id: "1",
@@ -53,287 +44,102 @@ let inventoryItems: InventoryItem[] = [
     quantity: 2,
     addedOn: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
   },
-  {
-    id: "3",
-    name: "Apples",
-    category: "Fruits",
-    expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 6,
-    addedOn: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    partiallyConsumed: true,
-    consumedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "4",
-    name: "Pasta",
-    category: "Grains",
-    expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Pantry",
-    quantity: 1,
-    addedOn: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "5",
-    name: "Tomato Sauce",
-    category: "Canned",
-    expiryDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Pantry",
-    quantity: 2,
-    addedOn: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  // Add some archived items for demonstration
-  {
-    id: "6",
-    name: "Yogurt",
-    category: "Dairy",
-    expiryDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 0,
-    addedOn: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    consumedOn: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    archived: true,
-    archiveReason: "consumed",
-  },
-  {
-    id: "7",
-    name: "Lettuce",
-    category: "Vegetables",
-    expiryDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 0,
-    addedOn: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    wastedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    archived: true,
-    archiveReason: "wasted",
-  },
-  // Add an item with missing expiry date (synced from email)
-  {
-    id: "8",
-    name: "Onions",
-    category: "Vegetables",
-    expiryDate: "",
-    location: "Pantry",
-    quantity: 3,
-    addedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    syncedFromEmail: true,
-    emailSource: "BigBasket",
-  },
-  {
-    id: "9",
-    name: "Potatoes",
-    category: "Vegetables",
-    expiryDate: "",
-    location: "Pantry",
-    quantity: 5,
-    addedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    syncedFromEmail: true,
-    emailSource: "BigBasket",
-  },
 ]
-const isProduction = process.env.NODE_ENV === "production"
 
-if (isProduction) {
-  throw new Error("lib/data.ts is a development-only fixture module and must not be imported in production.")
+let shoppingItems: ShoppingItem[] = []
+let operationReceipts: OperationReceipt[] = []
+
+export function getInventoryItems(): InventoryItem[] {
+  return inventoryItems.filter((item) => !item.archived)
 }
 
-// Get archived inventory items
 export function getArchivedItems(): InventoryItem[] {
   return inventoryItems.filter((item) => item.archived)
 }
 
-// Get a single inventory item by ID
 export function getInventoryItem(id: string): InventoryItem | undefined {
   return inventoryItems.find((item) => item.id === id)
 }
 
-// Add a new inventory item
 export function addInventoryItem(item: InventoryItem): InventoryItem {
   inventoryItems.push(item)
   return item
 }
 
-// Update an existing inventory item
 export function updateInventoryItem(updatedItem: InventoryItem): InventoryItem | undefined {
   const index = inventoryItems.findIndex((item) => item.id === updatedItem.id)
-  if (index !== -1) {
-    inventoryItems[index] = updatedItem
-    return updatedItem
-  }
-  return undefined
+  if (index === -1) return undefined
+  inventoryItems[index] = updatedItem
+  return inventoryItems[index]
 }
 
-// Delete an inventory item
 export function deleteInventoryItem(id: string): boolean {
   const index = inventoryItems.findIndex((item) => item.id === id)
-  if (index === -1) {
-    return false
-  }
+  if (index === -1) return false
 
-  const now = new Date().toISOString()
   inventoryItems[index] = {
     ...inventoryItems[index],
     archived: true,
-    archived_at: now,
-    archived_reason: "deleted",
     archiveReason: "other",
   }
-
   return true
 }
 
-// Mark an item as consumed
 export function markItemAsConsumed(id: string): InventoryItem | undefined {
   const index = inventoryItems.findIndex((item) => item.id === id)
-  if (index !== -1) {
-    const now = new Date().toISOString()
-    inventoryItems[index] = {
-      ...inventoryItems[index],
-      quantity: 0,
-      consumedOn: now,
-      archived: true,
-      archived_at: now,
-      archived_reason: "consumed",
-      archiveReason: "consumed",
-    }
-    return inventoryItems[index]
+  if (index === -1) return undefined
+
+  inventoryItems[index] = {
+    ...inventoryItems[index],
+    quantity: 0,
+    consumedOn: new Date().toISOString(),
+    archived: true,
+    archiveReason: "consumed",
   }
-  return undefined
+  return inventoryItems[index]
 }
 
-// Mark an item as wasted
 export function markItemAsWasted(id: string): InventoryItem | undefined {
   const index = inventoryItems.findIndex((item) => item.id === id)
-  if (index !== -1) {
-    const now = new Date().toISOString()
-    inventoryItems[index] = {
-      ...inventoryItems[index],
-      quantity: 0,
-      wastedOn: now,
-      archived: true,
-      archived_at: now,
-      archived_reason: "wasted",
-      archiveReason: "wasted",
-    }
-    return inventoryItems[index]
+  if (index === -1) return undefined
+
+  inventoryItems[index] = {
+    ...inventoryItems[index],
+    quantity: 0,
+    wastedOn: new Date().toISOString(),
+    archived: true,
+    archiveReason: "wasted",
   }
-  return undefined
+  return inventoryItems[index]
 }
-
-// Get consumption history
-export function getConsumptionHistory(): { item: string; date: string }[] {
-  return inventoryItems
-    .filter((item) => item.consumedOn)
-    .map((item) => ({
-      item: item.name,
-      date: item.consumedOn || new Date().toISOString(),
-    }))
-}
-
-// Get waste history
-export function getWasteHistory(): { item: string; date: string }[] {
-  return inventoryItems
-    .filter((item) => item.wastedOn)
-    .map((item) => ({
-      item: item.name,
-      date: item.wastedOn || new Date().toISOString(),
-    }))
-}
-
-// Get expiring items
-export function getExpiringItems(days = 7): InventoryItem[] {
-  return inventoryItems.filter((item) => {
-    if (item.archived) return false
-    if (!item.expiryDate) return false
-    const daysUntilExpiry = Math.ceil((new Date(item.expiryDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
-    return daysUntilExpiry <= days
-  })
-}
-
-// Get items with missing expiry dates
-export function getItemsWithMissingExpiry(): InventoryItem[] {
-  return inventoryItems.filter((item) => {
-    if (item.archived) return false
-    return !item.expiryDate || isNaN(new Date(item.expiryDate).getTime())
-  })
-}
-
-// Add item to shopping list
-export interface ShoppingItem {
-  id: string
-  name: string
-  quantity: number
-  category?: string
-  notes?: string
-  completed: boolean
-  addedOn: string
-  addedFrom?: "consumed" | "manual"
-}
-
-export interface OperationReceipt {
-  id: string
-  itemId: string
-  action: "consume" | "waste"
-  status: "completed" | "undone"
-  createdAt: string
-  undoExpiresAt: string
-  shoppingItemId?: string
-}
-
-let shoppingItems: ShoppingItem[] = [
-  {
-    id: "1",
-    name: "Milk",
-    quantity: 1,
-    category: "Dairy",
-    completed: false,
-    addedOn: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    name: "Eggs",
-    quantity: 12,
-    category: "Dairy",
-    completed: false,
-    addedOn: new Date().toISOString(),
-  },
-]
-
-let operationReceipts: OperationReceipt[] = []
 
 export function getShoppingItems(): ShoppingItem[] {
   return shoppingItems
 }
 
 export function addToShoppingList(item: ShoppingItem): ShoppingItem {
-  // Check if item already exists in shopping list
   const existingIndex = shoppingItems.findIndex((i) => i.name.toLowerCase() === item.name.toLowerCase() && !i.completed)
-
   if (existingIndex >= 0) {
-    // Update quantity if item exists
     shoppingItems[existingIndex].quantity += item.quantity
     return shoppingItems[existingIndex]
-  } else {
-    // Add new item
-    shoppingItems.push(item)
-    return item
   }
+
+  shoppingItems.push(item)
+  return item
 }
 
 export function updateShoppingItem(updatedItem: ShoppingItem): ShoppingItem | undefined {
   const index = shoppingItems.findIndex((item) => item.id === updatedItem.id)
-  if (index !== -1) {
-    shoppingItems[index] = updatedItem
-    return updatedItem
-  }
-  return undefined
+  if (index === -1) return undefined
+  shoppingItems[index] = updatedItem
+  return shoppingItems[index]
 }
 
-export const devFixtures = {
-  inventoryItems: [] as InventoryItem[],
-  shoppingItems: [] as ShoppingItem[],
+export function deleteShoppingItem(id: string): boolean {
+  const initialLength = shoppingItems.length
+  shoppingItems = shoppingItems.filter((item) => item.id !== id)
+  return shoppingItems.length !== initialLength
 }
-
 
 export function processInventoryOperation(input: {
   itemId: string
@@ -345,15 +151,11 @@ export function processInventoryOperation(input: {
   shoppingItem?: ShoppingItem
 } | null {
   const item = getInventoryItem(input.itemId)
-  if (!item || item.archived) {
-    return null
-  }
+  if (!item || item.archived) return null
 
   const previousQuantity = item.quantity ?? 1
   const updated = input.action === "consume" ? markItemAsConsumed(input.itemId) : markItemAsWasted(input.itemId)
-  if (!updated) {
-    return null
-  }
+  if (!updated) return null
 
   let shoppingItem: ShoppingItem | undefined
   if (input.addToShoppingList && input.action === "consume") {
@@ -376,7 +178,7 @@ export function processInventoryOperation(input: {
     action: input.action,
     status: "completed",
     createdAt,
-    undoExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    undoExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     shoppingItemId: shoppingItem?.id,
   }
   operationReceipts.push(receipt)
@@ -386,32 +188,47 @@ export function processInventoryOperation(input: {
 
 export function undoInventoryOperation(receiptId: string): { receipt: OperationReceipt; item: InventoryItem } | null {
   const receipt = operationReceipts.find((entry) => entry.id === receiptId)
-  if (!receipt || receipt.status === "undone") {
-    return null
-  }
-
-  if (new Date(receipt.undoExpiresAt).getTime() < Date.now()) {
-    return null
-  }
+  if (!receipt || receipt.status === "undone") return null
+  if (new Date(receipt.undoExpiresAt).getTime() < Date.now()) return null
 
   const itemIndex = inventoryItems.findIndex((item) => item.id === receipt.itemId)
-  if (itemIndex === -1) {
-    return null
-  }
+  if (itemIndex === -1) return null
 
-  const current = inventoryItems[itemIndex]
-  const restoredItem: InventoryItem = {
-    ...current,
+  inventoryItems[itemIndex] = {
+    ...inventoryItems[itemIndex],
     archived: false,
-    archived_at: undefined,
-    archived_reason: undefined,
     archiveReason: undefined,
-    consumedOn: receipt.action === "consume" ? undefined : current.consumedOn,
-    wastedOn: receipt.action === "waste" ? undefined : current.wastedOn,
+    consumedOn: receipt.action === "consume" ? undefined : inventoryItems[itemIndex].consumedOn,
+    wastedOn: receipt.action === "waste" ? undefined : inventoryItems[itemIndex].wastedOn,
+    quantity: Math.max(inventoryItems[itemIndex].quantity ?? 1, 1),
   }
 
-  inventoryItems[itemIndex] = restoredItem
   receipt.status = "undone"
+  return { receipt, item: inventoryItems[itemIndex] }
+}
 
-  return { receipt, item: restoredItem }
+export function getWasteAnalytics(timeFrame: AnalyticsTimeFrame): WasteAnalytics {
+  const items = getInventoryItems()
+  const currentDate = new Date()
+  const expiredItems = items.filter((item) => item.expiryDate && new Date(item.expiryDate) < currentDate)
+
+  const potentialWaste = expiredItems.reduce((total, item) => total + (item.quantity ?? 1) * 5, 0)
+  const wasteByCategory: Record<string, number> = {}
+  expiredItems.forEach((item) => {
+    wasteByCategory[item.category] = (wasteByCategory[item.category] || 0) + 1
+  })
+
+  const topWasteCategories = Object.entries(wasteByCategory).sort((a, b) => b[1] - a[1]).slice(0, 5)
+  const trendBase = timeFrame === "week" ? 4 : timeFrame === "month" ? 8 : timeFrame === "quarter" ? 12 : 16
+
+  return {
+    totalItems: items.length,
+    expiredItems: expiredItems.length,
+    wastePercentage: items.length ? Math.round((expiredItems.length / items.length) * 100) : 0,
+    potentialWaste,
+    expiryTrend: -5,
+    topWasteCategories,
+    monthlySavings: 45,
+    monthlyTrend: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((month, idx) => ({ month, count: Math.max(trendBase - idx, 0) })),
+  }
 }

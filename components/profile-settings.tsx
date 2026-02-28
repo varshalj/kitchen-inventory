@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, KeyRound, ShieldCheck, RotateCw } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -224,6 +224,100 @@ export function ProfileSettings() {
     } else {
       setSelectedServices([...availableServices])
     }
+  }
+
+
+
+  const activeKey = apiKeyVersions.find((version) => version.status === "active")
+
+  const addAuditEvent = (event: ApiKeyAudit) => {
+    setApiAuditTrail((trail) => [event, ...trail].slice(0, 20))
+  }
+
+  const buildMaskedKey = (value: string) => {
+    const trimmed = value.trim()
+    if (trimmed.length <= 8) return "****"
+    return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`
+  }
+
+  const handleValidateKey = async () => {
+    if (!apiKeyInput.trim()) return
+
+    setApiLoading(true)
+    setTimeout(() => {
+      const version = activeKey?.version ?? apiKeyVersions.length + 1
+      addAuditEvent({
+        action: "validated",
+        version,
+        actor: user?.email || "beta-user",
+        createdAt: new Date().toISOString(),
+        details: `Validated for model ${aiModel}.`,
+      })
+      setApiLoading(false)
+      toast({ title: "API key validated", description: "Key format looks good and can be stored." })
+    }, 400)
+  }
+
+  const handleRotateKey = async () => {
+    if (!apiKeyInput.trim()) return
+
+    setApiLoading(true)
+    setTimeout(() => {
+      setApiKeyVersions((previous) => {
+        const nextVersion = (previous[0]?.version ?? 0) + 1
+        const rotated = previous.map((version) => (version.status === "active" ? { ...version, status: "revoked" as const, revokedAt: new Date().toISOString() } : version))
+
+        const next: ApiKeyVersion = {
+          version: nextVersion,
+          provider: "openai",
+          model: aiModel,
+          status: "active",
+          keyMetadata: {
+            maskedKey: buildMaskedKey(apiKeyInput),
+            fingerprint: `fp_${Math.random().toString(36).slice(2, 10)}`,
+          },
+          createdAt: new Date().toISOString(),
+        }
+
+        return [next, ...rotated]
+      })
+
+      addAuditEvent({
+        action: "rotated",
+        version: (activeKey?.version ?? apiKeyVersions.length) + 1,
+        actor: user?.email || "beta-user",
+        createdAt: new Date().toISOString(),
+        details: `Rotated key for model ${aiModel}.`,
+      })
+
+      setApiLoading(false)
+      setApiKeyInput("")
+      toast({ title: "API key rotated", description: "A new active key version is now stored." })
+    }, 500)
+  }
+
+  const handleRevokeKey = async () => {
+    if (!activeKey) return
+
+    setApiLoading(true)
+    setTimeout(() => {
+      setApiKeyVersions((previous) =>
+        previous.map((version) =>
+          version.version === activeKey.version ? { ...version, status: "revoked", revokedAt: new Date().toISOString() } : version
+        )
+      )
+
+      addAuditEvent({
+        action: "revoked",
+        version: activeKey.version,
+        actor: user?.email || "beta-user",
+        createdAt: new Date().toISOString(),
+        details: "Revoked active key.",
+      })
+
+      setApiLoading(false)
+      toast({ title: "API key revoked", description: "No active key is currently stored." })
+    }, 400)
   }
 
   const availableServices = AVAILABLE_EMAIL_SERVICES

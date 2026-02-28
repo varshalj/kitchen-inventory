@@ -44,7 +44,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
 
     // Get frequently used items (based on usage history)
     // In a real app, this would be based on actual usage patterns
-    const frequentlyUsedItems = items.filter((item) => item.lastUsedAt || item.partiallyConsumedAt).slice(0, 3)
+    const frequentlyUsedItems = items.filter((item) => item.lastUsedOn || item.partiallyConsumed).slice(0, 3)
 
     // Generate shopping list suggestions
     // This would be more sophisticated in a real app
@@ -83,7 +83,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
     }
   }, [items])
 
-  const handleAddToInventory = (suggestion: ShoppingListSuggestion) => {
+  const handleAddToInventory = async (suggestion: ShoppingListSuggestion) => {
     const newItem: InventoryItem = {
       id: Date.now().toString(),
       name: suggestion.name,
