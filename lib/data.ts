@@ -1,33 +1,7 @@
 // This file simulates a database for the kitchen inventory app
 
-export interface InventoryItem {
-  id: string
-  name: string
-  category: string
-  expiryDate: string
-  location: string
-  quantity?: number
-  archived?: boolean
-  addedOn?: string
-  consumedOn?: string
-  wastedOn?: string
-  partiallyConsumed?: boolean
-  notes?: string
-  price?: string
-  brand?: string
-  // Track why the item was archived
-  archiveReason?: "consumed" | "wasted" | "other"
-  // Track source where item was ordered from
-  orderedFrom?: string
-  // Track if item was added from email sync
-  syncedFromEmail?: boolean
-  emailSource?: string
-  // Product review / rating
-  rating?: number // 1-5 stars
-  reviewTags?: string[]
-  reviewNote?: string
-  ratedAt?: string
-}
+import type { InventoryItem } from "@/lib/domain/inventory"
+export type { InventoryItem } from "@/lib/domain/inventory"
 
 // In-memory storage
 let inventoryItems: InventoryItem[] = [
