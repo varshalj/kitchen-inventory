@@ -4,7 +4,7 @@ DO $$
 DECLARE
   tbl text;
 BEGIN
-  FOREACH tbl IN ARRAY ARRAY['items', 'shopping_items', 'ai_interactions', 'user_ai_settings'] LOOP
+  FOREACH tbl IN ARRAY ARRAY['inventory_items', 'shopping_items', 'ai_interactions', 'user_ai_settings'] LOOP
     EXECUTE format('ALTER TABLE IF EXISTS public.%I ADD COLUMN IF NOT EXISTS user_id uuid', tbl);
 
     IF EXISTS (
