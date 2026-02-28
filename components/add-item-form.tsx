@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { MainLayout } from "@/components/main-layout"
-import { addInventoryItem } from "@/lib/data"
+import { addInventoryItem } from "@/lib/client/api"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { QuantityInput } from "@/components/quantity-input"
 import { CurrencyInput } from "@/components/currency-input"
@@ -179,11 +179,11 @@ export function AddItemForm() {
     reader.readAsDataURL(file)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (activeTab === "manual") {
-      addInventoryItem({
+      await addInventoryItem({
         id: Date.now().toString(),
         ...formData,
         addedOn: new Date().toISOString(),
@@ -193,6 +193,8 @@ export function AddItemForm() {
         .filter((item) => item.decision === "confirmed" || item.decision === "edited")
         .forEach((item) => {
           addInventoryItem({
+      for (const item of extractedItems.filter((entry) => entry.selected)) {
+        await addInventoryItem({
             id: Date.now() + Math.random().toString(),
             name: item.name,
             category: item.category,
@@ -204,8 +206,8 @@ export function AddItemForm() {
             price: item.price || formData.price,
             brand: formData.brand,
             orderedFrom: formData.orderedFrom || undefined,
-          })
         })
+      }
     }
 
     router.push("/dashboard")
@@ -282,8 +284,8 @@ export function AddItemForm() {
     },
   ]
 
-  const handleAddSuggestedItem = (item: (typeof suggestedItems)[0]) => {
-    addInventoryItem({
+  const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
+    await addInventoryItem({
       id: Date.now().toString(),
       name: item.name,
       category: item.category,
