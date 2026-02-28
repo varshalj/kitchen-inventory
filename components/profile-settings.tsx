@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
 import { useUserSettings } from "@/hooks/use-user-settings"
-import { getArchivedItems, getInventoryItems } from "@/lib/data"
+import { getArchivedItems, getInventoryItems } from "@/lib/client/api"
 import { Input } from "@/components/ui/input"
 import {
   Dialog,
@@ -58,13 +58,16 @@ export function ProfileSettings() {
   const [confirmRemove, setConfirmRemove] = useState<{ type: "source" | "location"; value: string; affectedCount: number } | null>(null)
 
   useEffect(() => {
-    if (settings) {
-      setExpiryReminders(settings.notifications)
+    const load = async () => {
+      if (settings) {
+        setExpiryReminders(settings.notifications)
+      }
+
+      const archivedItems = await getArchivedItems()
+      setArchivedItemsCount(archivedItems.length)
     }
 
-    // Get count of archived items
-    const archivedItems = getArchivedItems()
-    setArchivedItemsCount(archivedItems.length)
+    void load()
   }, [settings])
 
   const handleCurrencyChange = (value: string) => {
@@ -84,8 +87,8 @@ export function ProfileSettings() {
     toast({ title: "Source Added", description: `"${trimmed}" has been added to your order sources.` })
   }
 
-  const handleRemoveSource = (source: string) => {
-    const items = getInventoryItems()
+  const handleRemoveSource = async (source: string) => {
+    const items = await getInventoryItems()
     const affectedCount = items.filter((i) => i.orderedFrom === source).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "source", value: source, affectedCount })
@@ -114,8 +117,8 @@ export function ProfileSettings() {
     toast({ title: "Location Added", description: `"${trimmed}" has been added to your storage locations.` })
   }
 
-  const handleRemoveLocation = (location: string) => {
-    const items = getInventoryItems()
+  const handleRemoveLocation = async (location: string) => {
+    const items = await getInventoryItems()
     const affectedCount = items.filter((i) => i.location === location).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "location", value: location, affectedCount })

@@ -1,18 +1,23 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { BarChart2, DollarSign, BarChart, PieChart, TrendingDown, AlertTriangle, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
-import { getInventoryItems } from "@/lib/data"
+import { getInventoryItems } from "@/lib/client/api"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export function WasteAnalytics() {
   const [timeFrame, setTimeFrame] = useState("month")
-  const items = useMemo(() => getInventoryItems(), [])
+  const [items, setItems] = useState<any[]>([])
+
+  useEffect(() => {
+    const load = async () => setItems(await getInventoryItems())
+    void load()
+  }, [])
   const [activeTab, setActiveTab] = useState("overview")
 
   // In a real app, these would be calculated from actual usage data
