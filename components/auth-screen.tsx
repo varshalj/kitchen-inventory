@@ -5,81 +5,21 @@ import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/main-layout"
-import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase"
+import { useAuthUser } from "@/hooks/use-auth-user"
 
 export function AuthScreen() {
-  const searchParams = useSearchParams()
-  const [email, setEmail] = useState("")
-  const [isLoadingEmail, setIsLoadingEmail] = useState(false)
-  const [isLoadingGoogle, setIsLoadingGoogle] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+  const { signIn } = useAuthUser()
 
   const nextPath = searchParams.get("next")
 
-  const buildCallbackPath = () => {
-    const suffix = nextPath?.startsWith("/") ? `?next=${encodeURIComponent(nextPath)}` : ""
-    return `${window.location.origin}/auth/callback${suffix}`
-  }
-
-  const handleMagicLinkSignIn = async () => {
-    if (!email) {
-      setError("Enter your email to continue.")
-      return
-    }
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      setError("Authentication is not configured. Add Supabase environment variables.")
-      return
-    }
-
-    setIsLoadingEmail(true)
-    setError(null)
-    setMessage(null)
-
-    try {
-      const response = await fetch(`${supabaseUrl}/auth/v1/otp`, {
-        method: "POST",
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${supabaseAnonKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email,
-          create_user: true,
-          options: {
-            emailRedirectTo: buildCallbackPath(),
-          },
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to send magic link.")
-      }
-
-      setMessage("Check your email for the sign-in link.")
-    } catch {
-      setError("Could not send magic link. Please try again.")
-    } finally {
-      setIsLoadingEmail(false)
-    }
-  }
-
-  const handleGoogleSignIn = async () => {
-    if (!supabaseUrl || !supabaseAnonKey) {
-      setError("Authentication is not configured. Add Supabase environment variables.")
-      return
-    }
-
-    setIsLoadingGoogle(true)
-    setError(null)
-
-    const oauthUrl = new URL(`${supabaseUrl}/auth/v1/authorize`)
-    oauthUrl.searchParams.set("provider", "google")
-    oauthUrl.searchParams.set("redirect_to", buildCallbackPath())
-
-    window.location.href = oauthUrl.toString()
+    // Simulate authentication
+    setTimeout(() => {
+      signIn()
+      setIsLoading(false)
+      router.push("/dashboard")
+    }, 1500)
   }
 
   return (
