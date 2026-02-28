@@ -15,12 +15,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { MainLayout } from "@/components/main-layout"
-import { addInventoryItem } from "@/lib/data"
+import { addInventoryItem } from "@/lib/client/api"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { QuantityInput } from "@/components/quantity-input"
 import { CurrencyInput } from "@/components/currency-input"
 
 type DetectedType = "receipt" | "food" | "package" | null
+type ReviewDecision = "pending" | "confirmed" | "edited" | "rejected"
+type ProposalResponse = {
+  proposals: Array<{
+    name: string
+    category: string
+    expiryDate: string
+    quantity: number
+    price?: string
+  }>
+  confidence: number
+  reasoning: string
+  confidenceThreshold: number
+  canBulkApply: boolean
+}
 
 export function AddItemForm() {
   const router = useRouter()
@@ -39,11 +53,13 @@ export function AddItemForm() {
       category: string
       expiryDate: string
       quantity: number
-      selected: boolean
       confidence: number
       price?: string
+      decision: ReviewDecision
     }>
   >([])
+  const [reviewSummary, setReviewSummary] = useState<{ confidence: number; threshold: number; reasoning: string } | null>(null)
+  const [scanError, setScanError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     name: "",
@@ -99,6 +115,7 @@ export function AddItemForm() {
       setIsAnalyzing(true)
       setAnalyzeStep(0)
       setDetectedType(null)
+      setScanError(null)
 
       // Simulate multi-step AI analysis
       const stepDuration = 700
@@ -111,38 +128,45 @@ export function AddItemForm() {
         setDetectedType(isReceipt ? "receipt" : "food")
       }, stepDuration * 2)
       const timer3 = setTimeout(() => setAnalyzeStep(3), stepDuration * 3)
-      const timer4 = setTimeout(() => {
+      const timer4 = setTimeout(async () => {
         setIsAnalyzing(false)
 
-        setExtractedItems([
-          {
-            name: "Organic Milk",
-            category: "Dairy",
-            expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-            quantity: 1,
-            selected: true,
-            confidence: 0.95,
-            price: "65",
-          },
-          {
-            name: "Eggs (12 pack)",
-            category: "Dairy",
-            expiryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-            quantity: 1,
-            selected: true,
-            confidence: 0.87,
-            price: "89",
-          },
-          {
-            name: "Whole Wheat Bread",
-            category: "Grains",
-            expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-            quantity: 1,
-            selected: true,
-            confidence: 0.92,
-            price: "45",
-          },
-        ])
+        try {
+          const response = await fetch("/api/ai/propose-items", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              userId: "demo-user",
+              userInput: "Extract inventory items from the uploaded grocery image.",
+            }),
+          })
+
+          if (!response.ok) {
+            throw new Error("AI proposal request failed")
+          }
+
+          const payload = (await response.json()) as ProposalResponse
+
+          setExtractedItems(
+            payload.proposals.map((proposal) => ({
+              ...proposal,
+              confidence: payload.confidence,
+              decision: "pending",
+            }))
+          )
+
+          setReviewSummary({
+            confidence: payload.confidence,
+            threshold: payload.confidenceThreshold,
+            reasoning: payload.reasoning,
+          })
+        } catch {
+          setScanError("Could not generate AI proposals. Please try again.")
+          setExtractedItems([])
+          setReviewSummary(null)
+        }
       }, stepDuration * 4)
 
       return () => {
@@ -155,20 +179,22 @@ export function AddItemForm() {
     reader.readAsDataURL(file)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (activeTab === "manual") {
-      addInventoryItem({
+      await addInventoryItem({
         id: Date.now().toString(),
         ...formData,
         addedOn: new Date().toISOString(),
       })
     } else if (extractedItems.length > 0) {
       extractedItems
-        .filter((item) => item.selected)
+        .filter((item) => item.decision === "confirmed" || item.decision === "edited")
         .forEach((item) => {
           addInventoryItem({
+      for (const item of extractedItems.filter((entry) => entry.selected)) {
+        await addInventoryItem({
             id: Date.now() + Math.random().toString(),
             name: item.name,
             category: item.category,
@@ -180,19 +206,29 @@ export function AddItemForm() {
             price: item.price || formData.price,
             brand: formData.brand,
             orderedFrom: formData.orderedFrom || undefined,
-          })
         })
+      }
     }
 
     router.push("/dashboard")
   }
 
-  const toggleItemSelection = (index: number) => {
-    setExtractedItems((items) => items.map((item, i) => (i === index ? { ...item, selected: !item.selected } : item)))
+  const setItemDecision = (index: number, decision: ReviewDecision) => {
+    setExtractedItems((items) => items.map((item, i) => (i === index ? { ...item, decision } : item)))
   }
 
   const updateExtractedItem = (index: number, field: string, value: string | number) => {
-    setExtractedItems((items) => items.map((item, i) => (i === index ? { ...item, [field]: value } : item)))
+    setExtractedItems((items) =>
+      items.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              [field]: value,
+              decision: item.decision === "rejected" ? "edited" : item.decision === "pending" ? "edited" : item.decision,
+            }
+          : item
+      )
+    )
   }
 
   const handleCameraCapture = () => {
@@ -212,6 +248,8 @@ export function AddItemForm() {
     setExtractedItems([])
     setDetectedType(null)
     setAnalyzeStep(0)
+    setReviewSummary(null)
+    setScanError(null)
     if (fileInputRef.current) fileInputRef.current.value = ""
     if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
@@ -246,8 +284,8 @@ export function AddItemForm() {
     },
   ]
 
-  const handleAddSuggestedItem = (item: (typeof suggestedItems)[0]) => {
-    addInventoryItem({
+  const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
+    await addInventoryItem({
       id: Date.now().toString(),
       name: item.name,
       category: item.category,
@@ -260,7 +298,9 @@ export function AddItemForm() {
     router.push("/dashboard")
   }
 
-  const selectedCount = extractedItems.filter((i) => i.selected).length
+  const approvedCount = extractedItems.filter((i) => i.decision === "confirmed" || i.decision === "edited").length
+  const pendingCount = extractedItems.filter((i) => i.decision === "pending").length
+  const bulkApplyEnabled = !!reviewSummary && reviewSummary.confidence >= reviewSummary.threshold
 
   return (
     <MainLayout>
@@ -406,52 +446,36 @@ export function AddItemForm() {
                       </div>
                     ) : (
                       <>
+                        {scanError && <p className="text-sm text-destructive">{scanError}</p>}
                         {extractedItems.length > 0 && (
                           <div className="space-y-4">
-                            <div className="flex items-center justify-between">
+                            <div className="space-y-2">
                               <h3 className="font-medium">
-                                {selectedCount} of {extractedItems.length} items selected
+                                {approvedCount} approved • {pendingCount} pending review
                               </h3>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-xs h-7"
-                                onClick={() => {
-                                  const allSelected = extractedItems.every((i) => i.selected)
-                                  setExtractedItems((items) =>
-                                    items.map((item) => ({ ...item, selected: !allSelected }))
-                                  )
-                                }}
-                              >
-                                {extractedItems.every((i) => i.selected) ? "Deselect All" : "Select All"}
-                              </Button>
+                              {reviewSummary && (
+                                <div className="text-xs text-muted-foreground space-y-1">
+                                  <p>
+                                    Model confidence: {Math.round(reviewSummary.confidence * 100)}% (threshold {Math.round(reviewSummary.threshold * 100)}%)
+                                  </p>
+                                  <p>{reviewSummary.reasoning}</p>
+                                  {!bulkApplyEnabled && <p className="text-amber-600">Bulk apply is disabled until confidence threshold is met.</p>}
+                                </div>
+                              )}
                             </div>
 
                             <div className="space-y-3">
                               {extractedItems.map((item, index) => (
-                                <Card key={index} className={`border transition-colors ${item.selected ? "border-primary bg-primary/[0.02]" : "opacity-60"}`}>
+                                <Card key={index} className={`border transition-colors ${item.decision === "rejected" ? "opacity-60" : "border-primary bg-primary/[0.02]"}`}>
                                   <CardContent className="p-3">
                                     <div className="flex items-start gap-2">
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className={`h-6 w-6 rounded-full shrink-0 mt-0.5 ${
-                                          item.selected ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border hover:bg-muted"
-                                        }`}
-                                        onClick={() => toggleItemSelection(index)}
-                                      >
-                                        {item.selected && <Check className="h-3 w-3" />}
-                                        <span className="sr-only">{item.selected ? "Deselect" : "Select"}</span>
-                                      </Button>
-
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-2">
                                           <Input
                                             value={item.name}
                                             onChange={(e) => updateExtractedItem(index, "name", e.target.value)}
                                             className="h-8 text-sm font-medium"
+                                            disabled={item.decision === "rejected"}
                                           />
                                           <Badge variant="outline" className="text-[10px] shrink-0">
                                             {Math.round(item.confidence * 100)}%
@@ -462,6 +486,7 @@ export function AddItemForm() {
                                           <Select
                                             value={item.category}
                                             onValueChange={(value) => updateExtractedItem(index, "category", value)}
+                                            disabled={item.decision === "rejected"}
                                           >
                                             <SelectTrigger className="h-8 text-xs">
                                               <SelectValue />
@@ -486,6 +511,7 @@ export function AddItemForm() {
                                             value={item.expiryDate}
                                             onChange={(e) => updateExtractedItem(index, "expiryDate", e.target.value)}
                                             className="h-8 text-xs"
+                                            disabled={item.decision === "rejected"}
                                           />
 
                                           <div className="flex items-center border rounded-md">
@@ -497,6 +523,7 @@ export function AddItemForm() {
                                               onClick={() =>
                                                 updateExtractedItem(index, "quantity", Math.max(1, item.quantity - 1))
                                               }
+                                              disabled={item.decision === "rejected"}
                                             >
                                               <Minus className="h-3 w-3" />
                                             </Button>
@@ -507,6 +534,7 @@ export function AddItemForm() {
                                               size="icon"
                                               className="h-8 w-8 p-0 shrink-0"
                                               onClick={() => updateExtractedItem(index, "quantity", item.quantity + 1)}
+                                              disabled={item.decision === "rejected"}
                                             >
                                               <Plus className="h-3 w-3" />
                                             </Button>
@@ -519,6 +547,21 @@ export function AddItemForm() {
                                             value={item.price || ""}
                                             onValueChange={(val) => updateExtractedItem(index, "price", val)}
                                           />
+                                        </div>
+
+                                        <div className="mt-2 flex gap-2">
+                                          <Button type="button" size="sm" variant="outline" onClick={() => setItemDecision(index, "confirmed")}>
+                                            Confirm
+                                          </Button>
+                                          <Button type="button" size="sm" variant="outline" onClick={() => setItemDecision(index, "edited")}>
+                                            Mark Edited
+                                          </Button>
+                                          <Button type="button" size="sm" variant="ghost" onClick={() => setItemDecision(index, "rejected")}>
+                                            Reject
+                                          </Button>
+                                          <Badge variant="secondary" className="ml-auto capitalize">
+                                            {item.decision}
+                                          </Badge>
                                         </div>
                                       </div>
                                     </div>
@@ -766,14 +809,14 @@ export function AddItemForm() {
               className="w-full"
               disabled={
                 (activeTab === "scan" &&
-                  (isAnalyzing || !imagePreview || selectedCount === 0)) ||
+                  (isAnalyzing || !imagePreview || approvedCount === 0 || pendingCount > 0 || !bulkApplyEnabled)) ||
                 (activeTab === "manual" &&
                   (!formData.name || !formData.category || !formData.expiryDate || !formData.location)) ||
                 activeTab === "suggested"
               }
             >
               {activeTab === "scan"
-                ? `Save${selectedCount > 0 ? ` (${selectedCount} item${selectedCount > 1 ? "s" : ""})` : ""}`
+                ? `Save${approvedCount > 0 ? ` (${approvedCount} item${approvedCount > 1 ? "s" : ""})` : ""}`
                 : "Save Item"}
             </Button>
           </div>

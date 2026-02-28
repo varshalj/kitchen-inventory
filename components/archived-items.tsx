@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MainLayout } from "@/components/main-layout"
-import { getArchivedItems, type InventoryItem } from "@/lib/data"
+import { getArchivedItems } from "@/lib/client/api"
+import type { InventoryItem } from "@/lib/types"
 import Link from "next/link"
 
 export function ArchivedItems() {
@@ -15,9 +16,12 @@ export function ArchivedItems() {
   const [activeTab, setActiveTab] = useState("all")
 
   useEffect(() => {
-    // In a real app, we would fetch data from an API
-    const archivedItems = getArchivedItems()
-    setItems(archivedItems)
+    const load = async () => {
+      const archivedItems = await getArchivedItems()
+      setItems(archivedItems)
+    }
+
+    void load()
   }, [])
 
   // Filter items based on archive reason

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Copy, Mail } from "lucide-react"
-import type { InventoryItem } from "@/lib/data"
+import type { InventoryItem } from "@/lib/types"
 
 interface MealPlanGeneratorProps {
   items: InventoryItem[]

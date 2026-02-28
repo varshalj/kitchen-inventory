@@ -57,16 +57,18 @@ export function InventoryDashboard() {
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
 
   useEffect(() => {
-    // In a real app, we would fetch data from an API
-    const inventoryItems = getInventoryItems()
-    setItems(inventoryItems)
+    const load = async () => {
+      const inventoryItems = await getInventoryItems()
+      setItems(inventoryItems)
 
-    // Initialize Fuse.js for fuzzy search
-    fuseRef.current = new Fuse(inventoryItems, {
+      fuseRef.current = new Fuse(inventoryItems, {
       keys: ["name", "category", "location"],
       threshold: 0.4, // Lower threshold means more strict matching
       includeScore: true,
-    })
+      })
+    }
+
+    void load()
   }, [])
 
   useEffect(() => {
@@ -201,9 +203,9 @@ export function InventoryDashboard() {
     })
   }
 
-  const handleDeleteItem = () => {
+  const handleDeleteItem = async () => {
     if (deleteConfirmItem) {
-      deleteInventoryItem(deleteConfirmItem.id)
+      await deleteInventoryItem(deleteConfirmItem.id)
       setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
       setDeleteConfirmItem(null)
       toast({
@@ -305,9 +307,9 @@ export function InventoryDashboard() {
     }
   }
 
-  const handleReviewSubmit = (review: { rating: number; reviewTags: string[]; reviewNote: string }) => {
+  const handleReviewSubmit = async (review: { rating: number; reviewTags: string[]; reviewNote: string }) => {
     if (reviewItem) {
-      updateInventoryItem({
+      await updateInventoryItem({
         ...reviewItem.item,
         rating: review.rating,
         reviewTags: review.reviewTags,
@@ -326,8 +328,8 @@ export function InventoryDashboard() {
     setReviewItem(null)
   }
 
-  const handleEditSave = (updatedItem: InventoryItem) => {
-    updateInventoryItem(updatedItem)
+  const handleEditSave = async (updatedItem: InventoryItem) => {
+    await updateInventoryItem(updatedItem)
     setItems(items.map((item) => (item.id === updatedItem.id ? updatedItem : item)))
     setEditItem(null)
     toast({

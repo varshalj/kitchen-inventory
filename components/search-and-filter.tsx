@@ -17,7 +17,8 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 import { MainLayout } from "@/components/main-layout"
-import { type InventoryItem, getInventoryItems } from "@/lib/data"
+import { getInventoryItems } from "@/lib/client/api"
+import type { InventoryItem } from "@/lib/types"
 
 export function SearchAndFilter() {
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -26,8 +27,11 @@ export function SearchAndFilter() {
   const [sort, setSort] = useState("expiryDate")
 
   useEffect(() => {
-    // In a real app, we would fetch data from an API
-    setItems(getInventoryItems())
+    const load = async () => {
+      setItems(await getInventoryItems())
+    }
+
+    void load()
   }, [])
 
   // Filter and sort items
