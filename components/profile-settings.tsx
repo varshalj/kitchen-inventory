@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, KeyRound, ShieldCheck, RotateCw } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
@@ -100,13 +99,17 @@ export function ProfileSettings() {
     void load()
   }, [settings])
 
+  const loadAiSettings = async () => {
+    const response = await fetch("/api/user-ai-keys", { cache: "no-store" })
+    if (!response.ok) return
+    const data = await response.json()
+    setApiKeyVersions(data.keyVersions || [])
+    setApiAuditTrail(data.auditTrail || [])
+  }
+
   useEffect(() => {
-    if (user) {
-      setEmailAccounts(createSeedEmailAccounts(user))
-    } else {
-      setEmailAccounts([])
-    }
-  }, [user])
+    void loadAiSettings()
+  }, [])
 
   const handleCurrencyChange = (value: string) => {
     updateSettings({ currency: value })
@@ -226,101 +229,95 @@ export function ProfileSettings() {
     }
   }
 
-
-
+  const availableServices = ["Gmail", "Swiggy", "Blinkit", "Zepto", "BigBasket", "Amazon Fresh", "JioMart"]
   const activeKey = apiKeyVersions.find((version) => version.status === "active")
-
-  const addAuditEvent = (event: ApiKeyAudit) => {
-    setApiAuditTrail((trail) => [event, ...trail].slice(0, 20))
-  }
-
-  const buildMaskedKey = (value: string) => {
-    const trimmed = value.trim()
-    if (trimmed.length <= 8) return "****"
-    return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`
-  }
 
   const handleValidateKey = async () => {
     if (!apiKeyInput.trim()) return
-
     setApiLoading(true)
-    setTimeout(() => {
-      const version = activeKey?.version ?? apiKeyVersions.length + 1
-      addAuditEvent({
-        action: "validated",
-        version,
-        actor: user?.email || "beta-user",
-        createdAt: new Date().toISOString(),
-        details: `Validated for model ${aiModel}.`,
+    try {
+      const response = await fetch("/api/user-ai-keys/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKeyInput, model: aiModel }),
       })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Validation failed")
+      }
+
+      toast({
+        title: "Key validated",
+        description: `Fingerprint ${data.keyMetadata.fingerprint} is valid for ${aiModel}.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Validation failed",
+        description: error instanceof Error ? error.message : "Invalid API key",
+        variant: "destructive",
+      })
+    } finally {
       setApiLoading(false)
-      toast({ title: "API key validated", description: "Key format looks good and can be stored." })
-    }, 400)
+    }
   }
 
   const handleRotateKey = async () => {
     if (!apiKeyInput.trim()) return
-
     setApiLoading(true)
-    setTimeout(() => {
-      setApiKeyVersions((previous) => {
-        const nextVersion = (previous[0]?.version ?? 0) + 1
-        const rotated = previous.map((version) => (version.status === "active" ? { ...version, status: "revoked" as const, revokedAt: new Date().toISOString() } : version))
-
-        const next: ApiKeyVersion = {
-          version: nextVersion,
-          provider: "openai",
-          model: aiModel,
-          status: "active",
-          keyMetadata: {
-            maskedKey: buildMaskedKey(apiKeyInput),
-            fingerprint: `fp_${Math.random().toString(36).slice(2, 10)}`,
-          },
-          createdAt: new Date().toISOString(),
-        }
-
-        return [next, ...rotated]
+    try {
+      const response = await fetch("/api/user-ai-keys/rotate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKeyInput, model: aiModel }),
       })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Rotation failed")
+      }
 
-      addAuditEvent({
-        action: "rotated",
-        version: (activeKey?.version ?? apiKeyVersions.length) + 1,
-        actor: user?.email || "beta-user",
-        createdAt: new Date().toISOString(),
-        details: `Rotated key for model ${aiModel}.`,
-      })
-
-      setApiLoading(false)
       setApiKeyInput("")
-      toast({ title: "API key rotated", description: "A new active key version is now stored." })
-    }, 500)
+      await loadAiSettings()
+      toast({
+        title: "Key rotated",
+        description: `Active key is now version ${data.version.version} (${data.version.keyMetadata.fingerprint}).`,
+      })
+    } catch (error) {
+      toast({
+        title: "Rotation failed",
+        description: error instanceof Error ? error.message : "Unable to rotate key",
+        variant: "destructive",
+      })
+    } finally {
+      setApiLoading(false)
+    }
   }
 
   const handleRevokeKey = async () => {
-    if (!activeKey) return
-
     setApiLoading(true)
-    setTimeout(() => {
-      setApiKeyVersions((previous) =>
-        previous.map((version) =>
-          version.version === activeKey.version ? { ...version, status: "revoked", revokedAt: new Date().toISOString() } : version
-        )
-      )
-
-      addAuditEvent({
-        action: "revoked",
-        version: activeKey.version,
-        actor: user?.email || "beta-user",
-        createdAt: new Date().toISOString(),
-        details: "Revoked active key.",
+    try {
+      const response = await fetch("/api/user-ai-keys/revoke", {
+        method: "POST",
       })
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Revoke failed")
+      }
 
+      await loadAiSettings()
+      toast({
+        title: "Key revoked",
+        description: `Version ${data.revoked.version} is revoked and no longer active.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Revoke failed",
+        description: error instanceof Error ? error.message : "Unable to revoke key",
+        variant: "destructive",
+      })
+    } finally {
       setApiLoading(false)
-      toast({ title: "API key revoked", description: "No active key is currently stored." })
-    }, 400)
+    }
   }
-
-  const availableServices = AVAILABLE_EMAIL_SERVICES
 
   return (
     <MainLayout>
@@ -418,6 +415,73 @@ export function ProfileSettings() {
       </Card>
 
       )}
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center">
+            <KeyRound className="mr-2 h-4 w-4" />
+            AI API Key Vault
+          </CardTitle>
+          <CardDescription>Keys are validated, encrypted server-side, and never returned in plaintext.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ai-model">Model for key validation</Label>
+            <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-api-key">API key</Label>
+            <Input
+              id="ai-api-key"
+              type="password"
+              placeholder="sk-..."
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleValidateKey} disabled={apiLoading || !apiKeyInput.trim()}>
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Validate Key
+            </Button>
+            <Button onClick={handleRotateKey} disabled={apiLoading || !apiKeyInput.trim()}>
+              <RotateCw className="h-4 w-4 mr-2" />
+              Rotate + Save
+            </Button>
+            <Button variant="destructive" onClick={handleRevokeKey} disabled={apiLoading || !activeKey}>
+              Revoke Active Key
+            </Button>
+          </div>
+
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Active key metadata</p>
+            {activeKey ? (
+              <>
+                <p className="text-sm">Version: {activeKey.version}</p>
+                <p className="text-sm">Masked key: {activeKey.keyMetadata.maskedKey}</p>
+                <p className="text-sm">Fingerprint: {activeKey.keyMetadata.fingerprint}</p>
+                <p className="text-xs text-muted-foreground">Stored model: {activeKey.model}</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No active key.</p>
+            )}
+          </div>
+
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Audit trail</p>
+            {apiAuditTrail.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No key events logged yet.</p>
+            ) : (
+              apiAuditTrail.slice(0, 5).map((event, index) => (
+                <p key={`${event.version}-${index}`} className="text-xs text-muted-foreground">
+                  {new Date(event.createdAt).toLocaleString()} · v{event.version} · {event.action} · {event.details}
+                </p>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="mb-6">
         <CardHeader>
