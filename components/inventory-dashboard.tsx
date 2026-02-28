@@ -28,16 +28,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 import { MainLayout } from "@/components/main-layout"
-import {
-  type InventoryItem,
-  getInventoryItems,
-  deleteInventoryItem,
-  updateInventoryItem,
-  markItemAsConsumed,
-  markItemAsWasted,
-  addToShoppingList,
-  type ShoppingItem,
-} from "@/lib/data"
+import { type InventoryItem, getInventoryItems, deleteInventoryItem, updateInventoryItem } from "@/lib/data"
 import { EditItemForm } from "@/components/edit-item-form"
 import { useToast } from "@/hooks/use-toast"
 import Fuse from "fuse.js"
@@ -59,20 +50,25 @@ export function InventoryDashboard() {
   const [sortBy, setSortBy] = useState("expiryDate")
   const [showMealPlanModal, setShowMealPlanModal] = useState(false)
   const [reviewItem, setReviewItem] = useState<{ item: InventoryItem; type: "consumed" | "wasted" } | null>(null)
+  const [actionState, setActionState] = useState<{ status: "idle" | "pending" | "success" | "error"; message?: string }>({
+    status: "idle",
+  })
   const { toast } = useToast()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
 
   useEffect(() => {
-    // In a real app, we would fetch data from an API
-    const inventoryItems = getInventoryItems()
-    setItems(inventoryItems)
+    const load = async () => {
+      const inventoryItems = await getInventoryItems()
+      setItems(inventoryItems)
 
-    // Initialize Fuse.js for fuzzy search
-    fuseRef.current = new Fuse(inventoryItems, {
+      fuseRef.current = new Fuse(inventoryItems, {
       keys: ["name", "category", "location"],
       threshold: 0.4, // Lower threshold means more strict matching
       includeScore: true,
-    })
+      })
+    }
+
+    void load()
   }, [])
 
   useEffect(() => {
@@ -207,9 +203,9 @@ export function InventoryDashboard() {
     })
   }
 
-  const handleDeleteItem = () => {
+  const handleDeleteItem = async () => {
     if (deleteConfirmItem) {
-      deleteInventoryItem(deleteConfirmItem.id)
+      await deleteInventoryItem(deleteConfirmItem.id)
       setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
       setDeleteConfirmItem(null)
       toast({
@@ -219,64 +215,101 @@ export function InventoryDashboard() {
     }
   }
 
-  const handleConsumeItem = () => {
-    if (consumeConfirmItem) {
-      // Mark as consumed in database
-      markItemAsConsumed(consumeConfirmItem.id)
+  const handleConsumeItem = async () => {
+    if (!consumeConfirmItem) {
+      return
+    }
 
-      // Add to shopping list
-      const shoppingItem: ShoppingItem = {
-        id: Date.now().toString(),
-        name: consumeConfirmItem.name,
-        quantity: consumeConfirmItem.quantity || 1,
-        category: consumeConfirmItem.category,
-        notes: "",
-        completed: false,
-        addedOn: new Date().toISOString(),
-        addedFrom: "consumed",
+    setActionState({ status: "pending", message: "Saving consume operation..." })
+
+    try {
+      const response = await fetch("/api/inventory/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: consumeConfirmItem.id,
+          action: "consume",
+          addToShoppingList: true,
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || payload.status === "error") {
+        throw new Error(payload.error || "Consume operation failed")
       }
-      addToShoppingList(shoppingItem)
 
-      // Remove from current items list
-      setItems(items.filter((item) => item.id !== consumeConfirmItem.id))
+      setItems((prev) => prev.filter((item) => item.id !== consumeConfirmItem.id))
 
-      // Show review prompt if not already rated
       if (!consumeConfirmItem.rating) {
         setReviewItem({ item: consumeConfirmItem, type: "consumed" })
       }
 
+      setActionState({ status: "success", message: payload.message })
       setConsumeConfirmItem(null)
       toast({
         title: "Item Consumed",
-        description: `${consumeConfirmItem.name} has been marked as consumed and added to your shopping list.`,
+        description: `${consumeConfirmItem.name} saved. Receipt: ${payload.receipt.id}`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Consume operation failed"
+      setActionState({ status: "error", message })
+      toast({
+        title: "Consume Failed",
+        description: message,
+        variant: "destructive",
       })
     }
   }
 
-  const handleWasteItem = () => {
-    if (wasteConfirmItem) {
-      // Mark as wasted in database
-      markItemAsWasted(wasteConfirmItem.id)
+  const handleWasteItem = async () => {
+    if (!wasteConfirmItem) {
+      return
+    }
 
-      // Remove from current items list
-      setItems(items.filter((item) => item.id !== wasteConfirmItem.id))
+    setActionState({ status: "pending", message: "Saving waste operation..." })
 
-      // Show review prompt if not already rated
+    try {
+      const response = await fetch("/api/inventory/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: wasteConfirmItem.id,
+          action: "waste",
+          addToShoppingList: false,
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || payload.status === "error") {
+        throw new Error(payload.error || "Waste operation failed")
+      }
+
+      setItems((prev) => prev.filter((item) => item.id !== wasteConfirmItem.id))
+
       if (!wasteConfirmItem.rating) {
         setReviewItem({ item: wasteConfirmItem, type: "wasted" })
       }
 
+      setActionState({ status: "success", message: payload.message })
       setWasteConfirmItem(null)
       toast({
         title: "Item Wasted",
-        description: `${wasteConfirmItem.name} has been marked as wasted and moved to archive.`,
+        description: `${wasteConfirmItem.name} saved. Receipt: ${payload.receipt.id}`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Waste operation failed"
+      setActionState({ status: "error", message })
+      toast({
+        title: "Waste Failed",
+        description: message,
+        variant: "destructive",
       })
     }
   }
 
-  const handleReviewSubmit = (review: { rating: number; reviewTags: string[]; reviewNote: string }) => {
+  const handleReviewSubmit = async (review: { rating: number; reviewTags: string[]; reviewNote: string }) => {
     if (reviewItem) {
-      updateInventoryItem({
+      await updateInventoryItem({
         ...reviewItem.item,
         rating: review.rating,
         reviewTags: review.reviewTags,
@@ -295,8 +328,8 @@ export function InventoryDashboard() {
     setReviewItem(null)
   }
 
-  const handleEditSave = (updatedItem: InventoryItem) => {
-    updateInventoryItem(updatedItem)
+  const handleEditSave = async (updatedItem: InventoryItem) => {
+    await updateInventoryItem(updatedItem)
     setItems(items.map((item) => (item.id === updatedItem.id ? updatedItem : item)))
     setEditItem(null)
     toast({
@@ -333,6 +366,20 @@ export function InventoryDashboard() {
           <span>Create Meal Plan</span>
         </Button>
       </div>
+
+      {actionState.status !== "idle" && (
+        <div
+          className={`mb-3 rounded-md border px-3 py-2 text-sm ${
+            actionState.status === "pending"
+              ? "border-blue-200 bg-blue-50 text-blue-700"
+              : actionState.status === "success"
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {actionState.message}
+        </div>
+      )}
 
       <div className="sticky top-0 z-10 bg-background pt-2 pb-4 space-y-3">
         <div className="flex gap-2">

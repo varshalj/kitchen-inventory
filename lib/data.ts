@@ -1,110 +1,15 @@
-// This file simulates a database for the kitchen inventory app
+import type { InventoryItem, ShoppingItem } from "@/lib/types"
+
+import { SEED_INVENTORY_ITEMS, SEED_SHOPPING_ITEMS } from "@/lib/dev-seed-fixtures"
 
 import type { InventoryItem } from "@/lib/domain/inventory"
 export type { InventoryItem } from "@/lib/domain/inventory"
 
 // In-memory storage
-let inventoryItems: InventoryItem[] = [
-  {
-    id: "1",
-    name: "Organic Milk",
-    category: "Dairy",
-    expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 1,
-    addedOn: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "2",
-    name: "Chicken Breast",
-    category: "Meat",
-    expiryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Freezer",
-    quantity: 2,
-    addedOn: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "3",
-    name: "Apples",
-    category: "Fruits",
-    expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 6,
-    addedOn: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    partiallyConsumed: true,
-    consumedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "4",
-    name: "Pasta",
-    category: "Grains",
-    expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Pantry",
-    quantity: 1,
-    addedOn: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "5",
-    name: "Tomato Sauce",
-    category: "Canned",
-    expiryDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Pantry",
-    quantity: 2,
-    addedOn: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  // Add some archived items for demonstration
-  {
-    id: "6",
-    name: "Yogurt",
-    category: "Dairy",
-    expiryDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 0,
-    addedOn: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    consumedOn: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    archived: true,
-    archiveReason: "consumed",
-  },
-  {
-    id: "7",
-    name: "Lettuce",
-    category: "Vegetables",
-    expiryDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 0,
-    addedOn: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    wastedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    archived: true,
-    archiveReason: "wasted",
-  },
-  // Add an item with missing expiry date (synced from email)
-  {
-    id: "8",
-    name: "Onions",
-    category: "Vegetables",
-    expiryDate: "",
-    location: "Pantry",
-    quantity: 3,
-    addedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    syncedFromEmail: true,
-    emailSource: "BigBasket",
-  },
-  {
-    id: "9",
-    name: "Potatoes",
-    category: "Vegetables",
-    expiryDate: "",
-    location: "Pantry",
-    quantity: 5,
-    addedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    syncedFromEmail: true,
-    emailSource: "BigBasket",
-  },
-]
+let inventoryItems: InventoryItem[] = [...SEED_INVENTORY_ITEMS]
 
-// Get all inventory items
-export function getInventoryItems(): InventoryItem[] {
-  return inventoryItems.filter((item) => !item.archived)
+if (isProduction) {
+  throw new Error("lib/data.ts is a development-only fixture module and must not be imported in production.")
 }
 
 // Get archived inventory items
@@ -135,9 +40,21 @@ export function updateInventoryItem(updatedItem: InventoryItem): InventoryItem |
 
 // Delete an inventory item
 export function deleteInventoryItem(id: string): boolean {
-  const initialLength = inventoryItems.length
-  inventoryItems = inventoryItems.filter((item) => item.id !== id)
-  return inventoryItems.length !== initialLength
+  const index = inventoryItems.findIndex((item) => item.id === id)
+  if (index === -1) {
+    return false
+  }
+
+  const now = new Date().toISOString()
+  inventoryItems[index] = {
+    ...inventoryItems[index],
+    archived: true,
+    archived_at: now,
+    archived_reason: "deleted",
+    archiveReason: "other",
+  }
+
+  return true
 }
 
 // Mark an item as consumed
@@ -150,6 +67,8 @@ export function markItemAsConsumed(id: string): InventoryItem | undefined {
       quantity: 0,
       consumedOn: now,
       archived: true,
+      archived_at: now,
+      archived_reason: "consumed",
       archiveReason: "consumed",
     }
     return inventoryItems[index]
@@ -167,6 +86,8 @@ export function markItemAsWasted(id: string): InventoryItem | undefined {
       quantity: 0,
       wastedOn: now,
       archived: true,
+      archived_at: now,
+      archived_reason: "wasted",
       archiveReason: "wasted",
     }
     return inventoryItems[index]
@@ -224,6 +145,16 @@ export interface ShoppingItem {
   addedFrom?: "consumed" | "manual"
 }
 
+export interface OperationReceipt {
+  id: string
+  itemId: string
+  action: "consume" | "waste"
+  status: "completed" | "undone"
+  createdAt: string
+  undoExpiresAt: string
+  shoppingItemId?: string
+}
+
 let shoppingItems: ShoppingItem[] = [
   {
     id: "1",
@@ -242,6 +173,8 @@ let shoppingItems: ShoppingItem[] = [
     addedOn: new Date().toISOString(),
   },
 ]
+
+let operationReceipts: OperationReceipt[] = []
 
 export function getShoppingItems(): ShoppingItem[] {
   return shoppingItems
@@ -271,8 +204,89 @@ export function updateShoppingItem(updatedItem: ShoppingItem): ShoppingItem | un
   return undefined
 }
 
-export function deleteShoppingItem(id: string): boolean {
-  const initialLength = shoppingItems.length
-  shoppingItems = shoppingItems.filter((item) => item.id !== id)
-  return shoppingItems.length !== initialLength
+export const devFixtures = {
+  inventoryItems: [] as InventoryItem[],
+  shoppingItems: [] as ShoppingItem[],
+}
+
+
+export function processInventoryOperation(input: {
+  itemId: string
+  action: "consume" | "waste"
+  addToShoppingList?: boolean
+}): {
+  receipt: OperationReceipt
+  item: InventoryItem
+  shoppingItem?: ShoppingItem
+} | null {
+  const item = getInventoryItem(input.itemId)
+  if (!item || item.archived) {
+    return null
+  }
+
+  const previousQuantity = item.quantity ?? 1
+  const updated = input.action === "consume" ? markItemAsConsumed(input.itemId) : markItemAsWasted(input.itemId)
+  if (!updated) {
+    return null
+  }
+
+  let shoppingItem: ShoppingItem | undefined
+  if (input.addToShoppingList && input.action === "consume") {
+    shoppingItem = addToShoppingList({
+      id: `shop-${Date.now()}`,
+      name: updated.name,
+      quantity: previousQuantity,
+      category: updated.category,
+      notes: "",
+      completed: false,
+      addedOn: new Date().toISOString(),
+      addedFrom: "consumed",
+    })
+  }
+
+  const createdAt = new Date().toISOString()
+  const receipt: OperationReceipt = {
+    id: `rcpt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    itemId: updated.id,
+    action: input.action,
+    status: "completed",
+    createdAt,
+    undoExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    shoppingItemId: shoppingItem?.id,
+  }
+  operationReceipts.push(receipt)
+
+  return { receipt, item: updated, shoppingItem }
+}
+
+export function undoInventoryOperation(receiptId: string): { receipt: OperationReceipt; item: InventoryItem } | null {
+  const receipt = operationReceipts.find((entry) => entry.id === receiptId)
+  if (!receipt || receipt.status === "undone") {
+    return null
+  }
+
+  if (new Date(receipt.undoExpiresAt).getTime() < Date.now()) {
+    return null
+  }
+
+  const itemIndex = inventoryItems.findIndex((item) => item.id === receipt.itemId)
+  if (itemIndex === -1) {
+    return null
+  }
+
+  const current = inventoryItems[itemIndex]
+  const restoredItem: InventoryItem = {
+    ...current,
+    archived: false,
+    archived_at: undefined,
+    archived_reason: undefined,
+    archiveReason: undefined,
+    consumedOn: receipt.action === "consume" ? undefined : current.consumedOn,
+    wastedOn: receipt.action === "waste" ? undefined : current.wastedOn,
+  }
+
+  inventoryItems[itemIndex] = restoredItem
+  receipt.status = "undone"
+
+  return { receipt, item: restoredItem }
 }

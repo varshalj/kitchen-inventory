@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MainLayout } from "@/components/main-layout"
-import { getArchivedItems, type InventoryItem } from "@/lib/data"
+import { getArchivedItems } from "@/lib/client/api"
+import type { InventoryItem } from "@/lib/types"
 import Link from "next/link"
 
 export function ArchivedItems() {
@@ -15,15 +16,18 @@ export function ArchivedItems() {
   const [activeTab, setActiveTab] = useState("all")
 
   useEffect(() => {
-    // In a real app, we would fetch data from an API
-    const archivedItems = getArchivedItems()
-    setItems(archivedItems)
+    const load = async () => {
+      const archivedItems = await getArchivedItems()
+      setItems(archivedItems)
+    }
+
+    void load()
   }, [])
 
   // Filter items based on archive reason
-  const consumedItems = items.filter((item) => item.archiveReason === "consumed")
-  const wastedItems = items.filter((item) => item.archiveReason === "wasted")
-  const otherItems = items.filter((item) => item.archiveReason !== "consumed" && item.archiveReason !== "wasted")
+  const consumedItems = items.filter((item) => (item.archived_reason ?? item.archiveReason) === "consumed")
+  const wastedItems = items.filter((item) => (item.archived_reason ?? item.archiveReason) === "wasted")
+  const otherItems = items.filter((item) => (item.archived_reason ?? item.archiveReason) !== "consumed" && (item.archived_reason ?? item.archiveReason) !== "wasted")
 
   // Get items to display based on active tab
   const getDisplayItems = () => {
@@ -95,12 +99,12 @@ export function ArchivedItems() {
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-base">{item.name}</CardTitle>
                       <Badge variant="outline">
-                        {item.archiveReason === "consumed" ? (
+                        {(item.archived_reason ?? item.archiveReason) === "consumed" ? (
                           <span className="flex items-center text-green-600">
                             <ShoppingCart className="mr-1 h-3 w-3" />
                             Consumed
                           </span>
-                        ) : item.archiveReason === "wasted" ? (
+                        ) : (item.archived_reason ?? item.archiveReason) === "wasted" ? (
                           <span className="flex items-center text-red-600">
                             <Trash className="mr-1 h-3 w-3" />
                             Wasted

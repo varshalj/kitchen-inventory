@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { type InventoryItem, addInventoryItem } from "@/lib/data"
+import { addInventoryItem } from "@/lib/client/api"
+import type { InventoryItem } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MainLayout } from "@/components/main-layout"
@@ -93,7 +94,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
       addedOn: new Date().toISOString(),
     }
 
-    addInventoryItem(newItem)
+    await addInventoryItem(newItem)
 
     toast({
       title: "Item Added",

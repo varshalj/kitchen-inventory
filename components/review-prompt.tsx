@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { StarRating } from "@/components/star-rating"
-import type { InventoryItem } from "@/lib/data"
+import type { InventoryItem } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 const REVIEW_TAGS = [

@@ -17,8 +17,8 @@ import {
   updateShoppingItem,
   deleteShoppingItem,
   addToShoppingList,
-  type ShoppingItem,
-} from "@/lib/data"
+} from "@/lib/client/api"
+import type { ShoppingItem } from "@/lib/types"
 
 export function ShoppingList() {
   const { toast } = useToast()
@@ -28,12 +28,15 @@ export function ShoppingList() {
   const [showCompleted, setShowCompleted] = useState(false)
 
   useEffect(() => {
-    // Get shopping list items
-    const shoppingItems = getShoppingItems()
-    setItems(shoppingItems)
+    const load = async () => {
+      const shoppingItems = await getShoppingItems()
+      setItems(shoppingItems)
+    }
+
+    void load()
   }, [])
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newItem.name.trim()) return
 
     const item: ShoppingItem = {
@@ -46,7 +49,7 @@ export function ShoppingList() {
       addedFrom: "manual",
     }
 
-    const addedItem = addToShoppingList(item)
+    const addedItem = await addToShoppingList(item)
 
     // Update local state
     const existingIndex = items.findIndex((i) => i.name.toLowerCase() === item.name.toLowerCase() && !i.completed)
@@ -66,17 +69,17 @@ export function ShoppingList() {
     })
   }
 
-  const handleToggleComplete = (id: string) => {
+  const handleToggleComplete = async (id: string) => {
     const item = items.find((item) => item.id === id)
     if (item) {
       const updatedItem = { ...item, completed: !item.completed }
-      updateShoppingItem(updatedItem)
+      await updateShoppingItem(updatedItem)
       setItems(items.map((item) => (item.id === id ? updatedItem : item)))
     }
   }
 
-  const handleDeleteItem = (id: string) => {
-    deleteShoppingItem(id)
+  const handleDeleteItem = async (id: string) => {
+    await deleteShoppingItem(id)
     setItems(items.filter((item) => item.id !== id))
     toast({
       title: "Item Removed",
@@ -84,10 +87,10 @@ export function ShoppingList() {
     })
   }
 
-  const handleUpdateItem = () => {
+  const handleUpdateItem = async () => {
     if (!editItem) return
 
-    updateShoppingItem(editItem)
+    await updateShoppingItem(editItem)
     setItems(items.map((item) => (item.id === editItem.id ? editItem : item)))
     setEditItem(null)
     toast({
