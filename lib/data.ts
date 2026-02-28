@@ -2,36 +2,8 @@ import type { InventoryItem, ShoppingItem } from "@/lib/types"
 
 import { SEED_INVENTORY_ITEMS, SEED_SHOPPING_ITEMS } from "@/lib/dev-seed-fixtures"
 
-export interface InventoryItem {
-  id: string
-  name: string
-  category: string
-  expiryDate: string
-  location: string
-  quantity?: number
-  archived?: boolean
-  archived_at?: string
-  archived_reason?: "consumed" | "wasted" | "deleted" | "other"
-  addedOn?: string
-  consumedOn?: string
-  wastedOn?: string
-  partiallyConsumed?: boolean
-  notes?: string
-  price?: string
-  brand?: string
-  // Backward-compatible archive reason field
-  archiveReason?: "consumed" | "wasted" | "other"
-  // Track source where item was ordered from
-  orderedFrom?: string
-  // Track if item was added from email sync
-  syncedFromEmail?: boolean
-  emailSource?: string
-  // Product review / rating
-  rating?: number // 1-5 stars
-  reviewTags?: string[]
-  reviewNote?: string
-  ratedAt?: string
-}
+import type { InventoryItem } from "@/lib/domain/inventory"
+export type { InventoryItem } from "@/lib/domain/inventory"
 
 // In-memory storage
 let inventoryItems: InventoryItem[] = [...SEED_INVENTORY_ITEMS]
