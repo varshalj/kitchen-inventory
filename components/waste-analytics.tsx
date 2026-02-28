@@ -1,58 +1,19 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState } from "react"
 import { BarChart2, DollarSign, BarChart, PieChart, TrendingDown, AlertTriangle, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
-import { getInventoryItems } from "@/lib/client/api"
+import { getWasteAnalytics, type AnalyticsTimeFrame } from "@/lib/data"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export function WasteAnalytics() {
-  const [timeFrame, setTimeFrame] = useState("month")
-  const [items, setItems] = useState<any[]>([])
-
-  useEffect(() => {
-    const load = async () => setItems(await getInventoryItems())
-    void load()
-  }, [])
+  const [timeFrame, setTimeFrame] = useState<AnalyticsTimeFrame>("month")
   const [activeTab, setActiveTab] = useState("overview")
-
-  // In a real app, these would be calculated from actual usage data
-  const analytics = useMemo(() => {
-    // Get expired items
-    const currentDate = new Date()
-    const expiredItems = items.filter((item) => new Date(item.expiryDate) < currentDate)
-
-    // Calculate potential waste
-    const potentialWaste = expiredItems.reduce((total, item) => {
-      // Assuming each item has an average value of $5
-      return total + (item.quantity || 1) * 5
-    }, 0)
-
-    // Calculate waste by category
-    const wasteByCategory: Record<string, number> = {}
-    expiredItems.forEach((item) => {
-      wasteByCategory[item.category] = (wasteByCategory[item.category] || 0) + 1
-    })
-
-    // Sort categories by waste amount
-    const topWasteCategories = Object.entries(wasteByCategory)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-
-    return {
-      totalItems: items.length,
-      expiredItems: expiredItems.length,
-      wastePercentage: items.length ? Math.round((expiredItems.length / items.length) * 100) : 0,
-      potentialWaste,
-      expiryTrend: -5, // Mock trend data (negative is good - less waste)
-      topWasteCategories,
-      monthlySavings: 45, // Mock data
-    }
-  }, [items])
+  const analytics = getWasteAnalytics(timeFrame)
 
   return (
     <MainLayout>
@@ -61,7 +22,7 @@ export function WasteAnalytics() {
           <BarChart2 className="mr-2 h-5 w-5" />
           Waste Analytics
         </h1>
-        <Select value={timeFrame} onValueChange={setTimeFrame}>
+        <Select value={timeFrame} onValueChange={(value) => setTimeFrame(value as AnalyticsTimeFrame)}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Select time frame" />
           </SelectTrigger>
@@ -120,8 +81,8 @@ export function WasteAnalytics() {
             </CardHeader>
             <CardContent>
               <div className="flex items-center">
-                <div className="text-2xl font-bold text-green-500">{Math.abs(analytics.expiryTrend)}%</div>
-                <TrendingDown className="ml-2 h-5 w-5 text-green-500" />
+                <div className={`text-2xl font-bold ${analytics.expiryTrend <= 0 ? "text-green-500" : "text-destructive"}`}>{Math.abs(analytics.expiryTrend)}%</div>
+                <TrendingDown className={`ml-2 h-5 w-5 ${analytics.expiryTrend <= 0 ? "text-green-500" : "text-destructive"}`} />
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 You've saved approximately ${analytics.monthlySavings} by reducing waste
@@ -130,11 +91,16 @@ export function WasteAnalytics() {
               <div className="mt-4 space-y-2">
                 <div className="text-sm font-medium">Monthly Trend</div>
                 <div className="space-y-2">
-                  {["Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((month) => (
+                  {analytics.monthlyTrend.map(({ month, count }) => (
                     <div key={month} className="flex items-center gap-2">
                       <div className="w-12 text-xs">{month}</div>
                       <div className="h-2 bg-muted rounded-full flex-1 overflow-hidden">
-                        <div className="h-full bg-primary" style={{ width: `${Math.random() * 100}%` }} />
+                        <div
+                          className="h-full bg-primary"
+                          style={{
+                            width: `${analytics.monthlyTrend[0] ? Math.max((count / Math.max(...analytics.monthlyTrend.map((trendPoint) => trendPoint.count), 1)) * 100, count > 0 ? 8 : 0) : 0}%`,
+                          }}
+                        />
                       </div>
                     </div>
                   ))}
