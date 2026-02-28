@@ -1,4 +1,4 @@
-// This file simulates a database for the kitchen inventory app
+import type { InventoryItem, ShoppingItem } from "@/lib/types"
 
 import { SEED_INVENTORY_ITEMS, SEED_SHOPPING_ITEMS } from "@/lib/dev-seed-fixtures"
 
@@ -34,9 +34,8 @@ export interface InventoryItem {
 // In-memory storage
 let inventoryItems: InventoryItem[] = [...SEED_INVENTORY_ITEMS]
 
-// Get all inventory items
-export function getInventoryItems(): InventoryItem[] {
-  return inventoryItems.filter((item) => !item.archived)
+if (isProduction) {
+  throw new Error("lib/data.ts is a development-only fixture module and must not be imported in production.")
 }
 
 // Get archived inventory items
@@ -261,8 +260,7 @@ export function updateShoppingItem(updatedItem: ShoppingItem): ShoppingItem | un
   return undefined
 }
 
-export function deleteShoppingItem(id: string): boolean {
-  const initialLength = shoppingItems.length
-  shoppingItems = shoppingItems.filter((item) => item.id !== id)
-  return shoppingItems.length !== initialLength
+export const devFixtures = {
+  inventoryItems: [] as InventoryItem[],
+  shoppingItems: [] as ShoppingItem[],
 }

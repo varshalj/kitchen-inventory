@@ -5,7 +5,7 @@ import { Info, TrendingUp, DollarSign } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
-import type { InventoryItem } from "@/lib/data"
+import type { InventoryItem } from "@/lib/types"
 
 interface InsightsPanelProps {
   items: InventoryItem[]

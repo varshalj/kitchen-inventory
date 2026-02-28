@@ -45,6 +45,27 @@ interface EmailAccount {
   active: boolean
 }
 
+interface ApiKeyVersion {
+  version: number
+  provider: string
+  model: string
+  status: "active" | "revoked"
+  keyMetadata: {
+    maskedKey: string
+    fingerprint: string
+  }
+  createdAt: string
+  revokedAt?: string
+}
+
+interface ApiKeyAudit {
+  action: "validated" | "rotated" | "revoked"
+  version: number
+  createdAt: string
+  actor: string
+  details: string
+}
+
 export function ProfileSettings() {
   const router = useRouter()
   const { settings, updateSettings } = useUserSettings()
@@ -60,15 +81,23 @@ export function ProfileSettings() {
   const [newSource, setNewSource] = useState("")
   const [newLocation, setNewLocation] = useState("")
   const [confirmRemove, setConfirmRemove] = useState<{ type: "source" | "location"; value: string; affectedCount: number } | null>(null)
+  const [apiKeyInput, setApiKeyInput] = useState("")
+  const [aiModel, setAiModel] = useState("gpt-4o-mini")
+  const [apiKeyVersions, setApiKeyVersions] = useState<ApiKeyVersion[]>([])
+  const [apiAuditTrail, setApiAuditTrail] = useState<ApiKeyAudit[]>([])
+  const [apiLoading, setApiLoading] = useState(false)
 
   useEffect(() => {
-    if (settings) {
-      setExpiryReminders(settings.notifications)
+    const load = async () => {
+      if (settings) {
+        setExpiryReminders(settings.notifications)
+      }
+
+      const archivedItems = await getArchivedItems()
+      setArchivedItemsCount(archivedItems.length)
     }
 
-    // Get count of archived items
-    const archivedItems = getArchivedItems()
-    setArchivedItemsCount(archivedItems.length)
+    void load()
   }, [settings])
 
   useEffect(() => {
@@ -96,8 +125,8 @@ export function ProfileSettings() {
     toast({ title: "Source Added", description: `"${trimmed}" has been added to your order sources.` })
   }
 
-  const handleRemoveSource = (source: string) => {
-    const items = getInventoryItems()
+  const handleRemoveSource = async (source: string) => {
+    const items = await getInventoryItems()
     const affectedCount = items.filter((i) => i.orderedFrom === source).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "source", value: source, affectedCount })
@@ -126,8 +155,8 @@ export function ProfileSettings() {
     toast({ title: "Location Added", description: `"${trimmed}" has been added to your storage locations.` })
   }
 
-  const handleRemoveLocation = (location: string) => {
-    const items = getInventoryItems()
+  const handleRemoveLocation = async (location: string) => {
+    const items = await getInventoryItems()
     const affectedCount = items.filter((i) => i.location === location).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "location", value: location, affectedCount })
@@ -295,6 +324,73 @@ export function ProfileSettings() {
       </Card>
 
       )}
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center">
+            <KeyRound className="mr-2 h-4 w-4" />
+            AI API Key Vault
+          </CardTitle>
+          <CardDescription>Keys are validated, encrypted server-side, and never returned in plaintext.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ai-model">Model for key validation</Label>
+            <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-api-key">API key</Label>
+            <Input
+              id="ai-api-key"
+              type="password"
+              placeholder="sk-..."
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleValidateKey} disabled={apiLoading || !apiKeyInput.trim()}>
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Validate Key
+            </Button>
+            <Button onClick={handleRotateKey} disabled={apiLoading || !apiKeyInput.trim()}>
+              <RotateCw className="h-4 w-4 mr-2" />
+              Rotate + Save
+            </Button>
+            <Button variant="destructive" onClick={handleRevokeKey} disabled={apiLoading || !activeKey}>
+              Revoke Active Key
+            </Button>
+          </div>
+
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Active key metadata</p>
+            {activeKey ? (
+              <>
+                <p className="text-sm">Version: {activeKey.version}</p>
+                <p className="text-sm">Masked key: {activeKey.keyMetadata.maskedKey}</p>
+                <p className="text-sm">Fingerprint: {activeKey.keyMetadata.fingerprint}</p>
+                <p className="text-xs text-muted-foreground">Stored model: {activeKey.model}</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No active key.</p>
+            )}
+          </div>
+
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Audit trail</p>
+            {apiAuditTrail.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No key events logged yet.</p>
+            ) : (
+              apiAuditTrail.slice(0, 5).map((event, index) => (
+                <p key={`${event.version}-${index}`} className="text-xs text-muted-foreground">
+                  {new Date(event.createdAt).toLocaleString()} · v{event.version} · {event.action} · {event.details}
+                </p>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="mb-6">
         <CardHeader className="pb-2">
