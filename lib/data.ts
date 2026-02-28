@@ -10,6 +10,8 @@ export interface InventoryItem {
   location: string
   quantity?: number
   archived?: boolean
+  archived_at?: string
+  archived_reason?: "consumed" | "wasted" | "deleted" | "other"
   addedOn?: string
   consumedOn?: string
   wastedOn?: string
@@ -17,7 +19,7 @@ export interface InventoryItem {
   notes?: string
   price?: string
   brand?: string
-  // Track why the item was archived
+  // Backward-compatible archive reason field
   archiveReason?: "consumed" | "wasted" | "other"
   // Track source where item was ordered from
   orderedFrom?: string
@@ -66,9 +68,21 @@ export function updateInventoryItem(updatedItem: InventoryItem): InventoryItem |
 
 // Delete an inventory item
 export function deleteInventoryItem(id: string): boolean {
-  const initialLength = inventoryItems.length
-  inventoryItems = inventoryItems.filter((item) => item.id !== id)
-  return inventoryItems.length !== initialLength
+  const index = inventoryItems.findIndex((item) => item.id === id)
+  if (index === -1) {
+    return false
+  }
+
+  const now = new Date().toISOString()
+  inventoryItems[index] = {
+    ...inventoryItems[index],
+    archived: true,
+    archived_at: now,
+    archived_reason: "deleted",
+    archiveReason: "other",
+  }
+
+  return true
 }
 
 // Mark an item as consumed
@@ -81,6 +95,8 @@ export function markItemAsConsumed(id: string): InventoryItem | undefined {
       quantity: 0,
       consumedOn: now,
       archived: true,
+      archived_at: now,
+      archived_reason: "consumed",
       archiveReason: "consumed",
     }
     return inventoryItems[index]
@@ -98,6 +114,8 @@ export function markItemAsWasted(id: string): InventoryItem | undefined {
       quantity: 0,
       wastedOn: now,
       archived: true,
+      archived_at: now,
+      archived_reason: "wasted",
       archiveReason: "wasted",
     }
     return inventoryItems[index]
@@ -155,82 +173,36 @@ export interface ShoppingItem {
   addedFrom?: "consumed" | "manual"
 }
 
-let shoppingItems: ShoppingItem[] = [...SEED_SHOPPING_ITEMS]
-
-export type AnalyticsTimeFrame = "week" | "month" | "quarter" | "year"
-
-const TIMEFRAME_DAYS: Record<AnalyticsTimeFrame, number> = {
-  week: 7,
-  month: 30,
-  quarter: 90,
-  year: 365,
+export interface OperationReceipt {
+  id: string
+  itemId: string
+  action: "consume" | "waste"
+  status: "completed" | "undone"
+  createdAt: string
+  undoExpiresAt: string
+  shoppingItemId?: string
 }
 
-const parseItemValue = (item: InventoryItem) => {
-  const parsedPrice = Number.parseFloat(item.price || "")
-  const price = Number.isFinite(parsedPrice) ? parsedPrice : 5
-  return price * (item.quantity || 1)
-}
+let shoppingItems: ShoppingItem[] = [
+  {
+    id: "1",
+    name: "Milk",
+    quantity: 1,
+    category: "Dairy",
+    completed: false,
+    addedOn: new Date().toISOString(),
+  },
+  {
+    id: "2",
+    name: "Eggs",
+    quantity: 12,
+    category: "Dairy",
+    completed: false,
+    addedOn: new Date().toISOString(),
+  },
+]
 
-export function getWasteAnalytics(timeFrame: AnalyticsTimeFrame) {
-  const now = new Date()
-  const rangeDays = TIMEFRAME_DAYS[timeFrame]
-  const currentRangeStart = new Date(now.getTime() - rangeDays * 24 * 60 * 60 * 1000)
-  const previousRangeStart = new Date(currentRangeStart.getTime() - rangeDays * 24 * 60 * 60 * 1000)
-
-  const wastedItems = inventoryItems.filter((item) => item.wastedOn)
-  const currentWastedItems = wastedItems.filter((item) => {
-    const wastedDate = new Date(item.wastedOn as string)
-    return wastedDate >= currentRangeStart && wastedDate <= now
-  })
-  const previousWastedItems = wastedItems.filter((item) => {
-    const wastedDate = new Date(item.wastedOn as string)
-    return wastedDate >= previousRangeStart && wastedDate < currentRangeStart
-  })
-
-  const previousWasteCount = previousWastedItems.length
-  const currentWasteCount = currentWastedItems.length
-  const trendPercentage =
-    previousWasteCount === 0
-      ? currentWasteCount === 0
-        ? 0
-        : 100
-      : Math.round(((currentWasteCount - previousWasteCount) / previousWasteCount) * 100)
-
-  const potentialWaste = Math.round(currentWastedItems.reduce((total, item) => total + parseItemValue(item), 0))
-  const previousWasteValue = previousWastedItems.reduce((total, item) => total + parseItemValue(item), 0)
-  const monthlySavings = Math.max(0, Math.round(previousWasteValue - potentialWaste))
-
-  const wasteByCategory: Record<string, number> = {}
-  currentWastedItems.forEach((item) => {
-    wasteByCategory[item.category] = (wasteByCategory[item.category] || 0) + 1
-  })
-
-  const topWasteCategories = Object.entries(wasteByCategory)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-
-  const monthlyTrend = Array.from({ length: 6 }, (_, index) => {
-    const monthDate = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
-    const monthLabel = monthDate.toLocaleString("en-US", { month: "short" })
-    const monthWasteCount = wastedItems.filter((item) => {
-      const wastedDate = new Date(item.wastedOn as string)
-      return wastedDate.getMonth() === monthDate.getMonth() && wastedDate.getFullYear() === monthDate.getFullYear()
-    }).length
-    return { month: monthLabel, count: monthWasteCount }
-  })
-
-  return {
-    totalItems: inventoryItems.length,
-    expiredItems: currentWasteCount,
-    wastePercentage: inventoryItems.length ? Math.round((currentWasteCount / inventoryItems.length) * 100) : 0,
-    potentialWaste,
-    expiryTrend: trendPercentage,
-    topWasteCategories,
-    monthlySavings,
-    monthlyTrend,
-  }
-}
+let operationReceipts: OperationReceipt[] = []
 
 export function getShoppingItems(): ShoppingItem[] {
   return shoppingItems
@@ -263,4 +235,86 @@ export function updateShoppingItem(updatedItem: ShoppingItem): ShoppingItem | un
 export const devFixtures = {
   inventoryItems: [] as InventoryItem[],
   shoppingItems: [] as ShoppingItem[],
+}
+
+
+export function processInventoryOperation(input: {
+  itemId: string
+  action: "consume" | "waste"
+  addToShoppingList?: boolean
+}): {
+  receipt: OperationReceipt
+  item: InventoryItem
+  shoppingItem?: ShoppingItem
+} | null {
+  const item = getInventoryItem(input.itemId)
+  if (!item || item.archived) {
+    return null
+  }
+
+  const previousQuantity = item.quantity ?? 1
+  const updated = input.action === "consume" ? markItemAsConsumed(input.itemId) : markItemAsWasted(input.itemId)
+  if (!updated) {
+    return null
+  }
+
+  let shoppingItem: ShoppingItem | undefined
+  if (input.addToShoppingList && input.action === "consume") {
+    shoppingItem = addToShoppingList({
+      id: `shop-${Date.now()}`,
+      name: updated.name,
+      quantity: previousQuantity,
+      category: updated.category,
+      notes: "",
+      completed: false,
+      addedOn: new Date().toISOString(),
+      addedFrom: "consumed",
+    })
+  }
+
+  const createdAt = new Date().toISOString()
+  const receipt: OperationReceipt = {
+    id: `rcpt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    itemId: updated.id,
+    action: input.action,
+    status: "completed",
+    createdAt,
+    undoExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    shoppingItemId: shoppingItem?.id,
+  }
+  operationReceipts.push(receipt)
+
+  return { receipt, item: updated, shoppingItem }
+}
+
+export function undoInventoryOperation(receiptId: string): { receipt: OperationReceipt; item: InventoryItem } | null {
+  const receipt = operationReceipts.find((entry) => entry.id === receiptId)
+  if (!receipt || receipt.status === "undone") {
+    return null
+  }
+
+  if (new Date(receipt.undoExpiresAt).getTime() < Date.now()) {
+    return null
+  }
+
+  const itemIndex = inventoryItems.findIndex((item) => item.id === receipt.itemId)
+  if (itemIndex === -1) {
+    return null
+  }
+
+  const current = inventoryItems[itemIndex]
+  const restoredItem: InventoryItem = {
+    ...current,
+    archived: false,
+    archived_at: undefined,
+    archived_reason: undefined,
+    archiveReason: undefined,
+    consumedOn: receipt.action === "consume" ? undefined : current.consumedOn,
+    wastedOn: receipt.action === "waste" ? undefined : current.wastedOn,
+  }
+
+  inventoryItems[itemIndex] = restoredItem
+  receipt.status = "undone"
+
+  return { receipt, item: restoredItem }
 }
