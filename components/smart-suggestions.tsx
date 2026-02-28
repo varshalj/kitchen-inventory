@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { type InventoryItem, addInventoryItem } from "@/lib/data"
+import { addInventoryItem } from "@/lib/client/api"
+import type { InventoryItem } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MainLayout } from "@/components/main-layout"
@@ -15,6 +16,13 @@ import { MainLayout } from "@/components/main-layout"
 interface SmartSuggestionsProps {
   items: InventoryItem[]
   standalone?: boolean
+}
+
+interface ShoppingListSuggestion {
+  id: string
+  name: string
+  category: string
+  reason: string
 }
 
 export function SmartSuggestions({ items, standalone = false }: SmartSuggestionsProps) {
@@ -36,7 +44,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
 
     // Get frequently used items (based on usage history)
     // In a real app, this would be based on actual usage patterns
-    const frequentlyUsedItems = items.filter((item) => item.lastUsedOn || item.partiallyUsed).slice(0, 3)
+    const frequentlyUsedItems = items.filter((item) => item.lastUsedOn || item.partiallyConsumed).slice(0, 3)
 
     // Generate shopping list suggestions
     // This would be more sophisticated in a real app
@@ -75,7 +83,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
     }
   }, [items])
 
-  const handleAddToInventory = (suggestion: any) => {
+  const handleAddToInventory = async (suggestion: ShoppingListSuggestion) => {
     const newItem: InventoryItem = {
       id: Date.now().toString(),
       name: suggestion.name,
@@ -86,7 +94,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
       addedOn: new Date().toISOString(),
     }
 
-    addInventoryItem(newItem)
+    await addInventoryItem(newItem)
 
     toast({
       title: "Item Added",

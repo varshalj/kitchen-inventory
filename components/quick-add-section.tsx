@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { type InventoryItem, addInventoryItem } from "@/lib/data"
+import { addInventoryItem } from "@/lib/client/api"
+import type { InventoryItem } from "@/lib/types"
 
 interface QuickAddSectionProps {
   onAddItem: (item: InventoryItem) => void
@@ -58,13 +59,13 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
     },
   ]
 
-  const handleQuickAdd = (item: any) => {
+  const handleQuickAdd = async (item: any) => {
     const newItem: InventoryItem = {
       id: Date.now().toString(),
       ...item,
     }
 
-    addInventoryItem(newItem)
+    await addInventoryItem(newItem)
     onAddItem(newItem)
   }
 

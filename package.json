@@ -5,7 +5,11 @@
   "scripts": {
     "build": "next build",
     "dev": "next dev",
-    "start": "next start"
+    "start": "next start",
+    "lint": "pnpm exec tsc --noEmit --pretty false",
+    "typecheck": "pnpm exec tsc --noEmit",
+    "test": "pnpm run typecheck",
+    "audit:deps": "pnpm audit --audit-level=high"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.2",

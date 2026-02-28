@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
 import { useUserSettings } from "@/hooks/use-user-settings"
+import { useAuthUser } from "@/hooks/use-auth-user"
 import { getArchivedItems, getInventoryItems } from "@/lib/data"
 import { Input } from "@/components/ui/input"
 import {
@@ -33,6 +34,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CURRENCIES } from "@/components/currency-input"
+import { AVAILABLE_EMAIL_SERVICES, createSeedEmailAccounts } from "@/lib/dev-seed-fixtures"
+import { FEATURE_FLAGS } from "@/lib/feature-flags"
 
 interface EmailAccount {
   id: string
@@ -63,14 +66,14 @@ interface ApiKeyAudit {
 }
 
 export function ProfileSettings() {
+  const router = useRouter()
   const { settings, updateSettings } = useUserSettings()
+  const { user, signOut } = useAuthUser()
   const { toast } = useToast()
   const [expiryReminders, setExpiryReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(false)
   const [archivedItemsCount, setArchivedItemsCount] = useState(0)
-  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([
-    { id: "1", email: "john.doe@gmail.com", services: ["Gmail"], active: true },
-  ])
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([])
   const [showAddEmailDialog, setShowAddEmailDialog] = useState(false)
   const [newEmail, setNewEmail] = useState("")
   const [selectedServices, setSelectedServices] = useState<string[]>([])
@@ -84,13 +87,16 @@ export function ProfileSettings() {
   const [apiLoading, setApiLoading] = useState(false)
 
   useEffect(() => {
-    if (settings) {
-      setExpiryReminders(settings.notifications)
+    const load = async () => {
+      if (settings) {
+        setExpiryReminders(settings.notifications)
+      }
+
+      const archivedItems = await getArchivedItems()
+      setArchivedItemsCount(archivedItems.length)
     }
 
-    // Get count of archived items
-    const archivedItems = getArchivedItems()
-    setArchivedItemsCount(archivedItems.length)
+    void load()
   }, [settings])
 
   const loadAiSettings = async () => {
@@ -122,8 +128,8 @@ export function ProfileSettings() {
     toast({ title: "Source Added", description: `"${trimmed}" has been added to your order sources.` })
   }
 
-  const handleRemoveSource = (source: string) => {
-    const items = getInventoryItems()
+  const handleRemoveSource = async (source: string) => {
+    const items = await getInventoryItems()
     const affectedCount = items.filter((i) => i.orderedFrom === source).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "source", value: source, affectedCount })
@@ -152,8 +158,8 @@ export function ProfileSettings() {
     toast({ title: "Location Added", description: `"${trimmed}" has been added to your storage locations.` })
   }
 
-  const handleRemoveLocation = (location: string) => {
-    const items = getInventoryItems()
+  const handleRemoveLocation = async (location: string) => {
+    const items = await getInventoryItems()
     const affectedCount = items.filter((i) => i.location === location).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "location", value: location, affectedCount })
@@ -332,13 +338,18 @@ export function ProfileSettings() {
               <User className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <CardTitle>John Doe</CardTitle>
-              <CardDescription>john.doe@example.com</CardDescription>
+              <CardTitle>{user?.name || "Guest User"}</CardTitle>
+              <CardDescription>{user?.email || "No signed-in email"}</CardDescription>
             </div>
           </div>
         </CardHeader>
       </Card>
 
+      {(!FEATURE_FLAGS.EMAIL_SCRAPING || !FEATURE_FLAGS.NOTIFICATIONS) && (
+        <p className="mb-6 text-sm text-muted-foreground">Some phase-2 capabilities are hidden during the closed beta.</p>
+      )}
+
+      {FEATURE_FLAGS.EMAIL_SCRAPING && (
       <Card className="mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center">
@@ -399,6 +410,75 @@ export function ProfileSettings() {
               to your inventory.
             </p>
             <p className="mt-1">Items without expiry dates will be flagged for you to update.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      )}
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center">
+            <KeyRound className="mr-2 h-4 w-4" />
+            AI API Key Vault
+          </CardTitle>
+          <CardDescription>Keys are validated, encrypted server-side, and never returned in plaintext.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ai-model">Model for key validation</Label>
+            <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ai-api-key">API key</Label>
+            <Input
+              id="ai-api-key"
+              type="password"
+              placeholder="sk-..."
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleValidateKey} disabled={apiLoading || !apiKeyInput.trim()}>
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Validate Key
+            </Button>
+            <Button onClick={handleRotateKey} disabled={apiLoading || !apiKeyInput.trim()}>
+              <RotateCw className="h-4 w-4 mr-2" />
+              Rotate + Save
+            </Button>
+            <Button variant="destructive" onClick={handleRevokeKey} disabled={apiLoading || !activeKey}>
+              Revoke Active Key
+            </Button>
+          </div>
+
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Active key metadata</p>
+            {activeKey ? (
+              <>
+                <p className="text-sm">Version: {activeKey.version}</p>
+                <p className="text-sm">Masked key: {activeKey.keyMetadata.maskedKey}</p>
+                <p className="text-sm">Fingerprint: {activeKey.keyMetadata.fingerprint}</p>
+                <p className="text-xs text-muted-foreground">Stored model: {activeKey.model}</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No active key.</p>
+            )}
+          </div>
+
+          <div className="rounded-md border p-3 space-y-2">
+            <p className="text-sm font-medium">Audit trail</p>
+            {apiAuditTrail.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No key events logged yet.</p>
+            ) : (
+              apiAuditTrail.slice(0, 5).map((event, index) => (
+                <p key={`${event.version}-${index}`} className="text-xs text-muted-foreground">
+                  {new Date(event.createdAt).toLocaleString()} · v{event.version} · {event.action} · {event.details}
+                </p>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
@@ -632,6 +712,7 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
+      {FEATURE_FLAGS.NOTIFICATIONS && (
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-lg flex items-center">
@@ -674,12 +755,21 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Account</CardTitle>
         </CardHeader>
         <CardFooter>
-          <Button variant="outline" className="w-full text-destructive">
+          <Button
+            variant="outline"
+            className="w-full text-destructive"
+            onClick={() => {
+              signOut()
+              router.push("/auth")
+            }}
+          >
             <LogOut className="mr-2 h-4 w-4" />
             Sign Out
           </Button>
@@ -720,7 +810,7 @@ export function ProfileSettings() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Add Email Dialog */}
+      {FEATURE_FLAGS.EMAIL_SCRAPING && (
       <Dialog open={showAddEmailDialog} onOpenChange={setShowAddEmailDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -791,6 +881,7 @@ export function ProfileSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </MainLayout>
   )
 }
