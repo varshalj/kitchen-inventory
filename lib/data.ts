@@ -1,5 +1,7 @@
 // This file simulates a database for the kitchen inventory app
 
+import { SEED_INVENTORY_ITEMS, SEED_SHOPPING_ITEMS } from "@/lib/dev-seed-fixtures"
+
 export interface InventoryItem {
   id: string
   name: string
@@ -30,103 +32,7 @@ export interface InventoryItem {
 }
 
 // In-memory storage
-let inventoryItems: InventoryItem[] = [
-  {
-    id: "1",
-    name: "Organic Milk",
-    category: "Dairy",
-    expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 1,
-    addedOn: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "2",
-    name: "Chicken Breast",
-    category: "Meat",
-    expiryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Freezer",
-    quantity: 2,
-    addedOn: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "3",
-    name: "Apples",
-    category: "Fruits",
-    expiryDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 6,
-    addedOn: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    partiallyConsumed: true,
-    consumedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "4",
-    name: "Pasta",
-    category: "Grains",
-    expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Pantry",
-    quantity: 1,
-    addedOn: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "5",
-    name: "Tomato Sauce",
-    category: "Canned",
-    expiryDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Pantry",
-    quantity: 2,
-    addedOn: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  // Add some archived items for demonstration
-  {
-    id: "6",
-    name: "Yogurt",
-    category: "Dairy",
-    expiryDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 0,
-    addedOn: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    consumedOn: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    archived: true,
-    archiveReason: "consumed",
-  },
-  {
-    id: "7",
-    name: "Lettuce",
-    category: "Vegetables",
-    expiryDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    location: "Refrigerator",
-    quantity: 0,
-    addedOn: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    wastedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    archived: true,
-    archiveReason: "wasted",
-  },
-  // Add an item with missing expiry date (synced from email)
-  {
-    id: "8",
-    name: "Onions",
-    category: "Vegetables",
-    expiryDate: "",
-    location: "Pantry",
-    quantity: 3,
-    addedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    syncedFromEmail: true,
-    emailSource: "BigBasket",
-  },
-  {
-    id: "9",
-    name: "Potatoes",
-    category: "Vegetables",
-    expiryDate: "",
-    location: "Pantry",
-    quantity: 5,
-    addedOn: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    syncedFromEmail: true,
-    emailSource: "BigBasket",
-  },
-]
+let inventoryItems: InventoryItem[] = [...SEED_INVENTORY_ITEMS]
 
 // Get all inventory items
 export function getInventoryItems(): InventoryItem[] {
@@ -250,24 +156,82 @@ export interface ShoppingItem {
   addedFrom?: "consumed" | "manual"
 }
 
-let shoppingItems: ShoppingItem[] = [
-  {
-    id: "1",
-    name: "Milk",
-    quantity: 1,
-    category: "Dairy",
-    completed: false,
-    addedOn: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    name: "Eggs",
-    quantity: 12,
-    category: "Dairy",
-    completed: false,
-    addedOn: new Date().toISOString(),
-  },
-]
+let shoppingItems: ShoppingItem[] = [...SEED_SHOPPING_ITEMS]
+
+export type AnalyticsTimeFrame = "week" | "month" | "quarter" | "year"
+
+const TIMEFRAME_DAYS: Record<AnalyticsTimeFrame, number> = {
+  week: 7,
+  month: 30,
+  quarter: 90,
+  year: 365,
+}
+
+const parseItemValue = (item: InventoryItem) => {
+  const parsedPrice = Number.parseFloat(item.price || "")
+  const price = Number.isFinite(parsedPrice) ? parsedPrice : 5
+  return price * (item.quantity || 1)
+}
+
+export function getWasteAnalytics(timeFrame: AnalyticsTimeFrame) {
+  const now = new Date()
+  const rangeDays = TIMEFRAME_DAYS[timeFrame]
+  const currentRangeStart = new Date(now.getTime() - rangeDays * 24 * 60 * 60 * 1000)
+  const previousRangeStart = new Date(currentRangeStart.getTime() - rangeDays * 24 * 60 * 60 * 1000)
+
+  const wastedItems = inventoryItems.filter((item) => item.wastedOn)
+  const currentWastedItems = wastedItems.filter((item) => {
+    const wastedDate = new Date(item.wastedOn as string)
+    return wastedDate >= currentRangeStart && wastedDate <= now
+  })
+  const previousWastedItems = wastedItems.filter((item) => {
+    const wastedDate = new Date(item.wastedOn as string)
+    return wastedDate >= previousRangeStart && wastedDate < currentRangeStart
+  })
+
+  const previousWasteCount = previousWastedItems.length
+  const currentWasteCount = currentWastedItems.length
+  const trendPercentage =
+    previousWasteCount === 0
+      ? currentWasteCount === 0
+        ? 0
+        : 100
+      : Math.round(((currentWasteCount - previousWasteCount) / previousWasteCount) * 100)
+
+  const potentialWaste = Math.round(currentWastedItems.reduce((total, item) => total + parseItemValue(item), 0))
+  const previousWasteValue = previousWastedItems.reduce((total, item) => total + parseItemValue(item), 0)
+  const monthlySavings = Math.max(0, Math.round(previousWasteValue - potentialWaste))
+
+  const wasteByCategory: Record<string, number> = {}
+  currentWastedItems.forEach((item) => {
+    wasteByCategory[item.category] = (wasteByCategory[item.category] || 0) + 1
+  })
+
+  const topWasteCategories = Object.entries(wasteByCategory)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+
+  const monthlyTrend = Array.from({ length: 6 }, (_, index) => {
+    const monthDate = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1)
+    const monthLabel = monthDate.toLocaleString("en-US", { month: "short" })
+    const monthWasteCount = wastedItems.filter((item) => {
+      const wastedDate = new Date(item.wastedOn as string)
+      return wastedDate.getMonth() === monthDate.getMonth() && wastedDate.getFullYear() === monthDate.getFullYear()
+    }).length
+    return { month: monthLabel, count: monthWasteCount }
+  })
+
+  return {
+    totalItems: inventoryItems.length,
+    expiredItems: currentWasteCount,
+    wastePercentage: inventoryItems.length ? Math.round((currentWasteCount / inventoryItems.length) * 100) : 0,
+    potentialWaste,
+    expiryTrend: trendPercentage,
+    topWasteCategories,
+    monthlySavings,
+    monthlyTrend,
+  }
+}
 
 export function getShoppingItems(): ShoppingItem[] {
   return shoppingItems

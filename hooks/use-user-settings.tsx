@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, createContext, useContext } from "react"
+import { DEFAULT_ORDER_SOURCES, DEFAULT_STORAGE_LOCATIONS } from "@/lib/dev-seed-fixtures"
 
 type UserSettings = {
   currency: string
@@ -12,25 +13,6 @@ type UserSettings = {
   orderSources: string[]
   storageLocations: string[]
 }
-
-const DEFAULT_ORDER_SOURCES = [
-  "Zomato",
-  "Swiggy",
-  "BigBasket",
-  "Zepto",
-  "FirstClub",
-  "Amazon",
-  "Flipkart",
-]
-
-const DEFAULT_STORAGE_LOCATIONS = [
-  "Refrigerator",
-  "Freezer",
-  "Pantry",
-  "Cabinet",
-  "Counter",
-  "Other",
-]
 
 const defaultSettings: UserSettings = {
   currency: "INR",

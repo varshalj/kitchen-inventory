@@ -4,16 +4,19 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { MainLayout } from "@/components/main-layout"
+import { useAuthUser } from "@/hooks/use-auth-user"
 
 export function AuthScreen() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const { signIn } = useAuthUser()
 
   const handleGoogleSignIn = () => {
     setIsLoading(true)
 
     // Simulate authentication
     setTimeout(() => {
+      signIn()
       setIsLoading(false)
       router.push("/dashboard")
     }, 1500)

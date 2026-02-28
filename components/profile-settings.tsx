@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
@@ -11,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
 import { useUserSettings } from "@/hooks/use-user-settings"
+import { useAuthUser } from "@/hooks/use-auth-user"
 import { getArchivedItems, getInventoryItems } from "@/lib/data"
 import { Input } from "@/components/ui/input"
 import {
@@ -33,6 +35,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CURRENCIES } from "@/components/currency-input"
+import { AVAILABLE_EMAIL_SERVICES, createSeedEmailAccounts } from "@/lib/dev-seed-fixtures"
+import { FEATURE_FLAGS } from "@/lib/feature-flags"
 
 interface EmailAccount {
   id: string
@@ -42,14 +46,14 @@ interface EmailAccount {
 }
 
 export function ProfileSettings() {
+  const router = useRouter()
   const { settings, updateSettings } = useUserSettings()
+  const { user, signOut } = useAuthUser()
   const { toast } = useToast()
   const [expiryReminders, setExpiryReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(false)
   const [archivedItemsCount, setArchivedItemsCount] = useState(0)
-  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([
-    { id: "1", email: "john.doe@gmail.com", services: ["Gmail"], active: true },
-  ])
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([])
   const [showAddEmailDialog, setShowAddEmailDialog] = useState(false)
   const [newEmail, setNewEmail] = useState("")
   const [selectedServices, setSelectedServices] = useState<string[]>([])
@@ -66,6 +70,14 @@ export function ProfileSettings() {
     const archivedItems = getArchivedItems()
     setArchivedItemsCount(archivedItems.length)
   }, [settings])
+
+  useEffect(() => {
+    if (user) {
+      setEmailAccounts(createSeedEmailAccounts(user))
+    } else {
+      setEmailAccounts([])
+    }
+  }, [user])
 
   const handleCurrencyChange = (value: string) => {
     updateSettings({ currency: value })
@@ -185,7 +197,7 @@ export function ProfileSettings() {
     }
   }
 
-  const availableServices = ["Gmail", "Swiggy", "Blinkit", "Zepto", "BigBasket", "Amazon Fresh", "JioMart"]
+  const availableServices = AVAILABLE_EMAIL_SERVICES
 
   return (
     <MainLayout>
@@ -206,13 +218,18 @@ export function ProfileSettings() {
               <User className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <CardTitle>John Doe</CardTitle>
-              <CardDescription>john.doe@example.com</CardDescription>
+              <CardTitle>{user?.name || "Guest User"}</CardTitle>
+              <CardDescription>{user?.email || "No signed-in email"}</CardDescription>
             </div>
           </div>
         </CardHeader>
       </Card>
 
+      {(!FEATURE_FLAGS.EMAIL_SCRAPING || !FEATURE_FLAGS.NOTIFICATIONS) && (
+        <p className="mb-6 text-sm text-muted-foreground">Some phase-2 capabilities are hidden during the closed beta.</p>
+      )}
+
+      {FEATURE_FLAGS.EMAIL_SCRAPING && (
       <Card className="mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center">
@@ -276,6 +293,8 @@ export function ProfileSettings() {
           </div>
         </CardContent>
       </Card>
+
+      )}
 
       <Card className="mb-6">
         <CardHeader className="pb-2">
@@ -439,6 +458,7 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
+      {FEATURE_FLAGS.NOTIFICATIONS && (
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-lg flex items-center">
@@ -481,12 +501,21 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Account</CardTitle>
         </CardHeader>
         <CardFooter>
-          <Button variant="outline" className="w-full text-destructive">
+          <Button
+            variant="outline"
+            className="w-full text-destructive"
+            onClick={() => {
+              signOut()
+              router.push("/auth")
+            }}
+          >
             <LogOut className="mr-2 h-4 w-4" />
             Sign Out
           </Button>
@@ -527,7 +556,7 @@ export function ProfileSettings() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Add Email Dialog */}
+      {FEATURE_FLAGS.EMAIL_SCRAPING && (
       <Dialog open={showAddEmailDialog} onOpenChange={setShowAddEmailDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -598,6 +627,7 @@ export function ProfileSettings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </MainLayout>
   )
 }
