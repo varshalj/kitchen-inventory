@@ -8,6 +8,8 @@ export interface InventoryItem {
   location: string
   quantity?: number
   archived?: boolean
+  archived_at?: string
+  archived_reason?: "consumed" | "wasted" | "deleted" | "other"
   addedOn?: string
   consumedOn?: string
   wastedOn?: string
@@ -15,7 +17,7 @@ export interface InventoryItem {
   notes?: string
   price?: string
   brand?: string
-  // Track why the item was archived
+  // Backward-compatible archive reason field
   archiveReason?: "consumed" | "wasted" | "other"
   // Track source where item was ordered from
   orderedFrom?: string
@@ -161,9 +163,21 @@ export function updateInventoryItem(updatedItem: InventoryItem): InventoryItem |
 
 // Delete an inventory item
 export function deleteInventoryItem(id: string): boolean {
-  const initialLength = inventoryItems.length
-  inventoryItems = inventoryItems.filter((item) => item.id !== id)
-  return inventoryItems.length !== initialLength
+  const index = inventoryItems.findIndex((item) => item.id === id)
+  if (index === -1) {
+    return false
+  }
+
+  const now = new Date().toISOString()
+  inventoryItems[index] = {
+    ...inventoryItems[index],
+    archived: true,
+    archived_at: now,
+    archived_reason: "deleted",
+    archiveReason: "other",
+  }
+
+  return true
 }
 
 // Mark an item as consumed
@@ -176,6 +190,8 @@ export function markItemAsConsumed(id: string): InventoryItem | undefined {
       quantity: 0,
       consumedOn: now,
       archived: true,
+      archived_at: now,
+      archived_reason: "consumed",
       archiveReason: "consumed",
     }
     return inventoryItems[index]
@@ -193,6 +209,8 @@ export function markItemAsWasted(id: string): InventoryItem | undefined {
       quantity: 0,
       wastedOn: now,
       archived: true,
+      archived_at: now,
+      archived_reason: "wasted",
       archiveReason: "wasted",
     }
     return inventoryItems[index]
@@ -250,6 +268,16 @@ export interface ShoppingItem {
   addedFrom?: "consumed" | "manual"
 }
 
+export interface OperationReceipt {
+  id: string
+  itemId: string
+  action: "consume" | "waste"
+  status: "completed" | "undone"
+  createdAt: string
+  undoExpiresAt: string
+  shoppingItemId?: string
+}
+
 let shoppingItems: ShoppingItem[] = [
   {
     id: "1",
@@ -268,6 +296,8 @@ let shoppingItems: ShoppingItem[] = [
     addedOn: new Date().toISOString(),
   },
 ]
+
+let operationReceipts: OperationReceipt[] = []
 
 export function getShoppingItems(): ShoppingItem[] {
   return shoppingItems
@@ -301,4 +331,86 @@ export function deleteShoppingItem(id: string): boolean {
   const initialLength = shoppingItems.length
   shoppingItems = shoppingItems.filter((item) => item.id !== id)
   return shoppingItems.length !== initialLength
+}
+
+
+export function processInventoryOperation(input: {
+  itemId: string
+  action: "consume" | "waste"
+  addToShoppingList?: boolean
+}): {
+  receipt: OperationReceipt
+  item: InventoryItem
+  shoppingItem?: ShoppingItem
+} | null {
+  const item = getInventoryItem(input.itemId)
+  if (!item || item.archived) {
+    return null
+  }
+
+  const previousQuantity = item.quantity ?? 1
+  const updated = input.action === "consume" ? markItemAsConsumed(input.itemId) : markItemAsWasted(input.itemId)
+  if (!updated) {
+    return null
+  }
+
+  let shoppingItem: ShoppingItem | undefined
+  if (input.addToShoppingList && input.action === "consume") {
+    shoppingItem = addToShoppingList({
+      id: `shop-${Date.now()}`,
+      name: updated.name,
+      quantity: previousQuantity,
+      category: updated.category,
+      notes: "",
+      completed: false,
+      addedOn: new Date().toISOString(),
+      addedFrom: "consumed",
+    })
+  }
+
+  const createdAt = new Date().toISOString()
+  const receipt: OperationReceipt = {
+    id: `rcpt-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    itemId: updated.id,
+    action: input.action,
+    status: "completed",
+    createdAt,
+    undoExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    shoppingItemId: shoppingItem?.id,
+  }
+  operationReceipts.push(receipt)
+
+  return { receipt, item: updated, shoppingItem }
+}
+
+export function undoInventoryOperation(receiptId: string): { receipt: OperationReceipt; item: InventoryItem } | null {
+  const receipt = operationReceipts.find((entry) => entry.id === receiptId)
+  if (!receipt || receipt.status === "undone") {
+    return null
+  }
+
+  if (new Date(receipt.undoExpiresAt).getTime() < Date.now()) {
+    return null
+  }
+
+  const itemIndex = inventoryItems.findIndex((item) => item.id === receipt.itemId)
+  if (itemIndex === -1) {
+    return null
+  }
+
+  const current = inventoryItems[itemIndex]
+  const restoredItem: InventoryItem = {
+    ...current,
+    archived: false,
+    archived_at: undefined,
+    archived_reason: undefined,
+    archiveReason: undefined,
+    consumedOn: receipt.action === "consume" ? undefined : current.consumedOn,
+    wastedOn: receipt.action === "waste" ? undefined : current.wastedOn,
+  }
+
+  inventoryItems[itemIndex] = restoredItem
+  receipt.status = "undone"
+
+  return { receipt, item: restoredItem }
 }
