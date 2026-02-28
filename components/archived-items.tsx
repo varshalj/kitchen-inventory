@@ -25,9 +25,9 @@ export function ArchivedItems() {
   }, [])
 
   // Filter items based on archive reason
-  const consumedItems = items.filter((item) => (item.archived_reason ?? item.archiveReason) === "consumed")
-  const wastedItems = items.filter((item) => (item.archived_reason ?? item.archiveReason) === "wasted")
-  const otherItems = items.filter((item) => (item.archived_reason ?? item.archiveReason) !== "consumed" && (item.archived_reason ?? item.archiveReason) !== "wasted")
+  const consumedItems = items.filter((item) => item.archiveReason === "consumed")
+  const wastedItems = items.filter((item) => item.archiveReason === "wasted")
+  const otherItems = items.filter((item) => item.archiveReason !== "consumed" && item.archiveReason !== "wasted")
 
   // Get items to display based on active tab
   const getDisplayItems = () => {
@@ -99,12 +99,12 @@ export function ArchivedItems() {
                     <div className="flex justify-between items-center">
                       <CardTitle className="text-base">{item.name}</CardTitle>
                       <Badge variant="outline">
-                        {(item.archived_reason ?? item.archiveReason) === "consumed" ? (
+                        {item.archiveReason === "consumed" ? (
                           <span className="flex items-center text-green-600">
                             <ShoppingCart className="mr-1 h-3 w-3" />
                             Consumed
                           </span>
-                        ) : (item.archived_reason ?? item.archiveReason) === "wasted" ? (
+                        ) : item.archiveReason === "wasted" ? (
                           <span className="flex items-center text-red-600">
                             <Trash className="mr-1 h-3 w-3" />
                             Wasted

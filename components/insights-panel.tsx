@@ -46,7 +46,7 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
 
     // Calculate consumption trends
     // In a real app, this would be based on historical data
-    const consumptionTrend = items.filter((item) => item.consumedOn || item.partiallyConsumedAt || item.partiallyConsumed).length
+    const consumptionTrend = items.filter((item) => item.consumedOn || item.partiallyConsumed).length
 
     return {
       totalItems: items.length,
