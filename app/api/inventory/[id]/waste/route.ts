@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
-import { getOwnerEmail } from "@/lib/server/request-context"
 
 interface RouteParams { params: Promise<{ id: string }> }
 
