@@ -5,12 +5,10 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/main-layout"
-import { useAuthUser } from "@/hooks/use-auth-user"
+import { supabase } from "@/lib/supabase-client"
 
 export function AuthScreen() {
   const router = useRouter()
-  //const { signIn } = useAuthUser()
-
   const [email, setEmail] = useState("")
   const [isLoadingEmail, setIsLoadingEmail] = useState(false)
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false)
@@ -19,45 +17,31 @@ export function AuthScreen() {
 
   const nextPath = "/dashboard"
 
-  const handleMagicLinkSignIn = () => {
-    if (!email.trim()) {
-      setError("Please enter an email address.")
-      setMessage(null)
-      return
-    }
-
-    setError(null)
-    setMessage(null)
-    setIsLoadingEmail(true)
-
-    import { supabase } from "@/lib/supabase-client"
-
-    const handleMagicLinkSignIn = async () => {
-      if (!email.trim()) {
-        setError("Please enter an email address.")
-        return
-      }
-    
-      setIsLoadingEmail(true)
-      setError(null)
-      setMessage(null)
-    
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${location.origin}`,
-        },
-      })
-    
-      if (error) {
-        setError(error.message)
-      } else {
-        setMessage("Check your email for the magic link.")
-      }
-    
-      setIsLoadingEmail(false)
-    }
+const handleMagicLinkSignIn = async () => {
+  if (!email.trim()) {
+    setError("Please enter an email address.")
+    return
   }
+
+  setError(null)
+  setMessage(null)
+  setIsLoadingEmail(true)
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: location.origin,
+    },
+  })
+
+  if (error) {
+    setError(error.message)
+  } else {
+    setMessage("Check your email for the magic link.")
+  }
+
+  setIsLoadingEmail(false)
+}
 
 const handleGoogleSignIn = async () => {
   setError(null)
