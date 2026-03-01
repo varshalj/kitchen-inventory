@@ -23,14 +23,14 @@ const handleMagicLinkSignIn = async () => {
     return
   }
 
+  setIsLoadingEmail(true)
   setError(null)
   setMessage(null)
-  setIsLoadingEmail(true)
 
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: location.origin,
+      emailRedirectTo: `${location.origin}/dashboard`,
     },
   })
 
@@ -44,8 +44,6 @@ const handleMagicLinkSignIn = async () => {
 }
 
 const handleGoogleSignIn = async () => {
-  setError(null)
-  setMessage(null)
   setIsLoadingGoogle(true)
 
   const { error } = await supabase.auth.signInWithOAuth({
