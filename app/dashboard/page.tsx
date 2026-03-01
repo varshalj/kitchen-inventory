@@ -14,8 +14,10 @@ export default function DashboardPage() {
   useEffect(() => {
     let mounted = true
 
-    // First check initial session
-    supabase.auth.getSession().then(({ data }) => {
+    // Wait for session to hydrate
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession()
+
       if (!mounted) return
 
       if (data.session) {
@@ -23,25 +25,25 @@ export default function DashboardPage() {
       } else {
         router.replace("/auth?next=/dashboard")
       }
-    })
+    }
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!mounted) return
+    checkSession()
 
-        if (event === "SIGNED_IN" && session) {
-          setLoading(false)
-        }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
 
-        if (event === "SIGNED_OUT") {
-          router.replace("/auth?next=/dashboard")
-        }
+      if (session) {
+        setLoading(false)
+      } else if (event === "SIGNED_OUT") {
+        router.replace("/auth?next=/dashboard")
       }
-    )
+    })
 
     return () => {
       mounted = false
-      listener.subscription.unsubscribe()
+      subscription.unsubscribe()
     }
   }, [router])
 
