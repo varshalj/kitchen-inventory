@@ -35,6 +35,7 @@ type ProposalResponse = {
   confidenceThreshold: number
   canBulkApply: boolean
 }
+import { fetchWithAuth } from "@/lib/api-client"
 
 export function AddItemForm() {
   const router = useRouter()
@@ -132,7 +133,7 @@ export function AddItemForm() {
         setIsAnalyzing(false)
 
         try {
-          const response = await fetch("/api/ai/propose-items", {
+          const response = await fetchWithAuth("/api/ai/propose-items", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
