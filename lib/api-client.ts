@@ -1,10 +1,16 @@
+"use client"
+
 import { supabase } from "@/lib/supabase-client"
 
 export async function fetchWithAuth(
   input: RequestInfo,
   init?: RequestInit
 ) {
-  const { data } = await supabase.auth.getSession()
+  const { data, error } = await supabase.auth.getSession()
+
+  if (error) {
+    throw new Error(error.message)
+  }
 
   const accessToken = data.session?.access_token
 
