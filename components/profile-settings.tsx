@@ -37,6 +37,7 @@ import {
 import { CURRENCIES } from "@/components/currency-input"
 import { AVAILABLE_EMAIL_SERVICES, createSeedEmailAccounts } from "@/lib/dev-seed-fixtures"
 import { FEATURE_FLAGS } from "@/lib/feature-flags"
+import { fetchWithAuth } from "@/lib/api-client"
 
 interface EmailAccount {
   id: string
@@ -107,7 +108,7 @@ export function ProfileSettings() {
   }, [settings])
 
   const loadAiSettings = async () => {
-    const response = await fetch("/api/user-ai-keys", { cache: "no-store" })
+    const response = await fetchWithAuth("/api/user-ai-keys", { cache: "no-store" })
     if (!response.ok) return
     const data = await response.json()
     setApiKeyVersions(data.keyVersions || [])
@@ -243,7 +244,7 @@ export function ProfileSettings() {
     if (!apiKeyInput.trim()) return
     setApiLoading(true)
     try {
-      const response = await fetch("/api/user-ai-keys/validate", {
+      const response = await fetchWithAuth("/api/user-ai-keys/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: apiKeyInput, model: aiModel }),
@@ -272,7 +273,7 @@ export function ProfileSettings() {
     if (!apiKeyInput.trim()) return
     setApiLoading(true)
     try {
-      const response = await fetch("/api/user-ai-keys/rotate", {
+      const response = await fetchWithAuth("/api/user-ai-keys/rotate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: apiKeyInput, model: aiModel }),
@@ -302,7 +303,7 @@ export function ProfileSettings() {
   const handleRevokeKey = async () => {
     setApiLoading(true)
     try {
-      const response = await fetch("/api/user-ai-keys/revoke", {
+      const response = await fetchWithAuth("/api/user-ai-keys/revoke", {
         method: "POST",
       })
       const data = await response.json()
