@@ -1,10 +1,5 @@
 import type { InventoryItem, ShoppingItem } from "@/lib/data"
 
-export type AuthUserProfile = {
-  id: string
-  name: string
-  email: string
-}
 
 export type EmailIntegrationAccount = {
   id: string
@@ -14,12 +9,6 @@ export type EmailIntegrationAccount = {
 }
 
 const createIsoOffset = (daysOffset: number) => new Date(Date.now() + daysOffset * 24 * 60 * 60 * 1000).toISOString()
-
-export const DEV_SEED_AUTH_USER: AuthUserProfile = {
-  id: "demo-user-1",
-  name: "Demo User",
-  email: "demo.user@example.com",
-}
 
 export const AVAILABLE_EMAIL_SERVICES = ["Gmail", "Swiggy", "Blinkit", "Zepto", "BigBasket", "Amazon Fresh", "JioMart"]
 
@@ -42,8 +31,4 @@ export const SEED_INVENTORY_ITEMS: InventoryItem[] = [
 export const SEED_SHOPPING_ITEMS: ShoppingItem[] = [
   { id: "1", name: "Milk", quantity: 1, category: "Dairy", completed: false, addedOn: new Date().toISOString() },
   { id: "2", name: "Eggs", quantity: 12, category: "Dairy", completed: false, addedOn: new Date().toISOString() },
-]
-
-export const createSeedEmailAccounts = (user: AuthUserProfile): EmailIntegrationAccount[] => [
-  { id: `${user.id}-primary-email`, email: user.email, services: ["Gmail"], active: true },
 ]
