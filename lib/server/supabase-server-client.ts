@@ -1,5 +1,3 @@
-import { fetchWithAuth } from "@/lib/api-client"
-
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -11,7 +9,7 @@ function assertConfig() {
 
 async function request(path: string, init: RequestInit) {
   assertConfig()
-  const response = await fetchWithAuth(`${SUPABASE_URL}/rest/v1/${path}`, {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...init,
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY!,
