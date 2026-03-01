@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
-import { getOwnerEmail } from "@/lib/server/request-context"
 
 export async function GET(request: NextRequest) {
   try {
