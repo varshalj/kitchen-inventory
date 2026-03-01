@@ -69,7 +69,7 @@ interface ApiKeyAudit {
 export function ProfileSettings() {
   const router = useRouter()
   const { settings, updateSettings } = useUserSettings()
-  const { user, signOut } = useAuthUser()
+  //const { user, signOut } = useAuthUser()
   const { toast } = useToast()
   const [expiryReminders, setExpiryReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(false)
