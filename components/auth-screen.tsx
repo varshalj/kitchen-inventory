@@ -9,7 +9,7 @@ import { useAuthUser } from "@/hooks/use-auth-user"
 
 export function AuthScreen() {
   const router = useRouter()
-  const { signIn } = useAuthUser()
+  //const { signIn } = useAuthUser()
 
   const [email, setEmail] = useState("")
   const [isLoadingEmail, setIsLoadingEmail] = useState(false)
@@ -30,26 +30,52 @@ export function AuthScreen() {
     setMessage(null)
     setIsLoadingEmail(true)
 
-    setTimeout(() => {
-      signIn({ id: "demo-user", name: "Beta User", email })
+    import { supabase } from "@/lib/supabase-client"
+
+    const handleMagicLinkSignIn = async () => {
+      if (!email.trim()) {
+        setError("Please enter an email address.")
+        return
+      }
+    
+      setIsLoadingEmail(true)
+      setError(null)
+      setMessage(null)
+    
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${location.origin}`,
+        },
+      })
+    
+      if (error) {
+        setError(error.message)
+      } else {
+        setMessage("Check your email for the magic link.")
+      }
+    
       setIsLoadingEmail(false)
-      setMessage("Magic link verified. Redirecting...")
-      router.push(nextPath)
-    }, 1000)
+    }
   }
 
-  const handleGoogleSignIn = () => {
-    setError(null)
-    setMessage(null)
-    setIsLoadingGoogle(true)
+const handleGoogleSignIn = async () => {
+  setError(null)
+  setMessage(null)
+  setIsLoadingGoogle(true)
 
-    setTimeout(() => {
-      signIn()
-      setIsLoadingGoogle(false)
-      setMessage("Signed in with Google. Redirecting...")
-      router.push(nextPath)
-    }, 1000)
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: location.origin,
+    },
+  })
+
+  if (error) {
+    setError(error.message)
+    setIsLoadingGoogle(false)
   }
+}
 
   return (
     <MainLayout>
