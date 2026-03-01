@@ -12,14 +12,27 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!session) {
+          router.replace("/auth?next=/dashboard")
+        } else {
+          setLoading(false)
+        }
+      }
+    )
+
+    // Also check initial session
     supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        router.replace("/auth?next=/dashboard")
-      } else {
+      if (data.session) {
         setLoading(false)
       }
     })
-  }, [])
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
+  }, [router])
 
   if (loading) return <InventoryLoading />
 
