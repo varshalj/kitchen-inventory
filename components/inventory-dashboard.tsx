@@ -35,6 +35,7 @@ import Fuse from "fuse.js"
 import { MealPlanGenerator } from "@/components/meal-plan-generator"
 import { StarRating } from "@/components/star-rating"
 import { ReviewPrompt } from "@/components/review-prompt"
+import { fetchWithAuth } from "@/lib/api-client"
 
 export function InventoryDashboard() {
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -223,7 +224,7 @@ export function InventoryDashboard() {
     setActionState({ status: "pending", message: "Saving consume operation..." })
 
     try {
-      const response = await fetch("/api/inventory/operations", {
+      const response = await fetchWithAuth("/api/inventory/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -269,7 +270,7 @@ export function InventoryDashboard() {
     setActionState({ status: "pending", message: "Saving waste operation..." })
 
     try {
-      const response = await fetch("/api/inventory/operations", {
+      const response = await fetchWithAuth("/api/inventory/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
