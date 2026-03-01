@@ -10,9 +10,7 @@ function getSupabaseFromRequest(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      global: {
-        headers: { Authorization: `Bearer ${token}` },
-      },
+      global: { headers: { Authorization: `Bearer ${token}` } },
     }
   )
 }
@@ -25,6 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const item = await inventoryRepo.getById(params.id)
+
   return item
     ? NextResponse.json(item)
     : NextResponse.json({ error: "Not found" }, { status: 404 })
