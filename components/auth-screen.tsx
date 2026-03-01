@@ -17,6 +17,14 @@ export function AuthScreen() {
 
   const nextPath = "/dashboard"
 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.replace(nextPath)
+      }
+    })
+  }, [router])
+
 const handleMagicLinkSignIn = async () => {
   if (!email.trim()) {
     setError("Please enter an email address.")
