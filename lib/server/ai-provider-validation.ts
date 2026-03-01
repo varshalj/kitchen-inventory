@@ -1,7 +1,7 @@
-import { fetchWithAuth } from "@/lib/api-client"
+
 
 export async function validateOpenAiKey({ apiKey, model }: { apiKey: string; model: string }) {
-  const response = await fetchWithAuth(`https://api.openai.com/v1/models/${encodeURIComponent(model)}`, {
+  const response = await fetch(`https://api.openai.com/v1/models/${encodeURIComponent(model)}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
