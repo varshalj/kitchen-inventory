@@ -2,7 +2,6 @@ import { supabaseServerClient } from "@/lib/server/supabase-server-client"
 import type { InventoryItem } from "@/lib/types"
 
 const TABLE = "inventory_items"
-const encode = encodeURIComponent
 
 function toDomain(row: any): InventoryItem {
   return {
@@ -31,15 +30,16 @@ function toDomain(row: any): InventoryItem {
   }
 }
 
-function toRecord(item: Partial<InventoryItem>) {
+function toRecord(item: Partial<InventoryItem>, userId: string) {
   return {
     id: item.id,
+    user_id: userId, // 🔥 critical
     name: item.name,
     category: item.category,
     expiry_date: item.expiryDate || null,
     location: item.location,
     quantity: item.quantity,
-    archived: item.archived,
+    archived: item.archived ?? false,
     added_on: item.addedOn,
     consumed_on: item.consumedOn,
     wasted_on: item.wastedOn,
@@ -59,29 +59,32 @@ function toRecord(item: Partial<InventoryItem>) {
 }
 
 export const inventoryRepo = {
-  async list(ownerEmail: string, archived?: boolean): Promise<InventoryItem[]> {
-    const archivedFilter = archived === undefined ? "" : `&archived=eq.${archived}`
-    const rows = await supabaseServerClient.select(TABLE, `select=*&owner_email=eq.${encode(ownerEmail)}${archivedFilter}&order=added_on.desc`)
+  async list(archived?: boolean): Promise<InventoryItem[]> {
+    const query = archived === undefined
+      ? `select=*&order=added_on.desc`
+      : `select=*&archived=eq.${archived}&order=added_on.desc`
+
+    const rows = await supabaseServerClient.select(TABLE, query)
     return rows.map(toDomain)
   },
 
-  async getById(id: string, ownerEmail: string): Promise<InventoryItem | null> {
-    const rows = await supabaseServerClient.select(TABLE, `select=*&id=eq.${encode(id)}&owner_email=eq.${encode(ownerEmail)}&limit=1`)
+  async getById(id: string): Promise<InventoryItem | null> {
+    const rows = await supabaseServerClient.select(TABLE, `select=*&id=eq.${id}&limit=1`)
     return rows?.[0] ? toDomain(rows[0]) : null
   },
 
-  async create(item: InventoryItem, ownerEmail: string): Promise<InventoryItem> {
-    const rows = await supabaseServerClient.insert(TABLE, { ...toRecord(item), owner_email: ownerEmail })
+  async create(item: InventoryItem, userId: string): Promise<InventoryItem> {
+    const rows = await supabaseServerClient.insert(TABLE, toRecord(item, userId))
     return toDomain(rows[0])
   },
 
-  async update(id: string, ownerEmail: string, item: Partial<InventoryItem>): Promise<InventoryItem | null> {
-    const rows = await supabaseServerClient.update(TABLE, `id=eq.${encode(id)}&owner_email=eq.${encode(ownerEmail)}`, toRecord(item))
+  async update(id: string, item: Partial<InventoryItem>): Promise<InventoryItem | null> {
+    const rows = await supabaseServerClient.update(TABLE, `id=eq.${id}`, item)
     return rows?.[0] ? toDomain(rows[0]) : null
   },
 
-  async delete(id: string, ownerEmail: string): Promise<boolean> {
-    const rows = await supabaseServerClient.remove(TABLE, `id=eq.${encode(id)}&owner_email=eq.${encode(ownerEmail)}`)
+  async delete(id: string): Promise<boolean> {
+    const rows = await supabaseServerClient.remove(TABLE, `id=eq.${id}`)
     return Array.isArray(rows) && rows.length > 0
   },
 }
