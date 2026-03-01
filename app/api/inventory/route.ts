@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const archivedParam = request.nextUrl.searchParams.get("archived")
     const archived = archivedParam === null ? undefined : archivedParam === "true"
 
-    const items = await inventoryRepo.list(archived)
+    const items = await inventoryRepo.list(user.id, archived)
     return NextResponse.json(items)
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
