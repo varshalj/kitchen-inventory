@@ -1,5 +1,6 @@
 "use client"
 
+import { supabase } from "@/lib/supabase-client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -12,7 +13,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
 import { useUserSettings } from "@/hooks/use-user-settings"
-import { useAuthUser } from "@/hooks/use-auth-user"
 import { getArchivedItems, getInventoryItems } from "@/lib/data"
 import { Input } from "@/components/ui/input"
 import {
@@ -69,7 +69,13 @@ interface ApiKeyAudit {
 export function ProfileSettings() {
   const router = useRouter()
   const { settings, updateSettings } = useUserSettings()
-  //const { user, signOut } = useAuthUser()
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user)
+    })
+  }, [])
   const { toast } = useToast()
   const [expiryReminders, setExpiryReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(false)
@@ -766,8 +772,8 @@ export function ProfileSettings() {
           <Button
             variant="outline"
             className="w-full text-destructive"
-            onClick={() => {
-              signOut()
+            onClick={async () => {
+              await supabase.auth.signOut()
               router.push("/auth")
             }}
           >
