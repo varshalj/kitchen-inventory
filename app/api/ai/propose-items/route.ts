@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { getUserConfidenceThreshold, logAIInteraction } from "@/lib/server/ai-store"
-import { fetchWithAuth } from "@/lib/api-client"
+
 
 const requestSchema = z.object({
   userId: z.string().min(1),
@@ -52,7 +52,7 @@ async function getModelResponse(userInput: string): Promise<unknown> {
     return fallbackModelOutput(userInput)
   }
 
-  const response = await fetchWithAuth(modelUrl, {
+  const response = await fetch(modelUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
