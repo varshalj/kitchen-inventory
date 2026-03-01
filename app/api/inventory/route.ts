@@ -7,7 +7,7 @@ function getSupabaseFromRequest(request: NextRequest) {
 
   if (!accessToken) return null
 
-  const supabase = createClient(
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -18,8 +18,6 @@ function getSupabaseFromRequest(request: NextRequest) {
       },
     }
   )
-
-  return supabase
 }
 
 export async function GET(request: NextRequest) {
@@ -40,7 +38,7 @@ export async function GET(request: NextRequest) {
     const archivedParam = request.nextUrl.searchParams.get("archived")
     const archived = archivedParam === null ? undefined : archivedParam === "true"
 
-    const items = await inventoryRepo.list(user.id, archived)
+    const items = await inventoryRepo.list(archived)
     return NextResponse.json(items)
   } catch (error) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
