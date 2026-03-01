@@ -12,24 +12,35 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let mounted = true
+
+    // First check initial session
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
+
+      if (data.session) {
+        setLoading(false)
+      } else {
+        router.replace("/auth?next=/dashboard")
+      }
+    })
+
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (!session) {
-          router.replace("/auth?next=/dashboard")
-        } else {
+        if (!mounted) return
+
+        if (event === "SIGNED_IN" && session) {
           setLoading(false)
+        }
+
+        if (event === "SIGNED_OUT") {
+          router.replace("/auth?next=/dashboard")
         }
       }
     )
 
-    // Also check initial session
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setLoading(false)
-      }
-    })
-
     return () => {
+      mounted = false
       listener.subscription.unsubscribe()
     }
   }, [router])
