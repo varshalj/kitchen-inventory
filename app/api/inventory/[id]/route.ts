@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const item = await inventoryRepo.getById(params.id)
+  const item = await inventoryRepo.getById(params.id, user.id)
 
   return item
     ? NextResponse.json(item)
@@ -37,7 +37,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const payload = await request.json()
-  const updated = await inventoryRepo.update(params.id, payload)
+  const updated = await inventoryRepo.update(params.id, user.id, payload)
 
   return updated
     ? NextResponse.json(updated)
@@ -51,6 +51,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const removed = await inventoryRepo.delete(params.id)
+  const removed = await inventoryRepo.delete(params.id, user.id)
+
   return NextResponse.json({ success: removed })
 }
