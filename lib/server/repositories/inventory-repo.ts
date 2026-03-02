@@ -10,7 +10,6 @@ const TABLE = "inventory_items"
 function toDb(item: Partial<InventoryItem>) {
   const payload: any = {}
 
-  if (item.id !== undefined) payload.id = item.id
   if (item.name !== undefined) payload.name = item.name
   if (item.category !== undefined) payload.category = item.category
   if (item.expiryDate !== undefined) payload.expiry_date = item.expiryDate || null
@@ -97,20 +96,15 @@ export const inventoryRepo = {
   },
 
   async create(supabase: SupabaseClient, item: InventoryItem) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
+    const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
-
-    const dbPayload = {
-      ...toDb(item),
-      user_id: user.id, // 🔥 CRITICAL FOR RLS
-    }
 
     const { data, error } = await supabase
       .from(TABLE)
-      .insert(dbPayload)
+      .insert({
+        ...toDb(item),
+        user_id: user.id,
+      })
       .select()
 
     if (error) throw error
@@ -120,29 +114,40 @@ export const inventoryRepo = {
   },
 
   async update(supabase: SupabaseClient, id: string, item: Partial<InventoryItem>) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
     const { data, error } = await supabase
       .from(TABLE)
       .update(toDb(item))
       .eq("id", id)
+      .eq("user_id", user.id)   // 🔥 CRITICAL FIX
       .select()
 
     if (error) throw error
-    return data?.[0] ? toDomain(data[0]) : null
+    if (!data || data.length === 0) {
+      throw new Error("Update blocked by RLS or item not found")
+    }
+
+    return toDomain(data[0])
   },
 
-async delete(supabase: SupabaseClient, id: string) {
-  const { data, error } = await supabase
-    .from(TABLE)
-    .delete()
-    .eq("id", id)
-    .select()
+  async delete(supabase: SupabaseClient, id: string) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
 
-  if (error) throw error
+    const { data, error } = await supabase
+      .from(TABLE)
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)   // 🔥 CRITICAL FIX
+      .select()
 
-  if (!data || data.length === 0) {
-    throw new Error("Delete blocked by RLS")
-  }
+    if (error) throw error
+    if (!data || data.length === 0) {
+      throw new Error("Delete blocked by RLS")
+    }
 
-  return true
-},
+    return true
+  },
 }
