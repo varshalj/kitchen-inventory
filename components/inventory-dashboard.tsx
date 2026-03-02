@@ -28,7 +28,6 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
 import { MainLayout } from "@/components/main-layout"
-import { type InventoryItem, getInventoryItems, deleteInventoryItem, updateInventoryItem } from "@/lib/data"
 import { EditItemForm } from "@/components/edit-item-form"
 import { useToast } from "@/hooks/use-toast"
 import Fuse from "fuse.js"
@@ -36,6 +35,7 @@ import { MealPlanGenerator } from "@/components/meal-plan-generator"
 import { StarRating } from "@/components/star-rating"
 import { ReviewPrompt } from "@/components/review-prompt"
 import { fetchWithAuth } from "@/lib/api-client"
+import type { InventoryItem } from "@/lib/types"
 
 export function InventoryDashboard() {
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -57,20 +57,26 @@ export function InventoryDashboard() {
   const { toast } = useToast()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
 
-  useEffect(() => {
-    const load = async () => {
-      const inventoryItems = await getInventoryItems()
+useEffect(() => {
+  const load = async () => {
+    try {
+      const response = await fetchWithAuth("/api/inventory")
+      const inventoryItems = await response.json()
+
       setItems(inventoryItems)
 
       fuseRef.current = new Fuse(inventoryItems, {
-      keys: ["name", "category", "location"],
-      threshold: 0.4, // Lower threshold means more strict matching
-      includeScore: true,
+        keys: ["name", "category", "location"],
+        threshold: 0.4,
+        includeScore: true,
       })
+    } catch (error) {
+      console.error("Failed to load inventory:", error)
     }
+  }
 
-    void load()
-  }, [])
+  load()
+}, [])
 
   useEffect(() => {
     filterAndSortItems(activeFilter, searchQuery, sortBy)
@@ -206,7 +212,9 @@ export function InventoryDashboard() {
 
   const handleDeleteItem = async () => {
     if (deleteConfirmItem) {
-      await deleteInventoryItem(deleteConfirmItem.id)
+      await fetchWithAuth(`/api/inventory/${deleteConfirmItem.id}`, {
+  method: "DELETE",
+  })
       setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
       setDeleteConfirmItem(null)
       toast({
@@ -310,13 +318,15 @@ export function InventoryDashboard() {
 
   const handleReviewSubmit = async (review: { rating: number; reviewTags: string[]; reviewNote: string }) => {
     if (reviewItem) {
-      await updateInventoryItem({
-        ...reviewItem.item,
-        rating: review.rating,
-        reviewTags: review.reviewTags,
-        reviewNote: review.reviewNote,
-        ratedAt: new Date().toISOString(),
-      })
+      await fetchWithAuth(`/api/inventory/${reviewItem.item.id}`, {
+  method: "PATCH",
+  body: JSON.stringify({
+    rating: review.rating,
+    reviewTags: review.reviewTags,
+    reviewNote: review.reviewNote,
+    ratedAt: new Date().toISOString(),
+  }),
+})
       setReviewItem(null)
       toast({
         title: "Review Saved",
@@ -330,7 +340,10 @@ export function InventoryDashboard() {
   }
 
   const handleEditSave = async (updatedItem: InventoryItem) => {
-    await updateInventoryItem(updatedItem)
+    await fetchWithAuth(`/api/inventory/${updatedItem.id}`, {
+  method: "PATCH",
+  body: JSON.stringify(updatedItem),
+})
     setItems(items.map((item) => (item.id === updatedItem.id ? updatedItem : item)))
     setEditItem(null)
     toast({
