@@ -3,6 +3,51 @@ import type { InventoryItem } from "@/lib/types"
 
 const TABLE = "inventory_items"
 
+/* ----------------------------- */
+/* Domain → Database Mapper      */
+/* ----------------------------- */
+
+function toDb(item: Partial<InventoryItem>) {
+  const payload: any = {}
+
+  if (item.id !== undefined) payload.id = item.id
+  if (item.name !== undefined) payload.name = item.name
+  if (item.category !== undefined) payload.category = item.category
+  if (item.expiryDate !== undefined) payload.expiry_date = item.expiryDate || null
+  if (item.location !== undefined) payload.location = item.location
+  if (item.quantity !== undefined) payload.quantity = item.quantity
+  if (item.archived !== undefined) payload.archived = item.archived
+  if (item.addedOn !== undefined) payload.added_on = item.addedOn
+  if (item.consumedOn !== undefined) payload.consumed_on = item.consumedOn
+  if (item.wastedOn !== undefined) payload.wasted_on = item.wastedOn
+  if (item.partiallyConsumed !== undefined)
+    payload.partially_consumed = item.partiallyConsumed
+  if (item.notes !== undefined) payload.notes = item.notes
+  if (item.price !== undefined) payload.price = item.price
+  if (item.brand !== undefined) payload.brand = item.brand
+  if (item.archiveReason !== undefined)
+    payload.archive_reason = item.archiveReason
+  if (item.orderedFrom !== undefined)
+    payload.ordered_from = item.orderedFrom
+  if (item.syncedFromEmail !== undefined)
+    payload.synced_from_email = item.syncedFromEmail
+  if (item.emailSource !== undefined)
+    payload.email_source = item.emailSource
+  if (item.rating !== undefined) payload.rating = item.rating
+  if (item.reviewTags !== undefined)
+    payload.review_tags = item.reviewTags
+  if (item.reviewNote !== undefined)
+    payload.review_note = item.reviewNote
+  if (item.ratedAt !== undefined)
+    payload.rated_at = item.ratedAt
+
+  return payload
+}
+
+/* ----------------------------- */
+/* Database → Domain Mapper      */
+/* ----------------------------- */
+
 function toDomain(row: any): InventoryItem {
   return {
     id: row.id,
@@ -30,6 +75,10 @@ function toDomain(row: any): InventoryItem {
   }
 }
 
+/* ----------------------------- */
+/* Repository                    */
+/* ----------------------------- */
+
 export const inventoryRepo = {
   async list(
     supabase: SupabaseClient,
@@ -45,10 +94,9 @@ export const inventoryRepo = {
     }
 
     const { data, error } = await query
-
     if (error) throw error
 
-    return data.map(toDomain)
+    return (data ?? []).map(toDomain)
   },
 
   async getById(
@@ -72,10 +120,11 @@ export const inventoryRepo = {
   ): Promise<InventoryItem> {
     const { data, error } = await supabase
       .from(TABLE)
-      .insert(item)
+      .insert(toDb(item))
       .select()
 
     if (error) throw error
+    if (!data?.[0]) throw new Error("Insert failed")
 
     return toDomain(data[0])
   },
@@ -87,7 +136,7 @@ export const inventoryRepo = {
   ): Promise<InventoryItem | null> {
     const { data, error } = await supabase
       .from(TABLE)
-      .update(item)
+      .update(toDb(item))
       .eq("id", id)
       .select()
 
