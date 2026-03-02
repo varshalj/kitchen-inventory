@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const items = await shoppingRepo.list()
+  const items = await shoppingRepo.list(user.id)
   return NextResponse.json(items)
 }
 
