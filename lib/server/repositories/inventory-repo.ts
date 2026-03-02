@@ -130,7 +130,7 @@ export const inventoryRepo = {
     return data?.[0] ? toDomain(data[0]) : null
   },
 
-  async delete(supabase: SupabaseClient, id: string) {
+async delete(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
     .from(TABLE)
     .delete()
@@ -140,7 +140,7 @@ export const inventoryRepo = {
   if (error) throw error
 
   if (!data || data.length === 0) {
-    throw new Error("Delete failed — item not found or not owned by user")
+    throw new Error("Delete blocked by RLS")
   }
 
   return true
