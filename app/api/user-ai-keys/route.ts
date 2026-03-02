@@ -1,12 +1,14 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getOrCreateUserAiSettings } from "@/lib/server/user-ai-settings-store"
+import { requireUser } from "@/lib/server/require-user"
 
-function getUserId(request: Request) {
-  return request.headers.get("x-user-id") || "demo-user"
-}
+export async function GET(request: NextRequest) {
+  const { user } = await requireUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
-export async function GET(request: Request) {
-  const userId = getUserId(request)
+  const userId = user.id
   const record = getOrCreateUserAiSettings(userId)
 
   return NextResponse.json({

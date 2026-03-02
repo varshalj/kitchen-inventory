@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { getUserConfidenceThreshold, logAIInteraction } from "@/lib/server/ai-store"
+import { requireUser } from "@/lib/server/require-user"
 
 
 const requestSchema = z.object({
-  userId: z.string().min(1),
   userInput: z.string().min(1),
 })
 
@@ -97,7 +97,12 @@ async function getModelResponse(userInput: string): Promise<unknown> {
   return response.json()
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const { user } = await requireUser(req)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
   const body = await req.json().catch(() => null)
   const parsedRequest = requestSchema.safeParse(body)
 
@@ -105,7 +110,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request payload", details: parsedRequest.error.flatten() }, { status: 400 })
   }
 
-  const { userId, userInput } = parsedRequest.data
+  const { userInput } = parsedRequest.data
+  const userId = user.id
 
   try {
     const rawModelResponse = await getModelResponse(userInput)
