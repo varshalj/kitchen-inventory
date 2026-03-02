@@ -30,10 +30,9 @@ export async function POST(request: NextRequest) {
       wastedOn: action === "waste" ? new Date().toISOString() : undefined,
     })
 
-    if (!updated) {
-  console.error("Update failed or RLS blocked row")
-  return NextResponse.json({ error: "Item not found or not owned by user" }, { status: 404 })
-}
+    if (!updated)
+      return NextResponse.json({ error: "Update blocked by RLS" }, { status: 403 })
+
     if (action === "consume" && addToShoppingList) {
       await shoppingRepo.create(supabase, {
         id: crypto.randomUUID(),
