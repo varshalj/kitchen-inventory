@@ -1,38 +1,28 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
-
-function getSupabaseFromRequest(request: NextRequest) {
-  const token = request.headers.get("authorization")?.replace("Bearer ", "")
-  if (!token) return null
-
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    }
-  )
-}
+import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseFromRequest(request)
-    if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const supabase = createSupabaseFromRequest(request)
+    if (!supabase)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-    const body = await request.json()
+    if (!user)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { itemId, action, addToShoppingList } = body
+    const { itemId, action, addToShoppingList } = await request.json()
 
     if (!itemId || !["consume", "waste"].includes(action)) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
     }
 
-    const updated = await inventoryRepo.update(itemId, user.id, {
+    const updated = await inventoryRepo.update(supabase, itemId, {
       quantity: 0,
       archived: true,
       archiveReason: action === "consume" ? "consumed" : "wasted",
@@ -40,29 +30,23 @@ export async function POST(request: NextRequest) {
       wastedOn: action === "waste" ? new Date().toISOString() : undefined,
     })
 
-    if (!updated) {
+    if (!updated)
       return NextResponse.json({ error: "Item not found" }, { status: 404 })
-    }
 
     if (action === "consume" && addToShoppingList) {
-      await shoppingRepo.create(
-        {
-          id: Date.now().toString(),
-          name: updated.name,
-          quantity: 1,
-          category: updated.category,
-          completed: false,
-          addedOn: new Date().toISOString(),
-        },
-        user.id
-      )
+      await shoppingRepo.create(supabase, {
+        id: crypto.randomUUID(),
+        name: updated.name,
+        quantity: 1,
+        category: updated.category,
+        completed: false,
+        addedOn: new Date().toISOString(),
+      })
     }
 
-    return NextResponse.json({
-      status: "success",
-      message: `Item marked as ${action}`,
-    })
+    return NextResponse.json({ success: true })
   } catch (error) {
+    console.error("🔥 OPERATIONS ERROR:", error)
     return NextResponse.json({ error: "Operation failed" }, { status: 500 })
   }
 }
