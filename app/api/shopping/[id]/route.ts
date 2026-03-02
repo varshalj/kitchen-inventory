@@ -15,28 +15,53 @@ function getSupabaseFromRequest(request: NextRequest) {
   )
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   const supabase = getSupabaseFromRequest(request)
-  if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!supabase)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const payload = await request.json()
-  const updated = await shoppingRepo.update(params.id, payload)
+
+  const updated = await shoppingRepo.update(
+    params.id,
+    user.id,
+    payload
+  )
 
   return updated
     ? NextResponse.json(updated)
     : NextResponse.json({ error: "Not found" }, { status: 404 })
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
   const supabase = getSupabaseFromRequest(request)
-  if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!supabase)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  const removed = await shoppingRepo.delete(params.id)
+  if (!user)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const removed = await shoppingRepo.delete(
+    params.id,
+    user.id
+  )
+
   return NextResponse.json({ success: removed })
 }
