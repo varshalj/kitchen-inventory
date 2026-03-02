@@ -100,7 +100,8 @@ export function ProfileSettings() {
         setExpiryReminders(settings.notifications)
       }
 
-      const archivedItems = await getArchivedItems()
+      const response = await fetchWithAuth("/api/inventory?archived=true")
+      const archivedItems = await response.json()
       setArchivedItemsCount(archivedItems.length)
     }
 
@@ -137,7 +138,8 @@ export function ProfileSettings() {
   }
 
   const handleRemoveSource = async (source: string) => {
-    const items = await getInventoryItems()
+    const response = await fetchWithAuth("/api/inventory")
+    const items = await response.json()
     const affectedCount = items.filter((i) => i.orderedFrom === source).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "source", value: source, affectedCount })
@@ -167,7 +169,8 @@ export function ProfileSettings() {
   }
 
   const handleRemoveLocation = async (location: string) => {
-    const items = await getInventoryItems()
+    const response = await fetchWithAuth("/api/inventory")
+    const items = await response.json()
     const affectedCount = items.filter((i) => i.location === location).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "location", value: location, affectedCount })
