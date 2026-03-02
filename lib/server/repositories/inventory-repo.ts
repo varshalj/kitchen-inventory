@@ -4,7 +4,7 @@ import type { InventoryItem } from "@/lib/types"
 const TABLE = "inventory_items"
 
 /* ----------------------------- */
-/* Domain → Database Mapper      */
+/* Domain → DB Mapper            */
 /* ----------------------------- */
 
 function toDb(item: Partial<InventoryItem>) {
@@ -17,35 +17,25 @@ function toDb(item: Partial<InventoryItem>) {
   if (item.location !== undefined) payload.location = item.location
   if (item.quantity !== undefined) payload.quantity = item.quantity
   if (item.archived !== undefined) payload.archived = item.archived
-  if (item.addedOn !== undefined) payload.added_on = item.addedOn
   if (item.consumedOn !== undefined) payload.consumed_on = item.consumedOn
   if (item.wastedOn !== undefined) payload.wasted_on = item.wastedOn
-  if (item.partiallyConsumed !== undefined)
-    payload.partially_consumed = item.partiallyConsumed
+  if (item.archiveReason !== undefined) payload.archive_reason = item.archiveReason
   if (item.notes !== undefined) payload.notes = item.notes
   if (item.price !== undefined) payload.price = item.price
   if (item.brand !== undefined) payload.brand = item.brand
-  if (item.archiveReason !== undefined)
-    payload.archive_reason = item.archiveReason
-  if (item.orderedFrom !== undefined)
-    payload.ordered_from = item.orderedFrom
-  if (item.syncedFromEmail !== undefined)
-    payload.synced_from_email = item.syncedFromEmail
-  if (item.emailSource !== undefined)
-    payload.email_source = item.emailSource
+  if (item.orderedFrom !== undefined) payload.ordered_from = item.orderedFrom
+  if (item.syncedFromEmail !== undefined) payload.synced_from_email = item.syncedFromEmail
+  if (item.emailSource !== undefined) payload.email_source = item.emailSource
   if (item.rating !== undefined) payload.rating = item.rating
-  if (item.reviewTags !== undefined)
-    payload.review_tags = item.reviewTags
-  if (item.reviewNote !== undefined)
-    payload.review_note = item.reviewNote
-  if (item.ratedAt !== undefined)
-    payload.rated_at = item.ratedAt
+  if (item.reviewTags !== undefined) payload.review_tags = item.reviewTags
+  if (item.reviewNote !== undefined) payload.review_note = item.reviewNote
+  if (item.ratedAt !== undefined) payload.rated_at = item.ratedAt
 
   return payload
 }
 
 /* ----------------------------- */
-/* Database → Domain Mapper      */
+/* DB → Domain Mapper            */
 /* ----------------------------- */
 
 function toDomain(row: any): InventoryItem {
@@ -60,11 +50,10 @@ function toDomain(row: any): InventoryItem {
     addedOn: row.added_on,
     consumedOn: row.consumed_on,
     wastedOn: row.wasted_on,
-    partiallyConsumed: row.partially_consumed,
+    archiveReason: row.archive_reason,
     notes: row.notes,
     price: row.price,
     brand: row.brand,
-    archiveReason: row.archive_reason,
     orderedFrom: row.ordered_from,
     syncedFromEmail: row.synced_from_email,
     emailSource: row.email_source,
@@ -80,10 +69,7 @@ function toDomain(row: any): InventoryItem {
 /* ----------------------------- */
 
 export const inventoryRepo = {
-  async list(
-    supabase: SupabaseClient,
-    archived?: boolean
-  ): Promise<InventoryItem[]> {
+  async list(supabase: SupabaseClient, archived?: boolean) {
     let query = supabase
       .from(TABLE)
       .select("*")
@@ -99,10 +85,7 @@ export const inventoryRepo = {
     return (data ?? []).map(toDomain)
   },
 
-  async getById(
-    supabase: SupabaseClient,
-    id: string
-  ): Promise<InventoryItem | null> {
+  async getById(supabase: SupabaseClient, id: string) {
     const { data, error } = await supabase
       .from(TABLE)
       .select("*")
@@ -110,17 +93,24 @@ export const inventoryRepo = {
       .limit(1)
 
     if (error) throw error
-
     return data?.[0] ? toDomain(data[0]) : null
   },
 
-  async create(
-    supabase: SupabaseClient,
-    item: InventoryItem
-  ): Promise<InventoryItem> {
+  async create(supabase: SupabaseClient, item: InventoryItem) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) throw new Error("Unauthorized")
+
+    const dbPayload = {
+      ...toDb(item),
+      user_id: user.id, // 🔥 CRITICAL FOR RLS
+    }
+
     const { data, error } = await supabase
       .from(TABLE)
-      .insert(toDb(item))
+      .insert(dbPayload)
       .select()
 
     if (error) throw error
@@ -129,11 +119,7 @@ export const inventoryRepo = {
     return toDomain(data[0])
   },
 
-  async update(
-    supabase: SupabaseClient,
-    id: string,
-    item: Partial<InventoryItem>
-  ): Promise<InventoryItem | null> {
+  async update(supabase: SupabaseClient, id: string, item: Partial<InventoryItem>) {
     const { data, error } = await supabase
       .from(TABLE)
       .update(toDb(item))
@@ -141,21 +127,16 @@ export const inventoryRepo = {
       .select()
 
     if (error) throw error
-
     return data?.[0] ? toDomain(data[0]) : null
   },
 
-  async delete(
-    supabase: SupabaseClient,
-    id: string
-  ): Promise<boolean> {
+  async delete(supabase: SupabaseClient, id: string) {
     const { error } = await supabase
       .from(TABLE)
       .delete()
       .eq("id", id)
 
     if (error) throw error
-
     return true
   },
 }
