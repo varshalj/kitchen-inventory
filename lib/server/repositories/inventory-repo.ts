@@ -131,12 +131,18 @@ export const inventoryRepo = {
   },
 
   async delete(supabase: SupabaseClient, id: string) {
-    const { error } = await supabase
-      .from(TABLE)
-      .delete()
-      .eq("id", id)
+  const { data, error } = await supabase
+    .from(TABLE)
+    .delete()
+    .eq("id", id)
+    .select()
 
-    if (error) throw error
-    return true
-  },
+  if (error) throw error
+
+  if (!data || data.length === 0) {
+    throw new Error("Delete failed — item not found or not owned by user")
+  }
+
+  return true
+},
 }
