@@ -62,10 +62,26 @@ export async function DELETE(
 ) {
   try {
     const supabase = createSupabaseFromRequest(request)
-    if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!supabase) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // 🔎 DEBUG START
+    console.log("AUTH USER ID:", user.id)
+
+    const { data: row } = await supabase
+      .from("inventory_items")
+      .select("user_id")
+      .eq("id", params.id)
+      .single()
+
+    console.log("ROW USER ID:", row?.user_id)
+    // 🔎 DEBUG END
 
     await inventoryRepo.delete(supabase, params.id)
 
