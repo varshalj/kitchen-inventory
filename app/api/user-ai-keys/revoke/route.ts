@@ -1,12 +1,14 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { revokeActiveUserKey } from "@/lib/server/user-ai-settings-store"
+import { requireUser } from "@/lib/server/require-user"
 
-function getUserId(request: Request) {
-  return request.headers.get("x-user-id") || "demo-user"
-}
+export async function POST(request: NextRequest) {
+  const { user } = await requireUser(request)
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
 
-export async function POST(request: Request) {
-  const userId = getUserId(request)
+  const userId = user.id
   const actor = request.headers.get("x-actor") || "self-service"
   const revoked = revokeActiveUserKey({ userId, actor })
 

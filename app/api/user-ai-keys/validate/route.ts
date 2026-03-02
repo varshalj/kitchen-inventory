@@ -1,9 +1,15 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { validateOpenAiKey } from "@/lib/server/ai-provider-validation"
 import { createValidatedSnapshot } from "@/lib/server/user-ai-settings-store"
+import { requireUser } from "@/lib/server/require-user"
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const { user } = await requireUser(request)
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await request.json()
     const apiKey = String(body.apiKey || "").trim()
     const model = String(body.model || "gpt-4o-mini").trim()

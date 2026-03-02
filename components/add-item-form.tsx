@@ -139,7 +139,6 @@ export function AddItemForm() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              userId: "demo-user",
               userInput: "Extract inventory items from the uploaded grocery image.",
             }),
           })

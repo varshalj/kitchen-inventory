@@ -1,25 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
-
-function getSupabaseFromRequest(request: NextRequest) {
-  const token = request.headers.get("authorization")?.replace("Bearer ", "")
-  if (!token) return null
-
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    }
-  )
-}
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabaseFromRequest(request)
+  const supabase = createSupabaseFromRequest(request)
   if (!supabase)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -32,11 +19,7 @@ export async function PATCH(
 
   const payload = await request.json()
 
-  const updated = await shoppingRepo.update(
-    params.id,
-    user.id,
-    payload
-  )
+  const updated = await shoppingRepo.update(supabase, params.id, payload)
 
   return updated
     ? NextResponse.json(updated)
@@ -47,7 +30,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = getSupabaseFromRequest(request)
+  const supabase = createSupabaseFromRequest(request)
   if (!supabase)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -58,10 +41,7 @@ export async function DELETE(
   if (!user)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const removed = await shoppingRepo.delete(
-    params.id,
-    user.id
-  )
+  const removed = await shoppingRepo.delete(supabase, params.id)
 
   return NextResponse.json({ success: removed })
 }
