@@ -22,26 +22,42 @@ function getSupabaseFromRequest(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseFromRequest(request)
+    const supabase = createSupabaseFromRequest(request)
+
     if (!supabase) {
+      console.log("❌ No authorization header")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser()
 
-    if (!user) {
+    console.log("👤 Auth user:", user)
+    console.log("🔐 Auth error:", authError)
+
+    if (!user || authError) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const archivedParam = request.nextUrl.searchParams.get("archived")
-    const archived = archivedParam === null ? undefined : archivedParam === "true"
+    const { data, error } = await supabase
+      .from("inventory_items")
+      .select("*")
+      .order("added_on", { ascending: false })
 
-    const items = await inventoryRepo.list(user.id, archived)
-    return NextResponse.json(items)
+    console.log("📦 Query data:", data)
+    console.log("❗ Query error:", error)
+
+    if (error) throw error
+
+    return NextResponse.json(data ?? [])
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+    console.error("🔥 API ERROR:", error)
+    return NextResponse.json(
+      { error: (error as Error).message },
+      { status: 500 }
+    )
   }
 }
 
