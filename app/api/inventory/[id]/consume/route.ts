@@ -22,7 +22,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const updated = await inventoryRepo.update(params.id, {
+  const updated = await inventoryRepo.update(params.id, user.id, {
     quantity: 0,
     consumedOn: new Date().toISOString(),
     archived: true,
