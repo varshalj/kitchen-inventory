@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
 import { useUserSettings } from "@/hooks/use-user-settings"
-import { getArchivedItems, getInventoryItems } from "@/lib/data"
 import { Input } from "@/components/ui/input"
 import {
   Dialog,

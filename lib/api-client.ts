@@ -6,23 +6,19 @@ export async function fetchWithAuth(
   input: RequestInfo,
   init?: RequestInit
 ) {
-  const { data, error } = await supabase.auth.getSession()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  const accessToken = data.session?.access_token
-
-  if (!accessToken) {
-    throw new Error("No active session")
+  if (!session?.access_token) {
+    throw new Error("No active Supabase session")
   }
 
   return fetch(input, {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${session.access_token}`,
       "Content-Type": "application/json",
     },
   })
