@@ -3,6 +3,6 @@ import type { NextRequest } from "next/server"
 
 export function createSupabaseFromRequest(request: NextRequest) {
   return createRouteHandlerClient({
-    cookies: () => request.cookies,
+    cookies: async () => request.cookies as any,
   })
 }

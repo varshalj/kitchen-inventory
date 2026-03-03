@@ -139,7 +139,7 @@ export function ProfileSettings() {
   const handleRemoveSource = async (source: string) => {
     const response = await fetchWithAuth("/api/inventory")
     const items = await response.json()
-    const affectedCount = items.filter((i) => i.orderedFrom === source).length
+    const affectedCount = items.filter((i: { orderedFrom?: string }) => i.orderedFrom === source).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "source", value: source, affectedCount })
     } else {
@@ -170,7 +170,7 @@ export function ProfileSettings() {
   const handleRemoveLocation = async (location: string) => {
     const response = await fetchWithAuth("/api/inventory")
     const items = await response.json()
-    const affectedCount = items.filter((i) => i.location === location).length
+    const affectedCount = items.filter((i: { location?: string }) => i.location === location).length
     if (affectedCount > 0) {
       setConfirmRemove({ type: "location", value: location, affectedCount })
     } else {

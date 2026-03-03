@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const items = await inventoryRepo.list(supabase)
+    const archivedParam = request.nextUrl.searchParams.get("archived")
+    const archived = archivedParam === null ? undefined : archivedParam === "true"
+
+    const items = await inventoryRepo.list(supabase, archived)
 
     return NextResponse.json(items)
   } catch (error) {
