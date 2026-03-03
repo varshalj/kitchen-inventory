@@ -61,17 +61,29 @@ useEffect(() => {
   const load = async () => {
     try {
       const response = await fetchWithAuth("/api/inventory")
+      if (!response.ok) {
+        const body = await response.text()
+        throw new Error(body || `Failed to load inventory (${response.status})`)
+      }
+
       const inventoryItems = await response.json()
+      const safeItems = Array.isArray(inventoryItems) ? inventoryItems : []
 
-      setItems(inventoryItems)
+      setItems(safeItems)
 
-      fuseRef.current = new Fuse(inventoryItems, {
+      fuseRef.current = new Fuse(safeItems, {
         keys: ["name", "category", "location"],
         threshold: 0.4,
         includeScore: true,
       })
     } catch (error) {
       console.error("Failed to load inventory:", error)
+      setItems([])
+      fuseRef.current = new Fuse([], {
+        keys: ["name", "category", "location"],
+        threshold: 0.4,
+        includeScore: true,
+      })
     }
   }
 
@@ -217,7 +229,8 @@ useEffect(() => {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to delete inventory item")
+        const body = await response.text()
+        throw new Error(body || "Failed to delete inventory item")
       }
 
       setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
