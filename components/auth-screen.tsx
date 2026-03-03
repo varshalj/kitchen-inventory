@@ -14,16 +14,22 @@ export function AuthScreen() {
   const [isLoadingGoogle, setIsLoadingGoogle] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const nextPath = "/dashboard"
+  const [nextPath, setNextPath] = useState("/dashboard")
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    const requestedNext = new URLSearchParams(window.location.search).get("next")
+    if (requestedNext && requestedNext.startsWith("/")) {
+      setNextPath(requestedNext)
+    }
+  }, [])
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }: { data: { session: unknown } }) => {
       if (data.session) {
         router.replace(nextPath)
       }
     })
-  }, [router])
+  }, [router, nextPath])
 
 const handleMagicLinkSignIn = async () => {
   if (!email.trim()) {
@@ -38,7 +44,7 @@ const handleMagicLinkSignIn = async () => {
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${location.origin}/dashboard`,
+      emailRedirectTo: `${location.origin}${nextPath}`,
     },
   })
 
@@ -57,7 +63,7 @@ const handleGoogleSignIn = async () => {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${location.origin}/dashboard`,
+      redirectTo: `${location.origin}${nextPath}`,
     },
   })
 

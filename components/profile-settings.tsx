@@ -69,10 +69,10 @@ interface ApiKeyAudit {
 export function ProfileSettings() {
   const router = useRouter()
   const { settings, updateSettings } = useUserSettings()
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    supabase.auth.getUser().then(({ data }: { data: { user: { name?: string; email?: string } | null } }) => {
       setUser(data.user)
     })
   }, [])
