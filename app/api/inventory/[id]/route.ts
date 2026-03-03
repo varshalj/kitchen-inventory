@@ -2,18 +2,18 @@ import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+type RouteContext = { params: Promise<{ id: string }> }
+
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params
     const supabase = createSupabaseFromRequest(request)
     if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const item = await inventoryRepo.getById(supabase, params.id)
+    const item = await inventoryRepo.getById(supabase, id)
 
     return item
       ? NextResponse.json(item)
@@ -27,11 +27,9 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params
     const supabase = createSupabaseFromRequest(request)
     if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -42,7 +40,7 @@ export async function PATCH(
 
     const updated = await inventoryRepo.update(
       supabase,
-      params.id,
+      id,
       payload
     )
 
@@ -74,12 +72,12 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const existing = await inventoryRepo.getById(supabase, params.id)
+    const existing = await inventoryRepo.getById(supabase, id)
     if (!existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    await inventoryRepo.delete(supabase, params.id)
+    await inventoryRepo.delete(supabase, id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
