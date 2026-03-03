@@ -1,25 +1,11 @@
 "use client"
 
-import { supabase } from "@/lib/supabase-client"
-
-export async function fetchWithAuth(
-  input: RequestInfo,
-  init?: RequestInit
-) {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session?.access_token) {
-    throw new Error("No active Supabase session")
-  }
-
+export async function fetchWithAuth(input: RequestInfo, init?: RequestInit) {
   return fetch(input, {
     ...init,
+    credentials: "include",
     headers: {
       ...(init?.headers ?? {}),
-      Authorization: `Bearer ${session.access_token}`,
-      "Content-Type": "application/json",
     },
   })
 }
