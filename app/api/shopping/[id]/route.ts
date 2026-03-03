@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+type RouteContext = { params: Promise<{ id: string }> }
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params
     const supabase = createSupabaseFromRequest(request)
     if (!supabase) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -21,7 +21,7 @@ export async function PATCH(
 
     const updated = await shoppingRepo.update(
       supabase,
-      params.id,
+      id,
       payload
     )
 
@@ -37,11 +37,9 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params
     const supabase = createSupabaseFromRequest(request)
     if (!supabase) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -52,14 +50,18 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    await shoppingRepo.delete(supabase, params.id)
+    const existing = await shoppingRepo.getById(supabase, id)
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    await shoppingRepo.delete(supabase, id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("SHOPPING DELETE ERROR:", error)
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 }
-    )
+    const message = (error as Error).message
+    const status = message.includes("RLS") ? 403 : 500
+    return NextResponse.json({ error: message }, { status })
   }
 }

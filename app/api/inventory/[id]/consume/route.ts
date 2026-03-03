@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+type RouteContext = { params: Promise<{ id: string }> }
+
+export async function POST(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params
     const supabase = createSupabaseFromRequest(request)
     if (!supabase) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -17,7 +17,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const updated = await inventoryRepo.update(supabase, params.id, {
+    const updated = await inventoryRepo.update(supabase, id, {
       quantity: 0,
       consumedOn: new Date().toISOString(),
       archived: true,
