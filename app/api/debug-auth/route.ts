@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 
 export async function GET(request: NextRequest) {
-  const supabase = createSupabaseFromRequest(request)
+  const supabase = createSupabaseFromRequest()
 
   if (!supabase) {
     return NextResponse.json({
