@@ -212,9 +212,14 @@ useEffect(() => {
 
   const handleDeleteItem = async () => {
     if (deleteConfirmItem) {
-      await fetchWithAuth(`/api/inventory/${deleteConfirmItem.id}`, {
-  method: "DELETE",
-  })
+      const response = await fetchWithAuth(`/api/inventory/${deleteConfirmItem.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to delete inventory item")
+      }
+
       setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
       setDeleteConfirmItem(null)
       toast({

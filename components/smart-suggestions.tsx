@@ -95,7 +95,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
 
     toast({
       title: "Item Added",
-      description: `${suggestion.name} has been added to your inventory.`,
+      description: `${createdItem.name} has been added to your inventory.`,
     })
   }
 
