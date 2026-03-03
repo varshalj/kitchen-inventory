@@ -2,7 +2,8 @@ import type { NextRequest } from "next/server"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 
 export async function requireUser(request: NextRequest) {
-  const supabase = createSupabaseFromRequest(request)
+  void request
+  const supabase = createSupabaseFromRequest()
   if (!supabase) {
     return { supabase: null, user: null }
   }

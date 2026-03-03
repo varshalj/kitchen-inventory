@@ -5,7 +5,7 @@ import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseFromRequest(request)
+    const supabase = createSupabaseFromRequest()
     if (!supabase)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

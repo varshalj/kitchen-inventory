@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseFromRequest(request)
+    const supabase = createSupabaseFromRequest()
     if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -32,7 +32,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseFromRequest(request)
+    const supabase = createSupabaseFromRequest()
     if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -60,7 +60,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseFromRequest(request)
+  const supabase = createSupabaseFromRequest()
   if (!supabase) {
     console.log("❌ No supabase instance")
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
