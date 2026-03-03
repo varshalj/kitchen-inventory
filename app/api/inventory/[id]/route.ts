@@ -60,11 +60,23 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+  const supabase = createSupabaseFromRequest(request)
+  if (!supabase) {
+    console.log("❌ No supabase instance")
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  console.log("Auth user:", user?.id)
+
+  const { data: row } = await supabase
+    .from("inventory_items")
+    .select("id,user_id")
+    .eq("id", params.id)
+    .single()
 
     const {
       data: { user },
