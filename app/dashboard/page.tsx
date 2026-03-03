@@ -31,7 +31,7 @@ export default function DashboardPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((event: string, session: unknown) => {
       if (!mounted) return
 
       if (session) {
