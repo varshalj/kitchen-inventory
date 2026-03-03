@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { CURRENCIES } from "@/components/currency-input"
-import { AVAILABLE_EMAIL_SERVICES, createSeedEmailAccounts } from "@/lib/dev-seed-fixtures"
+import { AVAILABLE_EMAIL_SERVICES } from "@/lib/dev-seed-fixtures"
 import { FEATURE_FLAGS } from "@/lib/feature-flags"
 import { fetchWithAuth } from "@/lib/api-client"
 
@@ -425,73 +425,6 @@ export function ProfileSettings() {
       </Card>
 
       )}
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center">
-            <KeyRound className="mr-2 h-4 w-4" />
-            AI API Key Vault
-          </CardTitle>
-          <CardDescription>Keys are validated, encrypted server-side, and never returned in plaintext.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="ai-model">Model for key validation</Label>
-            <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ai-api-key">API key</Label>
-            <Input
-              id="ai-api-key"
-              type="password"
-              placeholder="sk-..."
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={handleValidateKey} disabled={apiLoading || !apiKeyInput.trim()}>
-              <ShieldCheck className="h-4 w-4 mr-2" />
-              Validate Key
-            </Button>
-            <Button onClick={handleRotateKey} disabled={apiLoading || !apiKeyInput.trim()}>
-              <RotateCw className="h-4 w-4 mr-2" />
-              Rotate + Save
-            </Button>
-            <Button variant="destructive" onClick={handleRevokeKey} disabled={apiLoading || !activeKey}>
-              Revoke Active Key
-            </Button>
-          </div>
-
-          <div className="rounded-md border p-3 space-y-2">
-            <p className="text-sm font-medium">Active key metadata</p>
-            {activeKey ? (
-              <>
-                <p className="text-sm">Version: {activeKey.version}</p>
-                <p className="text-sm">Masked key: {activeKey.keyMetadata.maskedKey}</p>
-                <p className="text-sm">Fingerprint: {activeKey.keyMetadata.fingerprint}</p>
-                <p className="text-xs text-muted-foreground">Stored model: {activeKey.model}</p>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">No active key.</p>
-            )}
-          </div>
-
-          <div className="rounded-md border p-3 space-y-2">
-            <p className="text-sm font-medium">Audit trail</p>
-            {apiAuditTrail.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No key events logged yet.</p>
-            ) : (
-              apiAuditTrail.slice(0, 5).map((event, index) => (
-                <p key={`${event.version}-${index}`} className="text-xs text-muted-foreground">
-                  {new Date(event.createdAt).toLocaleString()} · v{event.version} · {event.action} · {event.details}
-                </p>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       <Card className="mb-6">
         <CardHeader>
