@@ -58,6 +58,21 @@ export const shoppingRepo = {
     return (data ?? []).map(toDomain)
   },
 
+
+  async getById(supabase: SupabaseClient, id: string) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .limit(1)
+
+    if (error) throw error
+    return data?.[0] ? toDomain(data[0]) : null
+  },
   async create(supabase: SupabaseClient, item: ShoppingItem) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
