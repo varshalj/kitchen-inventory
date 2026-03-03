@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Clock, ChefHat, Mail, ShoppingCart, Shield, Sparkles } from "lucide-react"
@@ -117,11 +118,14 @@ export function LandingPage() {
               </div>
               <div className="flex items-center justify-center">
                 <div className="relative aspect-video w-full max-w-md overflow-hidden rounded-xl border shadow-xl">
-                  <video className="h-full w-full object-cover" autoPlay muted loop playsInline>
-                    <source src="/placeholder.svg?height=400&width=600" type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                  <Image
+                    src="/placeholder.jpg"
+                    alt="Kitchen inventory dashboard preview"
+                    fill
+                    className="object-cover"
+                    priority
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                   <div className="absolute bottom-4 left-4 right-4">
                     <p className="text-sm font-medium text-white">
                       See how users save time with AI-powered meal planning
