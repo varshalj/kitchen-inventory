@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { MainLayout } from "@/components/main-layout"
 import { addInventoryItem } from "@/lib/client/api"
+import type { InventoryItem } from "@/lib/types"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { QuantityInput } from "@/components/quantity-input"
 import { CurrencyInput } from "@/components/currency-input"
@@ -183,15 +184,14 @@ export function AddItemForm() {
     e.preventDefault()
 
     if (activeTab === "manual") {
-      await addInventoryItem({
-        id: Date.now().toString(),
+      const createdItem = await addInventoryItem({
         ...formData,
         addedOn: new Date().toISOString(),
-      })
+      } as unknown as InventoryItem)
+      setFormData((prev) => ({ ...prev, name: createdItem.name }))
     } else if (extractedItems.length > 0) {
       for (const item of extractedItems.filter((entry) => entry.decision === "confirmed" || entry.decision === "edited")) {
-        await addInventoryItem({
-          id: Date.now() + Math.random().toString(),
+        const createdItem = await addInventoryItem({
           name: item.name,
           category: item.category,
           expiryDate: new Date(item.expiryDate).toISOString(),
@@ -202,7 +202,10 @@ export function AddItemForm() {
           price: item.price || formData.price,
           brand: formData.brand,
           orderedFrom: formData.orderedFrom || undefined,
-        })
+        } as unknown as InventoryItem)
+        setExtractedItems((items) =>
+          items.map((entry) => (entry.name === item.name ? { ...entry, name: createdItem.name } : entry))
+        )
       }
     }
 
@@ -281,8 +284,7 @@ export function AddItemForm() {
   ]
 
   const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
-    await addInventoryItem({
-      id: Date.now().toString(),
+    const createdItem = await addInventoryItem({
       name: item.name,
       category: item.category,
       expiryDate: new Date(item.expiryDate).toISOString(),
@@ -290,7 +292,8 @@ export function AddItemForm() {
       quantity: item.quantity,
       price: item.price,
       addedOn: new Date().toISOString(),
-    })
+    } as unknown as InventoryItem)
+    setFormData((prev) => ({ ...prev, name: createdItem.name }))
     router.push("/dashboard")
   }
 

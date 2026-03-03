@@ -84,21 +84,18 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
   }, [items])
 
   const handleAddToInventory = async (suggestion: ShoppingListSuggestion) => {
-    const newItem: InventoryItem = {
-      id: Date.now().toString(),
+    const createdItem = await addInventoryItem({
       name: suggestion.name,
       category: suggestion.category,
       expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       location: "Refrigerator",
       quantity: 1,
       addedOn: new Date().toISOString(),
-    }
-
-    await addInventoryItem(newItem)
+    } as unknown as InventoryItem)
 
     toast({
       title: "Item Added",
-      description: `${suggestion.name} has been added to your inventory.`,
+      description: `${createdItem.name} has been added to your inventory.`,
     })
   }
 

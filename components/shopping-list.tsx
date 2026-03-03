@@ -39,8 +39,7 @@ export function ShoppingList() {
   const handleAddItem = async () => {
     if (!newItem.name.trim()) return
 
-    const item: ShoppingItem = {
-      id: Date.now().toString(),
+    const itemPayload = {
       name: newItem.name,
       quantity: newItem.quantity || 1,
       notes: newItem.notes || undefined,
@@ -49,14 +48,14 @@ export function ShoppingList() {
       addedFrom: "manual",
     }
 
-    const addedItem = await addToShoppingList(item)
+    const addedItem = await addToShoppingList(itemPayload as unknown as ShoppingItem)
 
     // Update local state
-    const existingIndex = items.findIndex((i) => i.name.toLowerCase() === item.name.toLowerCase() && !i.completed)
+    const existingIndex = items.findIndex((i) => i.name.toLowerCase() === itemPayload.name.toLowerCase() && !i.completed)
 
     if (existingIndex >= 0) {
-      // Update quantity if item exists
-      setItems(items.map((i, index) => (index === existingIndex ? { ...i, quantity: i.quantity + item.quantity } : i)))
+      // Update existing item using API response
+      setItems(items.map((i, index) => (index === existingIndex ? addedItem : i)))
     } else {
       // Add new item
       setItems([...items, addedItem])
@@ -65,7 +64,7 @@ export function ShoppingList() {
     setNewItem({ name: "", quantity: 1, notes: "" })
     toast({
       title: "Item Added",
-      description: `${item.name} added to your shopping list.`,
+      description: `${itemPayload.name} added to your shopping list.`,
     })
   }
 
