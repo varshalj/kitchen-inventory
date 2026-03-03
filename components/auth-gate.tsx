@@ -1,17 +1,19 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase-client"
 import { InventoryLoading } from "@/components/inventory-loading"
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+type AuthGateProps = {
+  children: ReactNode
+}
+
+export function AuthGate({ children }: AuthGateProps) {
   const router = useRouter()
-  const [isReady, setIsReady] = useState(false)
+  const pathname = usePathname()
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -21,10 +23,12 @@ export default function DashboardLayout({
       if (!mounted) return
 
       if (data.session) {
-        setIsReady(true)
-      } else {
-        router.replace("/auth?next=/dashboard")
+        setReady(true)
+        return
       }
+
+      const next = pathname || "/dashboard"
+      router.replace(`/auth?next=${encodeURIComponent(next)}`)
     }
 
     void checkSession()
@@ -35,9 +39,10 @@ export default function DashboardLayout({
       if (!mounted) return
 
       if (session) {
-        setIsReady(true)
+        setReady(true)
       } else if (event === "SIGNED_OUT") {
-        router.replace("/auth?next=/dashboard")
+        const next = pathname || "/dashboard"
+        router.replace(`/auth?next=${encodeURIComponent(next)}`)
       }
     })
 
@@ -45,11 +50,9 @@ export default function DashboardLayout({
       mounted = false
       subscription.unsubscribe()
     }
-  }, [router])
+  }, [pathname, router])
 
-  if (!isReady) {
-    return <InventoryLoading />
-  }
+  if (!ready) return <InventoryLoading />
 
   return <>{children}</>
 }

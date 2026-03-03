@@ -49,6 +49,10 @@ async function getModelResponse(userInput: string): Promise<unknown> {
   const modelUrl = process.env.AI_MODEL_URL
 
   if (!modelUrl) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("AI_MODEL_URL is not configured")
+    }
+
     return fallbackModelOutput(userInput)
   }
 
@@ -157,6 +161,7 @@ export async function POST(req: NextRequest) {
       errorMessage: message,
     })
 
-    return NextResponse.json({ error: "Failed to generate proposals" }, { status: 500 })
+    const status = message.includes("AI_MODEL_URL is not configured") ? 503 : 500
+    return NextResponse.json({ error: "Failed to generate proposals" }, { status })
   }
 }

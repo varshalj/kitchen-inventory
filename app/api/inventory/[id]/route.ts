@@ -54,11 +54,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
+    const { id } = await context.params
     const supabase = createSupabaseFromRequest(request)
     if (!supabase) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
