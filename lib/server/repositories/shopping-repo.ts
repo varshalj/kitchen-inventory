@@ -44,9 +44,13 @@ function toDomain(row: any): ShoppingItem {
 
 export const shoppingRepo = {
   async list(supabase: SupabaseClient) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
     const { data, error } = await supabase
       .from(TABLE)
       .select("*")
+      .eq("user_id", user.id)
       .order("added_on", { ascending: false })
 
     if (error) throw error

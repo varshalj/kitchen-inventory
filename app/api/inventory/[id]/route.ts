@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseFromRequest()
+    const supabase = createSupabaseFromRequest(request)
     if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -32,7 +32,7 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseFromRequest()
+    const supabase = createSupabaseFromRequest(request)
     if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -60,41 +60,32 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = createSupabaseFromRequest()
-  if (!supabase) {
-    console.log("❌ No supabase instance")
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  try {
+    const supabase = createSupabaseFromRequest(request)
+    if (!supabase) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const existing = await inventoryRepo.getById(supabase, params.id)
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    await inventoryRepo.delete(supabase, params.id)
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("DELETE ITEM ERROR:", error)
+    const message = (error as Error).message
+    const status = message.includes("RLS") ? 403 : 500
+    return NextResponse.json({ error: message }, { status })
   }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  console.log("Auth user:", user?.id)
-
-  const { data: row } = await supabase
-    .from("inventory_items")
-    .select("id,user_id")
-    .eq("id", params.id)
-    .single()
-
-  console.log("Row user_id:", row?.user_id)
-
-  const { data, error } = await supabase
-    .from("inventory_items")
-    .delete()
-    .eq("id", params.id)
-    .select()
-
-  console.log("Delete result:", data, error)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  if (!data || data.length === 0) {
-    return NextResponse.json({ error: "Delete blocked by RLS" }, { status: 403 })
-  }
-
-  return NextResponse.json({ success: true })
 }
