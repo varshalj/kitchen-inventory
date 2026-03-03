@@ -84,7 +84,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
   }, [items])
 
   const handleAddToInventory = async (suggestion: ShoppingListSuggestion) => {
-    const createdItem = await addInventoryItem({
+    await addInventoryItem({
       name: suggestion.name,
       category: suggestion.category,
       expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),

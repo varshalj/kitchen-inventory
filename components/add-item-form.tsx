@@ -184,14 +184,13 @@ export function AddItemForm() {
     e.preventDefault()
 
     if (activeTab === "manual") {
-      const createdItem = await addInventoryItem({
+      await addInventoryItem({
         ...formData,
         addedOn: new Date().toISOString(),
       } as unknown as InventoryItem)
-      setFormData((prev) => ({ ...prev, name: createdItem.name }))
     } else if (extractedItems.length > 0) {
       for (const item of extractedItems.filter((entry) => entry.decision === "confirmed" || entry.decision === "edited")) {
-        const createdItem = await addInventoryItem({
+        await addInventoryItem({
           name: item.name,
           category: item.category,
           expiryDate: new Date(item.expiryDate).toISOString(),
@@ -203,9 +202,6 @@ export function AddItemForm() {
           brand: formData.brand,
           orderedFrom: formData.orderedFrom || undefined,
         } as unknown as InventoryItem)
-        setExtractedItems((items) =>
-          items.map((entry) => (entry.name === item.name ? { ...entry, name: createdItem.name } : entry))
-        )
       }
     }
 
@@ -284,7 +280,7 @@ export function AddItemForm() {
   ]
 
   const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
-    const createdItem = await addInventoryItem({
+    await addInventoryItem({
       name: item.name,
       category: item.category,
       expiryDate: new Date(item.expiryDate).toISOString(),
@@ -293,7 +289,6 @@ export function AddItemForm() {
       price: item.price,
       addedOn: new Date().toISOString(),
     } as unknown as InventoryItem)
-    setFormData((prev) => ({ ...prev, name: createdItem.name }))
     router.push("/dashboard")
   }
 

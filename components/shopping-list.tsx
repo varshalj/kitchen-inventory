@@ -54,8 +54,10 @@ export function ShoppingList() {
     const existingIndex = items.findIndex((i) => i.name.toLowerCase() === itemPayload.name.toLowerCase() && !i.completed)
 
     if (existingIndex >= 0) {
-      // Update existing item using API response
-      setItems(items.map((i, index) => (index === existingIndex ? addedItem : i)))
+      // Update quantity if item exists
+      setItems(
+        items.map((i, index) => (index === existingIndex ? { ...i, quantity: i.quantity + itemPayload.quantity } : i))
+      )
     } else {
       // Add new item
       setItems([...items, addedItem])
