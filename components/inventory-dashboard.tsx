@@ -229,7 +229,8 @@ useEffect(() => {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to delete inventory item")
+        const body = await response.text()
+        throw new Error(body || "Failed to delete inventory item")
       }
 
       setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
