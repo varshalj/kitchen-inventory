@@ -358,16 +358,33 @@ useEffect(() => {
   }
 
   const handleEditSave = async (updatedItem: InventoryItem) => {
-    await fetchWithAuth(`/api/inventory/${updatedItem.id}`, {
-  method: "PATCH",
-  body: JSON.stringify(updatedItem),
-})
-    setItems(items.map((item) => (item.id === updatedItem.id ? updatedItem : item)))
-    setEditItem(null)
-    toast({
-      title: "Item Updated",
-      description: `${updatedItem.name} has been updated.`,
-    })
+    try {
+      const response = await fetchWithAuth(`/api/inventory/${updatedItem.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(updatedItem),
+      })
+
+      if (!response.ok) {
+        const body = await response.text()
+        throw new Error(body || "Failed to update inventory item")
+      }
+
+      const savedItem = (await response.json()) as InventoryItem
+
+      setItems(items.map((item) => (item.id === savedItem.id ? savedItem : item)))
+      setEditItem(null)
+      toast({
+        title: "Item Updated",
+        description: `${savedItem.name} has been updated.`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update inventory item"
+      toast({
+        title: "Update Failed",
+        description: message,
+        variant: "destructive",
+      })
+    }
   }
 
   const getCategories = () => {

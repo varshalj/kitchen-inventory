@@ -69,9 +69,13 @@ function toDomain(row: any): InventoryItem {
 
 export const inventoryRepo = {
   async list(supabase: SupabaseClient, archived?: boolean) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
     let query = supabase
       .from(TABLE)
       .select("*")
+      .eq("user_id", user.id)
       .order("added_on", { ascending: false })
 
     if (archived !== undefined) {
@@ -85,10 +89,14 @@ export const inventoryRepo = {
   },
 
   async getById(supabase: SupabaseClient, id: string) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
     const { data, error } = await supabase
       .from(TABLE)
       .select("*")
       .eq("id", id)
+      .eq("user_id", user.id)
       .limit(1)
 
     if (error) throw error
