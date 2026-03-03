@@ -7,7 +7,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseFromRequest()
+    const supabase = createSupabaseFromRequest(request)
     if (!supabase) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
