@@ -112,7 +112,7 @@ importers:
         version: 16.1.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       openai:
         specifier: ^6.25.0
-        version: 6.25.0(ws@8.19.0)
+        version: 6.25.0(ws@8.19.0)(zod@3.25.76)
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -131,6 +131,9 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.2.1)
+      zod:
+        specifier: ^3.22.0
+        version: 3.25.76
     devDependencies:
       '@tailwindcss/postcss':
         specifier: ^4.2.1
@@ -1668,6 +1671,9 @@ packages:
       utf-8-validate:
         optional: true
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
@@ -2874,9 +2880,10 @@ snapshots:
 
   object-assign@4.1.1: {}
 
-  openai@6.25.0(ws@8.19.0):
+  openai@6.25.0(ws@8.19.0)(zod@3.25.76):
     optionalDependencies:
       ws: 8.19.0
+      zod: 3.25.76
 
   picocolors@1.1.1: {}
 
@@ -3074,3 +3081,5 @@ snapshots:
       d3-timer: 3.0.1
 
   ws@8.19.0: {}
+
+  zod@3.25.76: {}
