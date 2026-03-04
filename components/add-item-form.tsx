@@ -20,6 +20,7 @@ import type { InventoryItem } from "@/lib/types"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { QuantityInput } from "@/components/quantity-input"
 import { CurrencyInput } from "@/components/currency-input"
+import { useToast } from "@/hooks/use-toast"
 
 type DetectedType = "receipt" | "food" | "package" | null
 type ReviewDecision = "pending" | "confirmed" | "edited" | "rejected"
@@ -41,6 +42,7 @@ import { fetchWithAuth } from "@/lib/api-client"
 export function AddItemForm() {
   const router = useRouter()
   const { settings } = useUserSettings()
+  const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const formContainerRef = useRef<HTMLDivElement>(null)
@@ -146,7 +148,8 @@ export function AddItemForm() {
           })
 
           if (!response.ok) {
-            throw new Error("AI proposal request failed")
+            const errBody = await response.json().catch(() => null)
+            throw new Error(errBody?.error || "AI proposal request failed")
           }
 
           const payload = (await response.json()) as ProposalResponse
@@ -184,29 +187,40 @@ export function AddItemForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (activeTab === "manual") {
-      await addInventoryItem({
-        ...formData,
-        addedOn: new Date().toISOString(),
-      } as unknown as InventoryItem)
-    } else if (extractedItems.length > 0) {
-      for (const item of extractedItems.filter((entry) => entry.decision === "confirmed" || entry.decision === "edited")) {
+    try {
+      if (activeTab === "manual") {
         await addInventoryItem({
-          name: item.name,
-          category: item.category,
-          expiryDate: new Date(item.expiryDate).toISOString(),
-          location: formData.location || "Refrigerator",
-          quantity: item.quantity,
+          ...formData,
           addedOn: new Date().toISOString(),
-          notes: formData.notes,
-          price: item.price || formData.price,
-          brand: formData.brand,
-          orderedFrom: formData.orderedFrom || undefined,
         } as unknown as InventoryItem)
+        toast({ title: "Item Saved", description: `${formData.name} has been added to your inventory.` })
+      } else if (extractedItems.length > 0) {
+        const approved = extractedItems.filter((entry) => entry.decision === "confirmed" || entry.decision === "edited")
+        for (const item of approved) {
+          await addInventoryItem({
+            name: item.name,
+            category: item.category,
+            expiryDate: new Date(item.expiryDate).toISOString(),
+            location: formData.location || "Refrigerator",
+            quantity: item.quantity,
+            addedOn: new Date().toISOString(),
+            notes: formData.notes,
+            price: item.price || formData.price,
+            brand: formData.brand,
+            orderedFrom: formData.orderedFrom || undefined,
+          } as unknown as InventoryItem)
+        }
+        toast({
+          title: "Items Saved",
+          description: `${approved.length} item${approved.length !== 1 ? "s" : ""} added to your inventory.`,
+        })
       }
-    }
 
-    router.push("/dashboard")
+      router.push("/dashboard")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to save item"
+      toast({ title: "Save Failed", description: message, variant: "destructive" })
+    }
   }
 
   const setItemDecision = (index: number, decision: ReviewDecision) => {
@@ -293,16 +307,22 @@ export function AddItemForm() {
   }, [])
 
   const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
-    await addInventoryItem({
-      name: item.name,
-      category: item.category,
-      expiryDate: new Date(item.expiryDate).toISOString(),
-      location: item.location,
-      quantity: item.quantity,
-      price: item.price,
-      addedOn: new Date().toISOString(),
-    } as unknown as InventoryItem)
-    router.push("/dashboard")
+    try {
+      await addInventoryItem({
+        name: item.name,
+        category: item.category,
+        expiryDate: new Date(item.expiryDate).toISOString(),
+        location: item.location,
+        quantity: item.quantity,
+        price: item.price,
+        addedOn: new Date().toISOString(),
+      } as unknown as InventoryItem)
+      toast({ title: "Item Added", description: `${item.name} has been added to your inventory.` })
+      router.push("/dashboard")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to add item"
+      toast({ title: "Add Failed", description: message, variant: "destructive" })
+    }
   }
 
   const approvedCount = extractedItems.filter((i) => i.decision === "confirmed" || i.decision === "edited").length

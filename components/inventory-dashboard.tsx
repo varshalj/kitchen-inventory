@@ -51,6 +51,7 @@ export function InventoryDashboard() {
   const [sortBy, setSortBy] = useState("expiryDate")
   const [showMealPlanModal, setShowMealPlanModal] = useState(false)
   const [reviewItem, setReviewItem] = useState<{ item: InventoryItem; type: "consumed" | "wasted" } | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [actionState, setActionState] = useState<{ status: "idle" | "pending" | "success" | "error"; message?: string }>({
     status: "idle",
   })
@@ -60,7 +61,7 @@ export function InventoryDashboard() {
 useEffect(() => {
   const load = async () => {
     try {
-      const response = await fetchWithAuth("/api/inventory")
+      const response = await fetchWithAuth("/api/inventory?archived=false")
       if (!response.ok) {
         const body = await response.text()
         throw new Error(body || `Failed to load inventory (${response.status})`)
@@ -84,6 +85,8 @@ useEffect(() => {
         threshold: 0.4,
         includeScore: true,
       })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -416,14 +419,15 @@ useEffect(() => {
 
       <div className="mb-6">
         <Button
-          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50"
           onClick={() => setShowMealPlanModal(true)}
+          disabled={isLoading || items.length === 0}
         >
           <div className="relative">
             <ShoppingCart className="h-5 w-5" />
             <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-yellow-300" />
           </div>
-          <span>Create Meal Plan</span>
+          <span>{items.length === 0 && !isLoading ? "Add items to create a meal plan" : "Create Meal Plan"}</span>
         </Button>
       </div>
 
@@ -565,9 +569,28 @@ useEffect(() => {
       </div>
 
       <div className="grid grid-cols-1 gap-4 mb-20">
-        {filteredItems.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="rounded-lg border p-4 animate-pulse">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-2 flex-1">
+                    <div className="h-4 bg-muted rounded w-1/3" />
+                    <div className="h-3 bg-muted rounded w-1/4" />
+                  </div>
+                  <div className="h-6 bg-muted rounded w-16" />
+                </div>
+                <div className="mt-3 pt-3 border-t">
+                  <div className="h-3 bg-muted rounded w-1/4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredItems.length === 0 ? (
           <div className="text-center py-10">
-            <p className="text-muted-foreground mb-4">No items match your search</p>
+            <p className="text-muted-foreground mb-4">
+              {items.length === 0 ? "Your inventory is empty" : "No items match your search"}
+            </p>
             <Button asChild>
               <Link href="/add-item">Add New Item</Link>
             </Button>
