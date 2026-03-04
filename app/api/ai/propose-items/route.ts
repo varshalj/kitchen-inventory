@@ -18,7 +18,7 @@ const proposalSchema = z.object({
 })
 
 const modelOutputSchema = z.object({
-  proposals: z.array(proposalSchema).min(1),
+  proposals: z.array(proposalSchema),
   confidence: z.number().min(0).max(1),
   reasoning: z.string().min(1),
 })
