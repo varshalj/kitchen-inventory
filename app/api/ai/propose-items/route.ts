@@ -13,7 +13,7 @@ const proposalSchema = z.object({
   name: z.string().min(1),
   category: z.string().min(1),
   expiryDate: z.string().min(1),
-  quantity: z.number().int().positive().default(1),
+  quantity: z.number().int().positive(),
   price: z.string().optional(),
 })
 
