@@ -42,44 +42,49 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
       return new Date(item.expiryDate) < new Date()
     })
 
-    // Get frequently used items (based on usage history)
-    // In a real app, this would be based on actual usage patterns
     const frequentlyUsedItems = items.filter((item) => item.lastUsedOn || item.partiallyConsumed).slice(0, 3)
 
-    // Generate shopping list suggestions
-    // This would be more sophisticated in a real app
-    const shoppingListSuggestions = [
-      {
-        id: "s1",
-        name: "Milk",
-        category: "Dairy",
-        reason: "Running low based on usage patterns",
-      },
-      {
-        id: "s2",
-        name: "Eggs",
-        category: "Dairy",
-        reason: "Used frequently in your recipes",
-      },
-      {
-        id: "s3",
-        name: "Bread",
-        category: "Grains",
-        reason: "You typically buy this weekly",
-      },
-    ]
+    const lowStockItems = items
+      .filter((item) => (item.quantity || 0) <= 1 && !item.archived)
+      .slice(0, 5)
+      .map((item, i) => ({
+        id: `low-${i}`,
+        name: item.name,
+        category: item.category,
+        reason: `Low stock (${item.quantity || 0} remaining)`,
+      }))
 
-    // Filter out items that are already in inventory
-    const filteredSuggestions = shoppingListSuggestions.filter(
-      (suggestion) =>
-        !items.some((item) => item.name.toLowerCase() === suggestion.name.toLowerCase() && (item.quantity || 0) > 0),
-    )
+    const consumedItems = items
+      .filter((item) => item.consumedOn && item.archived)
+      .slice(0, 3)
+      .map((item, i) => ({
+        id: `consumed-${i}`,
+        name: item.name,
+        category: item.category,
+        reason: "Previously consumed - may need restocking",
+      }))
+
+    const shoppingListSuggestions = [...lowStockItems, ...consumedItems]
+      .filter(
+        (suggestion, index, self) =>
+          self.findIndex((s) => s.name.toLowerCase() === suggestion.name.toLowerCase()) === index,
+      )
+      .filter(
+        (suggestion) =>
+          !items.some(
+            (item) =>
+              item.name.toLowerCase() === suggestion.name.toLowerCase() &&
+              !item.archived &&
+              (item.quantity || 0) > 1,
+          ),
+      )
+      .slice(0, 5)
 
     return {
       expiringItems,
       expiredItems,
       frequentlyUsedItems,
-      shoppingListSuggestions: filteredSuggestions,
+      shoppingListSuggestions,
     }
   }, [items])
 
@@ -205,23 +210,18 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
               <ScrollArea className="h-48">
                 <div className="space-y-3">
                   {suggestions.expiringItems.length > 0 ? (
-                    <>
-                      <div className="border rounded-md p-3">
-                        <h3 className="font-medium">Spinach and Egg Frittata</h3>
-                        <p className="text-xs text-muted-foreground mt-1">Uses: Eggs, Spinach, Milk</p>
-                      </div>
-                      <div className="border rounded-md p-3">
-                        <h3 className="font-medium">Apple Cinnamon Oatmeal</h3>
-                        <p className="text-xs text-muted-foreground mt-1">Uses: Apples, Milk</p>
-                      </div>
-                      <div className="border rounded-md p-3">
-                        <h3 className="font-medium">Chicken Pasta Bake</h3>
-                        <p className="text-xs text-muted-foreground mt-1">Uses: Chicken Breast, Pasta, Tomato Sauce</p>
-                      </div>
-                    </>
+                    <div className="border rounded-md p-3">
+                      <p className="text-sm text-muted-foreground">
+                        You have {suggestions.expiringItems.length} item{suggestions.expiringItems.length > 1 ? "s" : ""} expiring soon:
+                        {" "}{suggestions.expiringItems.map((item) => item.name).join(", ")}.
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Use the Meal Plan Generator on the dashboard to get AI-powered recipe suggestions based on these items.
+                      </p>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      No recipes available based on your current inventory.
+                      No items expiring soon. Your inventory is in good shape.
                     </p>
                   )}
                 </div>

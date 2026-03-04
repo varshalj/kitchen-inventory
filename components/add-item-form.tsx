@@ -122,12 +122,12 @@ export function AddItemForm() {
       // Simulate multi-step AI analysis
       const stepDuration = 700
 
+      const imageData = reader.result as string
+
       const timer1 = setTimeout(() => setAnalyzeStep(1), stepDuration)
       const timer2 = setTimeout(() => {
         setAnalyzeStep(2)
-        // Simulate AI detecting whether this is a receipt or food photo
-        const isReceipt = Math.random() > 0.5
-        setDetectedType(isReceipt ? "receipt" : "food")
+        setDetectedType("food")
       }, stepDuration * 2)
       const timer3 = setTimeout(() => setAnalyzeStep(3), stepDuration * 3)
       const timer4 = setTimeout(async () => {
@@ -140,7 +140,8 @@ export function AddItemForm() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              userInput: "Extract inventory items from the uploaded grocery image.",
+              userInput: "Extract all grocery and food items from this image. Identify item names, categories, quantities, and estimate expiry dates.",
+              imageBase64: imageData,
             }),
           })
 
@@ -249,35 +250,47 @@ export function AddItemForm() {
     if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
 
-  const suggestedItems = [
-    {
-      name: "Milk",
-      category: "Dairy",
-      expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      location: "Refrigerator",
-      quantity: 1,
-      price: "65",
-      reason: "Running low based on usage patterns",
-    },
-    {
-      name: "Eggs",
-      category: "Dairy",
-      expiryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      location: "Refrigerator",
-      quantity: 12,
-      price: "89",
-      reason: "Used frequently in your recipes",
-    },
-    {
-      name: "Bread",
-      category: "Grains",
-      expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      location: "Pantry",
-      quantity: 1,
-      price: "45",
-      reason: "You typically buy this weekly",
-    },
-  ]
+  const [suggestedItems, setSuggestedItems] = useState<
+    Array<{ name: string; category: string; expiryDate: string; location: string; quantity: number; price: string; reason: string }>
+  >([])
+
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      try {
+        const response = await fetchWithAuth("/api/inventory?archived=true")
+        if (!response.ok) return
+        const archived = await response.json()
+        if (!Array.isArray(archived)) return
+
+        const consumed = archived
+          .filter((item: any) => item.archiveReason === "consumed")
+          .slice(0, 5)
+
+        const seen = new Set<string>()
+        const suggestions = consumed
+          .filter((item: any) => {
+            const key = item.name.toLowerCase()
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          .map((item: any) => ({
+            name: item.name,
+            category: item.category || "Other",
+            expiryDate: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+            location: item.location || "Refrigerator",
+            quantity: item.quantity || 1,
+            price: item.price || "",
+            reason: "Previously consumed - may need restocking",
+          }))
+
+        setSuggestedItems(suggestions)
+      } catch {
+        // ignore
+      }
+    }
+    loadSuggestions()
+  }, [])
 
   const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
     await addInventoryItem({

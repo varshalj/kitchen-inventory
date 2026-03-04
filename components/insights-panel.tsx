@@ -40,12 +40,17 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
     const expiryRatio = items.length > 0 ? expiringSoon / items.length : 0
     const healthScore = Math.round((1 - expiryRatio) * 100)
 
-    // Calculate potential waste
-    // In a real app, this would be based on actual prices and usage patterns
-    const potentialWaste = expiringSoon * 3.5 // Assuming average item cost of $3.50
+    const expiringItems = items.filter((item) => {
+      const daysUntilExpiry = Math.ceil(
+        (new Date(item.expiryDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24),
+      )
+      return daysUntilExpiry <= 7
+    })
+    const potentialWaste = expiringItems.reduce((total, item) => {
+      const price = parseFloat(item.price || "0")
+      return total + (price > 0 ? price : 0)
+    }, 0)
 
-    // Calculate consumption trends
-    // In a real app, this would be based on historical data
     const consumptionTrend = items.filter((item) => item.consumedOn || item.partiallyConsumed).length
 
     return {
@@ -53,7 +58,7 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
       expiringSoon,
       topCategory: topCategory.name,
       healthScore,
-      potentialWaste: potentialWaste.toFixed(2),
+      potentialWaste,
       consumptionTrend,
     }
   }, [items])
@@ -159,7 +164,7 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
               </TooltipProvider>
             </div>
             <div className="flex items-center">
-              <p className="text-lg font-medium">${insights.potentialWaste}</p>
+              <p className="text-lg font-medium">{insights.potentialWaste > 0 ? `${insights.potentialWaste.toFixed(0)}` : "N/A"}</p>
               <DollarSign className="ml-2 h-4 w-4 text-amber-500" />
             </div>
           </div>

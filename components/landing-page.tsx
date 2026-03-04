@@ -21,38 +21,69 @@ export function LandingPage() {
   const [showOTP, setShowOTP] = useState(false)
   const [otp, setOtp] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
 
     setIsSubmitting(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false)
+    try {
+      const { supabase } = await import("@/lib/supabase-client")
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+        },
+      })
+
+      if (error) throw error
+
       setShowOTP(true)
-    }, 1000)
+      toast({
+        title: "Check your email",
+        description: "We sent a magic link to your email address.",
+      })
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to send magic link",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleVerifyOTP = (e: React.FormEvent) => {
+  const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!otp) return
 
     setIsSubmitting(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false)
+    try {
+      const { supabase } = await import("@/lib/supabase-client")
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: "email",
+      })
+
+      if (error) throw error
+
       toast({
         title: "Successfully verified!",
         description: "Redirecting to your dashboard...",
       })
-
-      // Redirect to dashboard
-      setTimeout(() => {
-        router.push("/dashboard")
-      }, 1500)
-    }, 1000)
+      router.push("/dashboard")
+    } catch (err) {
+      toast({
+        title: "Verification failed",
+        description: err instanceof Error ? err.message : "Invalid code. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -360,11 +391,24 @@ export function LandingPage() {
                     <button
                       type="button"
                       className="underline"
-                      onClick={() => {
-                        toast({
-                          title: "Code resent!",
-                          description: "Please check your email for the new code.",
-                        })
+                      onClick={async () => {
+                        try {
+                          const { supabase } = await import("@/lib/supabase-client")
+                          await supabase.auth.signInWithOtp({
+                            email,
+                            options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+                          })
+                          toast({
+                            title: "Code resent!",
+                            description: "Please check your email for the new code.",
+                          })
+                        } catch {
+                          toast({
+                            title: "Failed to resend",
+                            description: "Please try again.",
+                            variant: "destructive",
+                          })
+                        }
                       }}
                     >
                       Resend code
@@ -502,7 +546,7 @@ export function LandingPage() {
               </div>
             </div>
           </div>
-          <div className="mt-6 text-center text-xs text-gray-500">© 2023 Kitchen Inventory. All rights reserved.</div>
+          <div className="mt-6 text-center text-xs text-gray-500">© {new Date().getFullYear()} Kitchen Inventory. All rights reserved.</div>
         </div>
       </footer>
     </div>

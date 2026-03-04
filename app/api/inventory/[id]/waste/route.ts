@@ -4,13 +4,10 @@ import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const supabase = await createSupabaseFromRequest()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {

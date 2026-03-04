@@ -7,10 +7,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const supabase = await createSupabaseFromRequest()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
@@ -19,11 +16,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const payload = await request.json()
 
-    const updated = await shoppingRepo.update(
-      supabase,
-      id,
-      payload
-    )
+    const updated = await shoppingRepo.update(supabase, id, payload)
 
     return updated
       ? NextResponse.json(updated)
@@ -37,13 +30,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const supabase = await createSupabaseFromRequest()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {

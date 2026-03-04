@@ -5,9 +5,7 @@ import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const supabase = await createSupabaseFromRequest()
 
     const {
       data: { user },
@@ -41,12 +39,13 @@ export async function POST(request: NextRequest) {
         category: updated.category,
         completed: false,
         addedOn: new Date().toISOString(),
+        addedFrom: "consumed",
       })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("🔥 OPERATIONS ERROR:", error)
+    console.error("OPERATIONS ERROR:", error)
     return NextResponse.json({ error: "Operation failed" }, { status: 500 })
   }
 }

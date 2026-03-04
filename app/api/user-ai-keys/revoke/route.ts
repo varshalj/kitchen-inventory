@@ -3,7 +3,7 @@ import { revokeActiveUserKey } from "@/lib/server/user-ai-settings-store"
 import { requireUser } from "@/lib/server/require-user"
 
 export async function POST(request: NextRequest) {
-  const { user } = await requireUser(request)
+  const { user } = await requireUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }

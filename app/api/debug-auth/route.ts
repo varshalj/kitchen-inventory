@@ -6,14 +6,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
-  const supabase = createSupabaseFromRequest(request)
-
-  if (!supabase) {
-    return NextResponse.json({
-      hasSupabase: false,
-      authHeader: request.headers.get("authorization"),
-    })
-  }
+  const supabase = await createSupabaseFromRequest()
 
   const {
     data: { user },

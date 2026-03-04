@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { getUserConfidenceThreshold, logAIInteraction } from "@/lib/server/ai-store"
 import { requireUser } from "@/lib/server/require-user"
-
+import OpenAI from "openai"
 
 const requestSchema = z.object({
   userInput: z.string().min(1),
+  imageBase64: z.string().optional(),
 })
 
 const proposalSchema = z.object({
@@ -22,20 +23,92 @@ const modelOutputSchema = z.object({
   reasoning: z.string().min(1),
 })
 
+const SYSTEM_PROMPT = `You are an AI assistant that extracts grocery/kitchen inventory items from user descriptions or images.
+
+Given a user's text description or an image of groceries, a receipt, or food items, extract each item and return structured data.
+
+For each item provide:
+- name: the item name
+- category: one of Fruits, Vegetables, Dairy, Meat, Grains, Canned, Frozen, Snacks, Beverages, Condiments, Other
+- expiryDate: estimated expiry date in YYYY-MM-DD format (use reasonable defaults based on the item type)
+- quantity: integer quantity (default 1)
+- price: price as a string if visible (optional)
+
+Also provide:
+- confidence: a number between 0 and 1 indicating how confident you are in the extraction
+- reasoning: a brief explanation of what was detected
+
+Return valid JSON matching this exact schema:
+{
+  "proposals": [{ "name": "...", "category": "...", "expiryDate": "YYYY-MM-DD", "quantity": 1, "price": "..." }],
+  "confidence": 0.9,
+  "reasoning": "..."
+}`
+
+function getOpenAIClient(): OpenAI | null {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) return null
+  return new OpenAI({ apiKey })
+}
+
+async function getModelResponse(userInput: string, imageBase64?: string): Promise<unknown> {
+  const client = getOpenAIClient()
+
+  if (!client) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("OPENAI_API_KEY is not configured")
+    }
+
+    return fallbackModelOutput(userInput)
+  }
+
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+  ]
+
+  if (imageBase64) {
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: userInput },
+        {
+          type: "image_url",
+          image_url: { url: imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}` },
+        },
+      ],
+    })
+  } else {
+    messages.push({ role: "user", content: userInput })
+  }
+
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages,
+    response_format: { type: "json_object" },
+    max_tokens: 1024,
+  })
+
+  const content = completion.choices[0]?.message?.content
+  if (!content) throw new Error("Empty response from OpenAI")
+
+  return JSON.parse(content)
+}
+
 function fallbackModelOutput(userInput: string) {
+  const today = new Date()
   return {
     proposals: [
       {
         name: "Organic Milk",
         category: "Dairy",
-        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        expiryDate: new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0],
         quantity: 1,
         price: "65",
       },
       {
         name: "Eggs",
         category: "Dairy",
-        expiryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        expiryDate: new Date(today.getTime() + 14 * 86400000).toISOString().split("T")[0],
         quantity: 12,
         price: "89",
       },
@@ -45,64 +118,8 @@ function fallbackModelOutput(userInput: string) {
   }
 }
 
-async function getModelResponse(userInput: string): Promise<unknown> {
-  const modelUrl = process.env.AI_MODEL_URL
-
-  if (!modelUrl) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("AI_MODEL_URL is not configured")
-    }
-
-    return fallbackModelOutput(userInput)
-  }
-
-  const response = await fetch(modelUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      prompt: userInput,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "proposal_response",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: ["proposals", "confidence", "reasoning"],
-            properties: {
-              proposals: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  required: ["name", "category", "expiryDate", "quantity"],
-                  properties: {
-                    name: { type: "string" },
-                    category: { type: "string" },
-                    expiryDate: { type: "string" },
-                    quantity: { type: "integer", minimum: 1 },
-                    price: { type: "string" },
-                  },
-                },
-              },
-              confidence: { type: "number", minimum: 0, maximum: 1 },
-              reasoning: { type: "string" },
-            },
-          },
-        },
-      },
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Model request failed with status ${response.status}`)
-  }
-
-  return response.json()
-}
-
 export async function POST(req: NextRequest) {
-  const { user } = await requireUser(req)
+  const { user } = await requireUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
@@ -114,11 +131,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request payload", details: parsedRequest.error.flatten() }, { status: 400 })
   }
 
-  const { userInput } = parsedRequest.data
+  const { userInput, imageBase64 } = parsedRequest.data
   const userId = user.id
 
   try {
-    const rawModelResponse = await getModelResponse(userInput)
+    const rawModelResponse = await getModelResponse(userInput, imageBase64)
     const parsedOutput = modelOutputSchema.safeParse(rawModelResponse)
 
     if (!parsedOutput.success) {
@@ -161,7 +178,7 @@ export async function POST(req: NextRequest) {
       errorMessage: message,
     })
 
-    const status = message.includes("AI_MODEL_URL is not configured") ? 503 : 500
+    const status = message.includes("not configured") ? 503 : 500
     return NextResponse.json({ error: "Failed to generate proposals" }, { status })
   }
 }

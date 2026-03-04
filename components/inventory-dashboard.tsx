@@ -223,7 +223,9 @@ useEffect(() => {
   }
 
   const handleDeleteItem = async () => {
-    if (deleteConfirmItem) {
+    if (!deleteConfirmItem) return
+
+    try {
       const response = await fetchWithAuth(`/api/inventory/${deleteConfirmItem.id}`, {
         method: "DELETE",
       })
@@ -238,6 +240,13 @@ useEffect(() => {
       toast({
         title: "Item Deleted",
         description: `${deleteConfirmItem.name} has been removed from your inventory.`,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete item"
+      toast({
+        title: "Delete Failed",
+        description: message,
+        variant: "destructive",
       })
     }
   }
@@ -271,11 +280,11 @@ useEffect(() => {
         setReviewItem({ item: consumeConfirmItem, type: "consumed" })
       }
 
-      setActionState({ status: "success", message: payload.message })
+      setActionState({ status: "success" })
       setConsumeConfirmItem(null)
       toast({
         title: "Item Consumed",
-        description: `${consumeConfirmItem.name} saved. Receipt: ${payload.receipt.id}`,
+        description: `${consumeConfirmItem.name} has been consumed and archived.`,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Consume operation failed"
@@ -317,11 +326,11 @@ useEffect(() => {
         setReviewItem({ item: wasteConfirmItem, type: "wasted" })
       }
 
-      setActionState({ status: "success", message: payload.message })
+      setActionState({ status: "success" })
       setWasteConfirmItem(null)
       toast({
         title: "Item Wasted",
-        description: `${wasteConfirmItem.name} saved. Receipt: ${payload.receipt.id}`,
+        description: `${wasteConfirmItem.name} has been marked as wasted.`,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Waste operation failed"
@@ -337,14 +346,15 @@ useEffect(() => {
   const handleReviewSubmit = async (review: { rating: number; reviewTags: string[]; reviewNote: string }) => {
     if (reviewItem) {
       await fetchWithAuth(`/api/inventory/${reviewItem.item.id}`, {
-  method: "PATCH",
-  body: JSON.stringify({
-    rating: review.rating,
-    reviewTags: review.reviewTags,
-    reviewNote: review.reviewNote,
-    ratedAt: new Date().toISOString(),
-  }),
-})
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rating: review.rating,
+          reviewTags: review.reviewTags,
+          reviewNote: review.reviewNote,
+          ratedAt: new Date().toISOString(),
+        }),
+      })
       setReviewItem(null)
       toast({
         title: "Review Saved",
@@ -361,6 +371,7 @@ useEffect(() => {
     try {
       const response = await fetchWithAuth(`/api/inventory/${updatedItem.id}`, {
         method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedItem),
       })
 

@@ -110,8 +110,10 @@ export const inventoryRepo = {
     const { data, error } = await supabase
       .from(TABLE)
       .insert({
+        id: crypto.randomUUID(),
         ...toDb(item),
         user_id: user.id,
+        added_on: item.addedOn ?? new Date().toISOString(),
       })
       .select()
 
@@ -129,7 +131,7 @@ export const inventoryRepo = {
       .from(TABLE)
       .update(toDb(item))
       .eq("id", id)
-      .eq("user_id", user.id)   // 🔥 CRITICAL FIX
+      .eq("user_id", user.id)
       .select()
 
     if (error) throw error
@@ -148,7 +150,7 @@ export const inventoryRepo = {
       .from(TABLE)
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)   // 🔥 CRITICAL FIX
+      .eq("user_id", user.id)
       .select()
 
     if (error) throw error

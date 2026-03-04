@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { getOrCreateUserAiSettings } from "@/lib/server/user-ai-settings-store"
 import { requireUser } from "@/lib/server/require-user"
 
-export async function GET(request: NextRequest) {
-  const { user } = await requireUser(request)
+export async function GET() {
+  const { user } = await requireUser()
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }

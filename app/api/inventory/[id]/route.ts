@@ -4,11 +4,10 @@ import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const supabase = await createSupabaseFromRequest()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -30,19 +29,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const supabase = await createSupabaseFromRequest()
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const payload = await request.json()
 
-    const updated = await inventoryRepo.update(
-      supabase,
-      id,
-      payload
-    )
+    const updated = await inventoryRepo.update(supabase, id, payload)
 
     return NextResponse.json(updated)
   } catch (error) {
@@ -54,21 +48,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params
-    const supabase = createSupabaseFromRequest(request)
-    if (!supabase) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const supabase = await createSupabaseFromRequest()
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const existing = await inventoryRepo.getById(supabase, id)
     if (!existing) {

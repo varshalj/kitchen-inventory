@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Copy, Mail } from "lucide-react"
 import type { InventoryItem } from "@/lib/types"
+import { fetchWithAuth } from "@/lib/api-client"
 
 interface MealPlanGeneratorProps {
   items: InventoryItem[]
@@ -45,17 +46,13 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
     }
   }
 
-  const generatePrompt = () => {
-    setIsGenerating(true)
-
-    // Sort items by expiry date, prioritizing those expiring soon
+  const buildPrompt = () => {
     const sortedItems = [...items].sort((a, b) => {
       if (!a.expiryDate) return 1
       if (!b.expiryDate) return -1
       return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime()
     })
 
-    // Identify items expiring within 7 days
     const currentDate = new Date()
     const expiringItems = sortedItems.filter((item) => {
       if (!item.expiryDate) return false
@@ -64,20 +61,17 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
       return daysUntilExpiry <= 7 && daysUntilExpiry > 0
     })
 
-    // Format items list
-    const formatItemsList = (items: InventoryItem[]) => {
-      return items
+    const formatItemsList = (itemsList: InventoryItem[]) => {
+      return itemsList
         .map((item) => {
           const expiryInfo = item.expiryDate
             ? `expiry: ${new Date(item.expiryDate).toLocaleDateString()}`
             : "no expiry date"
-
           return `- ${item.name} (quantity: ${item.quantity || 1}, category: ${item.category}, ${expiryInfo})`
         })
         .join("\n")
     }
 
-    // Build the prompt
     let prompt = `Create a meal plan using the following ingredients from my kitchen inventory. Please prioritize using items that are expiring soon.\n\n`
 
     if (expiringItems.length > 0) {
@@ -85,7 +79,6 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
     }
 
     prompt += `ALL AVAILABLE ITEMS:\n${formatItemsList(sortedItems)}\n\n`
-
     prompt += `PREFERENCES:\n`
     prompt += `- Cooking skill level: ${skillLevel}\n`
     prompt += `- Meals per day: ${mealsPerDay}\n`
@@ -94,7 +87,6 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
     if (dietaryRestrictions.length > 0) {
       prompt += `- Dietary restrictions: ${dietaryRestrictions.join(", ")}\n`
     }
-
     if (allergies.trim()) {
       prompt += `- Allergies: ${allergies}\n`
     }
@@ -104,15 +96,34 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
     prompt += `2. Ingredients needed (marking which ones I already have)\n`
     prompt += `3. Brief preparation instructions\n`
     prompt += `4. Estimated cooking time\n\n`
-
     prompt += `Also, please suggest a shopping list for additional ingredients I might need to complete the meal plan.`
 
-    // Simulate generation delay
-    setTimeout(() => {
+    return prompt
+  }
+
+  const generatePrompt = async () => {
+    setIsGenerating(true)
+    const prompt = buildPrompt()
+
+    try {
+      const response = await fetchWithAuth("/api/ai/meal-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setGeneratedPrompt(data.mealPlan)
+      } else {
+        setGeneratedPrompt(prompt)
+      }
+    } catch {
       setGeneratedPrompt(prompt)
+    } finally {
       setIsGenerating(false)
       setShowPrompt(true)
-    }, 1500)
+    }
   }
 
   const copyToClipboard = async () => {

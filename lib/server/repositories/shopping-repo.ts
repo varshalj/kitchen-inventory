@@ -77,13 +77,12 @@ export const shoppingRepo = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
 
-    // 🔥 Check existing unfinished item for THIS USER ONLY
     const { data: existing, error: findError } = await supabase
       .from(TABLE)
       .select("*")
       .eq("name", item.name)
       .eq("completed", false)
-      .eq("user_id", user.id)   // 🔥 CRITICAL FIX
+      .eq("user_id", user.id)
       .limit(1)
 
     if (findError) throw findError
@@ -96,7 +95,7 @@ export const shoppingRepo = {
         .from(TABLE)
         .update({ quantity: mergedQuantity })
         .eq("id", existing[0].id)
-        .eq("user_id", user.id)   // 🔥 CRITICAL FIX
+        .eq("user_id", user.id)
         .select()
 
       if (updateError) throw updateError
@@ -107,10 +106,10 @@ export const shoppingRepo = {
       return toDomain(updated[0])
     }
 
-    // 🔥 Insert new row with user_id
     const { data, error } = await supabase
       .from(TABLE)
       .insert({
+        id: crypto.randomUUID(),
         ...toDb(item),
         user_id: user.id,
       })
@@ -134,7 +133,7 @@ export const shoppingRepo = {
       .from(TABLE)
       .update(toDb(item))
       .eq("id", id)
-      .eq("user_id", user.id)   // 🔥 CRITICAL FIX
+      .eq("user_id", user.id)
       .select()
 
     if (error) throw error
@@ -153,7 +152,7 @@ export const shoppingRepo = {
       .from(TABLE)
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)   // 🔥 CRITICAL FIX
+      .eq("user_id", user.id)
       .select()
 
     if (error) throw error
