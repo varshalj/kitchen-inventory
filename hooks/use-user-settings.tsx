@@ -4,14 +4,17 @@ import type React from "react"
 
 import { useState, useEffect, createContext, useContext } from "react"
 import { DEFAULT_ORDER_SOURCES, DEFAULT_STORAGE_LOCATIONS } from "@/lib/dev-seed-fixtures"
+import { GROCERY_PLATFORMS } from "@/lib/grocery-platforms"
 
-type UserSettings = {
+export type UserSettings = {
   currency: string
   language: string
   theme: string
   notifications: boolean
   orderSources: string[]
   storageLocations: string[]
+  country: string
+  deliveryPlatforms: string[]
 }
 
 const defaultSettings: UserSettings = {
@@ -21,6 +24,8 @@ const defaultSettings: UserSettings = {
   notifications: true,
   orderSources: DEFAULT_ORDER_SOURCES,
   storageLocations: DEFAULT_STORAGE_LOCATIONS,
+  country: "IN",
+  deliveryPlatforms: GROCERY_PLATFORMS.map((p) => p.id),
 }
 
 const UserSettingsContext = createContext<{

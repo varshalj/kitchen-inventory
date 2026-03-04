@@ -35,4 +35,6 @@ export interface ShoppingItem {
   completed: boolean
   addedOn: string
   addedFrom?: "consumed" | "manual"
+  brand?: string
+  orderedFrom?: string
 }

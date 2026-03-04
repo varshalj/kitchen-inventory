@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Check, Edit, Plus, Trash2, ShoppingCart } from "lucide-react"
+import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import { MainLayout } from "@/components/main-layout"
 import { QuantityInput } from "@/components/quantity-input"
+import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
+import { useUserSettings } from "@/hooks/use-user-settings"
 import {
   getShoppingItems,
   updateShoppingItem,
@@ -22,10 +24,14 @@ import type { ShoppingItem } from "@/lib/types"
 
 export function ShoppingList() {
   const { toast } = useToast()
+  const { settings } = useUserSettings()
   const [items, setItems] = useState<ShoppingItem[]>([])
   const [editItem, setEditItem] = useState<ShoppingItem | null>(null)
+  const [buyItem, setBuyItem] = useState<ShoppingItem | null>(null)
   const [newItem, setNewItem] = useState({ name: "", quantity: 1, notes: "" })
   const [showCompleted, setShowCompleted] = useState(false)
+
+  const showBuyButton = settings?.country === "IN" && (settings?.deliveryPlatforms || []).length > 0
 
   useEffect(() => {
     const load = async () => {
@@ -196,6 +202,9 @@ export function ShoppingList() {
                           <div
                             className={cn("font-medium", item.completed ? "line-through text-muted-foreground" : "")}
                           >
+                            {item.brand && (
+                              <span className="text-muted-foreground font-normal">{item.brand} </span>
+                            )}
                             {item.name}
                             {item.quantity > 1 && <span className="text-sm font-normal ml-1">×{item.quantity}</span>}
                           </div>
@@ -205,6 +214,18 @@ export function ShoppingList() {
                               <Badge variant="outline" className="text-xs">
                                 {item.category}
                               </Badge>
+                            )}
+
+                            {showBuyButton && !item.completed && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-primary"
+                                onClick={() => setBuyItem(item)}
+                              >
+                                <ShoppingBag className="h-3.5 w-3.5" />
+                                <span className="sr-only">Buy</span>
+                              </Button>
                             )}
 
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditItem(item)}>
@@ -226,7 +247,13 @@ export function ShoppingList() {
 
                         {item.notes && <div className="text-sm text-muted-foreground mt-1">{item.notes}</div>}
 
-                        {item.addedFrom === "consumed" && (
+                        {item.orderedFrom && !item.completed && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Previously from {item.orderedFrom}
+                          </div>
+                        )}
+
+                        {item.addedFrom === "consumed" && !item.orderedFrom && (
                           <div className="text-xs text-muted-foreground mt-1">
                             Added automatically when item was consumed
                           </div>
@@ -249,6 +276,14 @@ export function ShoppingList() {
           </div>
         )}
       </div>
+
+      <BuyBottomSheet
+        item={buyItem}
+        open={!!buyItem}
+        onOpenChange={(open) => !open && setBuyItem(null)}
+        enabledPlatformIds={settings?.deliveryPlatforms || []}
+        userOrderSources={settings?.orderSources || []}
+      />
 
       {/* Edit Item Dialog */}
       {editItem && (

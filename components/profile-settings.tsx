@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase-client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, Globe, ShoppingBag } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,6 +37,7 @@ import { CURRENCIES } from "@/components/currency-input"
 import { AVAILABLE_EMAIL_SERVICES } from "@/lib/dev-seed-fixtures"
 import { FEATURE_FLAGS } from "@/lib/feature-flags"
 import { fetchWithAuth } from "@/lib/api-client"
+import { GROCERY_PLATFORMS } from "@/lib/grocery-platforms"
 
 interface EmailAccount {
   id: string
@@ -347,6 +348,93 @@ export function ProfileSettings() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center">
+            <Globe className="mr-2 h-4 w-4" />
+            Country
+          </CardTitle>
+          <CardDescription>Set your country to enable local grocery platform integrations.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label htmlFor="country-select">Country</Label>
+            <Select
+              value={settings?.country || "IN"}
+              onValueChange={(value) => {
+                updateSettings({ country: value })
+                if (value !== "IN") {
+                  updateSettings({ deliveryPlatforms: [] })
+                }
+              }}
+            >
+              <SelectTrigger id="country-select" className="w-full sm:w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="IN">India</SelectItem>
+                <SelectItem value="OTHER">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {settings?.country === "IN" && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center">
+              <ShoppingBag className="mr-2 h-4 w-4" />
+              Delivery Platforms
+            </CardTitle>
+            <CardDescription>Select the grocery delivery services available in your area. These will appear as &quot;Buy&quot; options on your shopping list.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Available Platforms</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const allIds = GROCERY_PLATFORMS.map((p) => p.id)
+                  const allSelected = (settings?.deliveryPlatforms || []).length === allIds.length
+                  updateSettings({ deliveryPlatforms: allSelected ? [] : allIds })
+                }}
+                className="text-xs text-primary hover:underline font-medium"
+              >
+                {(settings?.deliveryPlatforms || []).length === GROCERY_PLATFORMS.length ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {GROCERY_PLATFORMS.map((platform) => {
+                const isChecked = (settings?.deliveryPlatforms || []).includes(platform.id)
+                return (
+                  <label key={platform.id} className="flex items-center gap-2.5 cursor-pointer group">
+                    <Checkbox
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        const current = settings?.deliveryPlatforms || []
+                        const updated = checked
+                          ? [...current, platform.id]
+                          : current.filter((id) => id !== platform.id)
+                        updateSettings({ deliveryPlatforms: updated })
+                      }}
+                    />
+                    <span className="text-sm group-hover:text-foreground transition-colors">{platform.name}</span>
+                  </label>
+                )
+              })}
+            </div>
+
+            {(settings?.deliveryPlatforms || []).length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {(settings?.deliveryPlatforms || []).length} platform{(settings?.deliveryPlatforms || []).length !== 1 ? "s" : ""} selected
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mb-6">
         <CardHeader>

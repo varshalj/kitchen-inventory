@@ -17,6 +17,8 @@ function toDb(item: Partial<ShoppingItem>) {
   if (item.completed !== undefined) payload.completed = item.completed
   if (item.addedOn !== undefined) payload.added_on = item.addedOn
   if (item.addedFrom !== undefined) payload.added_from = item.addedFrom
+  if (item.brand !== undefined) payload.brand = item.brand
+  if (item.orderedFrom !== undefined) payload.ordered_from = item.orderedFrom
 
   return payload
 }
@@ -35,6 +37,8 @@ function toDomain(row: any): ShoppingItem {
     completed: row.completed,
     addedOn: row.added_on,
     addedFrom: row.added_from,
+    brand: row.brand ?? undefined,
+    orderedFrom: row.ordered_from ?? undefined,
   }
 }
 

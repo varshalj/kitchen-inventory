@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
         completed: false,
         addedOn: new Date().toISOString(),
         addedFrom: "consumed",
+        brand: updated.brand || undefined,
+        orderedFrom: updated.orderedFrom || undefined,
       })
     }
 
