@@ -35,6 +35,8 @@ import { MealPlanGenerator } from "@/components/meal-plan-generator"
 import { StarRating } from "@/components/star-rating"
 import { ReviewPrompt } from "@/components/review-prompt"
 import { fetchWithAuth } from "@/lib/api-client"
+import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
+import { ItemDetailSheet } from "@/components/item-detail-sheet"
 import type { InventoryItem } from "@/lib/types"
 
 export function InventoryDashboard() {
@@ -50,6 +52,7 @@ export function InventoryDashboard() {
   const [swipedItems, setSwipedItems] = useState<{ [key: string]: string }>({})
   const [sortBy, setSortBy] = useState("expiryDate")
   const [showMealPlanModal, setShowMealPlanModal] = useState(false)
+  const [detailItem, setDetailItem] = useState<InventoryItem | null>(null)
   const [reviewItem, setReviewItem] = useState<{ item: InventoryItem; type: "consumed" | "wasted" } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [actionState, setActionState] = useState<{ status: "idle" | "pending" | "success" | "error"; message?: string }>({
@@ -240,12 +243,14 @@ useEffect(() => {
 
       setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
       setDeleteConfirmItem(null)
+      triggerHaptic(HAPTIC_SUCCESS)
       toast({
         title: "Item Deleted",
         description: `${deleteConfirmItem.name} has been removed from your inventory.`,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to delete item"
+      triggerHaptic(HAPTIC_ERROR)
       toast({
         title: "Delete Failed",
         description: message,
@@ -285,6 +290,7 @@ useEffect(() => {
 
       setActionState({ status: "success" })
       setConsumeConfirmItem(null)
+      triggerHaptic(HAPTIC_SUCCESS)
       toast({
         title: "Item Consumed",
         description: `${consumeConfirmItem.name} has been consumed and archived.`,
@@ -292,6 +298,7 @@ useEffect(() => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Consume operation failed"
       setActionState({ status: "error", message })
+      triggerHaptic(HAPTIC_ERROR)
       toast({
         title: "Consume Failed",
         description: message,
@@ -331,6 +338,7 @@ useEffect(() => {
 
       setActionState({ status: "success" })
       setWasteConfirmItem(null)
+      triggerHaptic(HAPTIC_SUCCESS)
       toast({
         title: "Item Wasted",
         description: `${wasteConfirmItem.name} has been marked as wasted.`,
@@ -338,6 +346,7 @@ useEffect(() => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Waste operation failed"
       setActionState({ status: "error", message })
+      triggerHaptic(HAPTIC_ERROR)
       toast({
         title: "Waste Failed",
         description: message,
@@ -633,9 +642,10 @@ useEffect(() => {
                 )}
 
                 <Card
-                  className={`${getExpiryColor(item.expiryDate)} border-l-4 relative ${
+                  className={`${getExpiryColor(item.expiryDate)} border-l-4 relative cursor-pointer transition-all ${
                     swipedItems[item.id] ? "opacity-50" : ""
                   }`}
+                  onClick={() => setDetailItem(item)}
                 >
                   <CardContent className="pt-4">
                     <div className="flex justify-between items-start">
@@ -655,7 +665,7 @@ useEffect(() => {
                         <Badge variant="outline">{item.category}</Badge>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
                               <span className="sr-only">Open menu</span>
                               <svg
                                 width="15"
@@ -709,7 +719,7 @@ useEffect(() => {
                           variant="ghost"
                           size="sm"
                           className="h-6 ml-2 text-xs"
-                          onClick={() => setEditItem(item)}
+                          onClick={(e) => { e.stopPropagation(); setEditItem(item) }}
                         >
                           Set Now
                         </Button>
@@ -754,7 +764,7 @@ useEffect(() => {
             <Button variant="outline" onClick={() => setDeleteConfirmItem(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteItem}>
+            <Button variant="destructive" onClick={handleDeleteItem} className="active:scale-95 transition-transform">
               Delete
             </Button>
           </DialogFooter>
@@ -776,7 +786,7 @@ useEffect(() => {
             <Button variant="outline" onClick={() => setConsumeConfirmItem(null)}>
               Cancel
             </Button>
-            <Button variant="default" onClick={handleConsumeItem}>
+            <Button variant="default" onClick={handleConsumeItem} className="active:scale-95 transition-transform">
               <ShoppingCart className="mr-2 h-4 w-4" />
               Mark as Consumed
             </Button>
@@ -798,7 +808,7 @@ useEffect(() => {
             <Button variant="outline" onClick={() => setWasteConfirmItem(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleWasteItem}>
+            <Button variant="destructive" onClick={handleWasteItem} className="active:scale-95 transition-transform">
               <Trash className="mr-2 h-4 w-4" />
               Mark as Wasted
             </Button>
@@ -825,6 +835,15 @@ useEffect(() => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Item Detail Sheet */}
+      <ItemDetailSheet
+        item={detailItem}
+        open={!!detailItem}
+        onOpenChange={(open) => !open && setDetailItem(null)}
+        onEdit={(item) => setEditItem(item)}
+        onDelete={(item) => setDeleteConfirmItem(item)}
+      />
 
       {/* Meal Plan Generator Modal */}
       <Dialog open={showMealPlanModal} onOpenChange={setShowMealPlanModal}>

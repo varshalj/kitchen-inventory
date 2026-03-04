@@ -21,6 +21,7 @@ interface MealPlanGeneratorProps {
 export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
   const { toast } = useToast()
   const [skillLevel, setSkillLevel] = useState("intermediate")
+  const [planDays, setPlanDays] = useState("7")
   const [mealsPerDay, setMealsPerDay] = useState("3")
   const [servings, setServings] = useState("2")
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string[]>([])
@@ -91,7 +92,7 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
       prompt += `- Allergies: ${allergies}\n`
     }
 
-    prompt += `\nPlease create a 7-day meal plan that maximizes the use of my ingredients, especially those expiring soon. For each meal, include:\n`
+    prompt += `\nPlease create a ${planDays}-day meal plan that maximizes the use of my ingredients, especially those expiring soon. For each meal, include:\n`
     prompt += `1. Recipe name\n`
     prompt += `2. Ingredients needed (marking which ones I already have)\n`
     prompt += `3. Brief preparation instructions\n`
@@ -176,6 +177,20 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
               </RadioGroup>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="plan-days">Plan Duration</Label>
+              <Select value={planDays} onValueChange={setPlanDays}>
+                <SelectTrigger id="plan-days">
+                  <SelectValue placeholder="Select duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 days</SelectItem>
+                  <SelectItem value="5">5 days</SelectItem>
+                  <SelectItem value="7">7 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="meals-per-day">Meals Per Day</Label>
@@ -242,14 +257,14 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={generatePrompt} disabled={isGenerating}>
+            <Button onClick={generatePrompt} disabled={isGenerating} className="active:scale-95 transition-transform">
               {isGenerating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Generating...
                 </>
               ) : (
-                "Generate Meal Plan Prompt"
+                `Create ${planDays}-Day Meal Plan`
               )}
             </Button>
           </div>

@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase-client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, Globe, ShoppingBag } from "lucide-react"
+import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, Globe, ShoppingBag, Bug, RotateCcw } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -38,6 +38,8 @@ import { AVAILABLE_EMAIL_SERVICES } from "@/lib/dev-seed-fixtures"
 import { FEATURE_FLAGS } from "@/lib/feature-flags"
 import { fetchWithAuth } from "@/lib/api-client"
 import { GROCERY_PLATFORMS } from "@/lib/grocery-platforms"
+import { BugReportDialog } from "@/components/bug-report-dialog"
+import { useOnboarding } from "@/hooks/use-onboarding"
 
 interface EmailAccount {
   id: string
@@ -67,6 +69,8 @@ export function ProfileSettings() {
   const [newSource, setNewSource] = useState("")
   const [newLocation, setNewLocation] = useState("")
   const [confirmRemove, setConfirmRemove] = useState<{ type: "source" | "location"; value: string; affectedCount: number } | null>(null)
+  const [showBugReport, setShowBugReport] = useState(false)
+  const { reset: resetOnboarding } = useOnboarding()
 
   useEffect(() => {
     const load = async () => {
@@ -595,6 +599,41 @@ export function ProfileSettings() {
 
       )}
 
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center">
+            <Bug className="mr-2 h-4 w-4" />
+            Help & Feedback
+          </CardTitle>
+          <CardDescription>Report issues or restart the app tour</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            className="w-full active:scale-95 transition-transform"
+            onClick={() => setShowBugReport(true)}
+          >
+            <Bug className="mr-2 h-4 w-4" />
+            Report a Bug
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full active:scale-95 transition-transform"
+            onClick={() => {
+              resetOnboarding()
+              toast({
+                title: "Tour reset",
+                description: "Visit the dashboard to start the guided tour again.",
+              })
+              router.push("/dashboard")
+            }}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Restart App Tour
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Account</CardTitle>
@@ -613,6 +652,8 @@ export function ProfileSettings() {
           </Button>
         </CardFooter>
       </Card>
+
+      <BugReportDialog open={showBugReport} onOpenChange={setShowBugReport} />
 
       {/* Confirm Removal Dialog */}
       <AlertDialog open={!!confirmRemove} onOpenChange={(open) => !open && setConfirmRemove(null)}>

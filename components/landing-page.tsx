@@ -1,90 +1,15 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Clock, ChefHat, Mail, ShoppingCart, Shield, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { useToast } from "@/hooks/use-toast"
 
 export function LandingPage() {
   const router = useRouter()
-  const { toast } = useToast()
-  const [email, setEmail] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [showOTP, setShowOTP] = useState(false)
-  const [otp, setOtp] = useState("")
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email) return
-
-    setIsSubmitting(true)
-
-    try {
-      const { supabase } = await import("@/lib/supabase-client")
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-        },
-      })
-
-      if (error) throw error
-
-      setShowOTP(true)
-      toast({
-        title: "Check your email",
-        description: "We sent a magic link to your email address.",
-      })
-    } catch (err) {
-      toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to send magic link",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!otp) return
-
-    setIsSubmitting(true)
-
-    try {
-      const { supabase } = await import("@/lib/supabase-client")
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: otp,
-        type: "email",
-      })
-
-      if (error) throw error
-
-      toast({
-        title: "Successfully verified!",
-        description: "Redirecting to your dashboard...",
-      })
-      router.push("/dashboard")
-    } catch (err) {
-      toast({
-        title: "Verification failed",
-        description: err instanceof Error ? err.message : "Invalid code. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -138,7 +63,7 @@ export function LandingPage() {
                   <Button
                     size="lg"
                     className="gap-1"
-                    onClick={() => document.getElementById("auth-section")?.scrollIntoView({ behavior: "smooth" })}
+                    onClick={() => router.push("/auth")}
                   >
                     Get Started <ArrowRight className="h-4 w-4" />
                   </Button>
@@ -325,101 +250,6 @@ export function LandingPage() {
           </div>
         </section>
 
-        {/* Authentication Section */}
-        <section id="auth-section" className="bg-white py-12 md:py-16">
-          <div className="container mx-auto px-4 md:px-6 max-w-7xl">
-            <div className="mx-auto max-w-md space-y-6 text-center">
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">Get Started Today</h2>
-                <p className="text-gray-500">Join thousands of users who are reducing food waste and saving money.</p>
-              </div>
-
-              {!showOTP ? (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Input
-                      type="email"
-                      placeholder="Enter your email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="h-12"
-                    />
-                  </div>
-                  <Button type="submit" className="w-full h-12" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        <span>Processing...</span>
-                      </div>
-                    ) : (
-                      <span>Continue with Email</span>
-                    )}
-                  </Button>
-                  <p className="text-xs text-gray-500">
-                    We'll send a one-time password to your email. No need to create and remember a password.
-                  </p>
-                </form>
-              ) : (
-                <form onSubmit={handleVerifyOTP} className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-sm text-left font-medium">Enter the 6-digit code sent to {email}</p>
-                    <Input
-                      type="text"
-                      placeholder="Enter 6-digit code"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
-                      required
-                      className="h-12 text-center text-lg tracking-widest"
-                      maxLength={6}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full h-12" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                        <span>Verifying...</span>
-                      </div>
-                    ) : (
-                      <span>Verify & Continue</span>
-                    )}
-                  </Button>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <button type="button" className="underline" onClick={() => setShowOTP(false)}>
-                      Change email
-                    </button>
-                    <button
-                      type="button"
-                      className="underline"
-                      onClick={async () => {
-                        try {
-                          const { supabase } = await import("@/lib/supabase-client")
-                          await supabase.auth.signInWithOtp({
-                            email,
-                            options: { emailRedirectTo: `${window.location.origin}/dashboard` },
-                          })
-                          toast({
-                            title: "Code resent!",
-                            description: "Please check your email for the new code.",
-                          })
-                        } catch {
-                          toast({
-                            title: "Failed to resend",
-                            description: "Please try again.",
-                            variant: "destructive",
-                          })
-                        }
-                      }}
-                    >
-                      Resend code
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </section>
-
         {/* FAQ Section */}
         <section className="bg-gray-50 py-12 md:py-16">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
@@ -491,7 +321,7 @@ export function LandingPage() {
               <Button
                 size="lg"
                 className="bg-primary-foreground text-primary hover:bg-primary-foreground/90"
-                onClick={() => document.getElementById("auth-section")?.scrollIntoView({ behavior: "smooth" })}
+                onClick={() => router.push("/auth")}
               >
                 Get Started for Free
               </Button>

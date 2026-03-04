@@ -14,6 +14,7 @@ import { MainLayout } from "@/components/main-layout"
 import { QuantityInput } from "@/components/quantity-input"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
 import { useUserSettings } from "@/hooks/use-user-settings"
+import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import {
   getShoppingItems,
   updateShoppingItem,
@@ -30,13 +31,20 @@ export function ShoppingList() {
   const [buyItem, setBuyItem] = useState<ShoppingItem | null>(null)
   const [newItem, setNewItem] = useState({ name: "", quantity: 1, notes: "" })
   const [showCompleted, setShowCompleted] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   const showBuyButton = settings?.country === "IN" && (settings?.deliveryPlatforms || []).length > 0
 
   useEffect(() => {
     const load = async () => {
-      const shoppingItems = await getShoppingItems()
-      setItems(shoppingItems)
+      try {
+        const shoppingItems = await getShoppingItems()
+        setItems(shoppingItems)
+      } catch {
+        setItems([])
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     void load()
@@ -70,6 +78,7 @@ export function ShoppingList() {
     }
 
     setNewItem({ name: "", quantity: 1, notes: "" })
+    triggerHaptic(HAPTIC_SUCCESS)
     toast({
       title: "Item Added",
       description: `${itemPayload.name} added to your shopping list.`,
@@ -82,12 +91,14 @@ export function ShoppingList() {
       const updatedItem = { ...item, completed: !item.completed }
       await updateShoppingItem(updatedItem)
       setItems(items.map((item) => (item.id === id ? updatedItem : item)))
+      triggerHaptic()
     }
   }
 
   const handleDeleteItem = async (id: string) => {
     await deleteShoppingItem(id)
     setItems(items.filter((item) => item.id !== id))
+    triggerHaptic(HAPTIC_SUCCESS)
     toast({
       title: "Item Removed",
       description: "Item removed from your shopping list.",
@@ -159,7 +170,7 @@ export function ShoppingList() {
               </div>
             </div>
 
-            <Button className="w-full" onClick={handleAddItem} disabled={!newItem.name.trim()}>
+            <Button className="w-full active:scale-95 transition-transform" onClick={handleAddItem} disabled={!newItem.name.trim()}>
               <Plus className="h-4 w-4 mr-2" /> Add to Shopping List
             </Button>
           </div>
@@ -171,7 +182,24 @@ export function ShoppingList() {
           {showCompleted ? "All Items" : "Items to Buy"} ({displayedItems.length})
         </h2>
 
-        {displayedItems.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-6 w-6 rounded-full bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-muted rounded w-2/3" />
+                      <div className="h-3 bg-muted rounded w-1/3" />
+                    </div>
+                    <div className="h-6 bg-muted rounded w-16" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : displayedItems.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             {showCompleted ? "Your shopping list is empty." : "No items to buy. Add some items to your shopping list."}
           </div>
