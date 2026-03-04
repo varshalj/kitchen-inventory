@@ -23,22 +23,28 @@ const modelOutputSchema = z.object({
   reasoning: z.string().min(1),
 })
 
-const SYSTEM_PROMPT = `You are an AI assistant that extracts grocery/kitchen inventory items from user descriptions or images.
+function buildSystemPrompt(): string {
+  const today = new Date().toISOString().split("T")[0]
+  return `You are an AI assistant that extracts grocery/kitchen inventory items from user descriptions or images.
 
 Given a user's text description or an image of groceries, a receipt, or food items, extract each item and return structured JSON.
+
+Today's date is ${today}. Use this as the base when estimating expiry dates.
+Typical shelf lives for reference: fresh produce 3-7 days, dairy 7-14 days, meat 2-5 days, bread 5-7 days, canned goods 1-2 years, frozen items 3-6 months, snacks/dry goods 1-6 months.
 
 You MUST return a JSON object with exactly these keys:
 - "proposals": an array of item objects, each with:
   - "name" (string): the item name
   - "category" (string): one of Fruits, Vegetables, Dairy, Meat, Grains, Canned, Frozen, Snacks, Beverages, Condiments, Other
-  - "expiryDate" (string): estimated expiry date in YYYY-MM-DD format
+  - "expiryDate" (string): estimated expiry date in YYYY-MM-DD format, calculated from today (${today})
   - "quantity" (integer): quantity, default 1
   - "price" (string, optional): price if visible
 - "confidence" (number): a number between 0 and 1
 - "reasoning" (string): a brief explanation of what was detected
 
 Example response:
-{"proposals":[{"name":"Milk","category":"Dairy","expiryDate":"2026-03-11","quantity":1}],"confidence":0.9,"reasoning":"Detected 1 dairy item"}`
+{"proposals":[{"name":"Milk","category":"Dairy","expiryDate":"${new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0]}","quantity":1}],"confidence":0.9,"reasoning":"Detected 1 dairy item"}`
+}
 
 function getOpenAIClient(): OpenAI | null {
   const apiKey = process.env.OPENAI_API_KEY
@@ -112,7 +118,7 @@ async function getModelResponse(userInput: string, imageBase64?: string): Promis
   }
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: buildSystemPrompt() },
   ]
 
   if (imageBase64) {
