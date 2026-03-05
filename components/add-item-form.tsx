@@ -21,6 +21,8 @@ import { useUserSettings } from "@/hooks/use-user-settings"
 import { QuantityInput } from "@/components/quantity-input"
 import { CurrencyInput } from "@/components/currency-input"
 import { useToast } from "@/hooks/use-toast"
+import { BugReportDialog } from "@/components/bug-report-dialog"
+import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 
 type DetectedType = "receipt" | "food" | "package" | null
 type ReviewDecision = "pending" | "confirmed" | "edited" | "rejected"
@@ -43,6 +45,7 @@ export function AddItemForm() {
   const router = useRouter()
   const { settings } = useUserSettings()
   const { toast } = useToast()
+  const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const formContainerRef = useRef<HTMLDivElement>(null)
@@ -219,7 +222,7 @@ export function AddItemForm() {
       router.push("/dashboard")
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save item"
-      toast({ title: "Save Failed", description: message, variant: "destructive" })
+      toastWithNudge({ title: "Save Failed", description: message, variant: "destructive" })
     }
   }
 
@@ -321,7 +324,7 @@ export function AddItemForm() {
       router.push("/dashboard")
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to add item"
-      toast({ title: "Add Failed", description: message, variant: "destructive" })
+      toastWithNudge({ title: "Add Failed", description: message, variant: "destructive" })
     }
   }
 
@@ -849,6 +852,8 @@ export function AddItemForm() {
           </div>
         </form>
       </Tabs>
+
+      <BugReportDialog open={bugReportOpen} onOpenChange={setBugReportOpen} />
     </MainLayout>
   )
 }

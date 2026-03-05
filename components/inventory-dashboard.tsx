@@ -37,6 +37,8 @@ import { ReviewPrompt } from "@/components/review-prompt"
 import { fetchWithAuth } from "@/lib/api-client"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { ItemDetailSheet } from "@/components/item-detail-sheet"
+import { BugReportDialog } from "@/components/bug-report-dialog"
+import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 import type { InventoryItem } from "@/lib/types"
 
 export function InventoryDashboard() {
@@ -59,6 +61,7 @@ export function InventoryDashboard() {
     status: "idle",
   })
   const { toast } = useToast()
+  const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
 
 useEffect(() => {
@@ -251,7 +254,7 @@ useEffect(() => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to delete item"
       triggerHaptic(HAPTIC_ERROR)
-      toast({
+      toastWithNudge({
         title: "Delete Failed",
         description: message,
         variant: "destructive",
@@ -299,7 +302,7 @@ useEffect(() => {
       const message = error instanceof Error ? error.message : "Consume operation failed"
       setActionState({ status: "error", message })
       triggerHaptic(HAPTIC_ERROR)
-      toast({
+      toastWithNudge({
         title: "Consume Failed",
         description: message,
         variant: "destructive",
@@ -347,7 +350,7 @@ useEffect(() => {
       const message = error instanceof Error ? error.message : "Waste operation failed"
       setActionState({ status: "error", message })
       triggerHaptic(HAPTIC_ERROR)
-      toast({
+      toastWithNudge({
         title: "Waste Failed",
         description: message,
         variant: "destructive",
@@ -402,7 +405,7 @@ useEffect(() => {
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to update inventory item"
-      toast({
+      toastWithNudge({
         title: "Update Failed",
         description: message,
         variant: "destructive",
@@ -685,19 +688,19 @@ useEffect(() => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setEditItem(item)}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditItem(item) }}>
                               <Edit className="mr-2 h-4 w-4" />
                               <span>Edit</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setConsumeConfirmItem(item)}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setConsumeConfirmItem(item) }}>
                               <Check className="mr-2 h-4 w-4" />
                               <span>Mark as Consumed</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setWasteConfirmItem(item)}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setWasteConfirmItem(item) }}>
                               <Trash className="mr-2 h-4 w-4" />
                               <span>Mark as Wasted</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteConfirmItem(item)}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setDeleteConfirmItem(item) }}>
                               <Trash2 className="mr-2 h-4 w-4" />
                               <span>Delete</span>
                             </DropdownMenuItem>
@@ -844,6 +847,9 @@ useEffect(() => {
         onEdit={(item) => setEditItem(item)}
         onDelete={(item) => setDeleteConfirmItem(item)}
       />
+
+      {/* Bug Report Dialog (opened contextually after errors) */}
+      <BugReportDialog open={bugReportOpen} onOpenChange={setBugReportOpen} />
 
       {/* Meal Plan Generator Modal */}
       <Dialog open={showMealPlanModal} onOpenChange={setShowMealPlanModal}>
