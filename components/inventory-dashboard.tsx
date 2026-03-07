@@ -60,6 +60,8 @@ export function InventoryDashboard() {
   const [actionState, setActionState] = useState<{ status: "idle" | "pending" | "success" | "error"; message?: string }>({
     status: "idle",
   })
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const { toast } = useToast()
   const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
@@ -417,11 +419,108 @@ useEffect(() => {
     return Array.from(new Set(items.map((item) => item.category)))
   }
 
+  // Count badges for filter pills
+  const now = new Date()
+  const expiredCount = items.filter((i) => i.expiryDate && new Date(i.expiryDate) < now).length
+  const expiringSoonCount = items.filter((i) => {
+    if (!i.expiryDate || isNaN(new Date(i.expiryDate).getTime())) return false
+    const days = Math.ceil((new Date(i.expiryDate).getTime() - now.getTime()) / 86400000)
+    return days >= 0 && days <= 7
+  }).length
+  const missingExpiryCount = items.filter((i) => !i.expiryDate || isNaN(new Date(i.expiryDate).getTime())).length
+
   // Check for expired items
-  const hasExpiredItems = items.some((item) => new Date(item.expiryDate) < new Date())
+  const hasExpiredItems = expiredCount > 0
 
   // Check for items with missing expiry dates
-  const hasMissingExpiryItems = items.some((item) => !item.expiryDate || isNaN(new Date(item.expiryDate).getTime()))
+  const hasMissingExpiryItems = missingExpiryCount > 0
+
+  // Bulk selection helpers
+  const toggleItemSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredItems.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredItems.map((i) => i.id)))
+    }
+  }
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
+
+  const handleBulkConsume = async () => {
+    const targets = filteredItems.filter((i) => selectedIds.has(i.id))
+    if (!targets.length) return
+    try {
+      await Promise.all(
+        targets.map((item) =>
+          fetchWithAuth("/api/inventory/operations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ itemId: item.id, action: "consume", addToShoppingList: false }),
+          })
+        )
+      )
+      setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
+      exitSelectionMode()
+      triggerHaptic(HAPTIC_SUCCESS)
+      toast({ title: "Items Consumed", description: `${targets.length} item${targets.length !== 1 ? "s" : ""} marked as consumed.` })
+    } catch {
+      triggerHaptic(HAPTIC_ERROR)
+      toastWithNudge({ title: "Bulk Consume Failed", description: "Some items could not be updated.", variant: "destructive" })
+    }
+  }
+
+  const handleBulkWaste = async () => {
+    const targets = filteredItems.filter((i) => selectedIds.has(i.id))
+    if (!targets.length) return
+    try {
+      await Promise.all(
+        targets.map((item) =>
+          fetchWithAuth("/api/inventory/operations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ itemId: item.id, action: "waste" }),
+          })
+        )
+      )
+      setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
+      exitSelectionMode()
+      triggerHaptic(HAPTIC_SUCCESS)
+      toast({ title: "Items Wasted", description: `${targets.length} item${targets.length !== 1 ? "s" : ""} marked as wasted.` })
+    } catch {
+      triggerHaptic(HAPTIC_ERROR)
+      toastWithNudge({ title: "Bulk Waste Failed", description: "Some items could not be updated.", variant: "destructive" })
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    const targets = filteredItems.filter((i) => selectedIds.has(i.id))
+    if (!targets.length) return
+    try {
+      await Promise.all(
+        targets.map((item) =>
+          fetchWithAuth(`/api/inventory/${item.id}`, { method: "DELETE" })
+        )
+      )
+      setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
+      exitSelectionMode()
+      triggerHaptic(HAPTIC_SUCCESS)
+      toast({ title: "Items Deleted", description: `${targets.length} item${targets.length !== 1 ? "s" : ""} removed.` })
+    } catch {
+      triggerHaptic(HAPTIC_ERROR)
+      toastWithNudge({ title: "Bulk Delete Failed", description: "Some items could not be deleted.", variant: "destructive" })
+    }
+  }
 
   return (
     <MainLayout>
@@ -522,63 +621,130 @@ useEffect(() => {
           </DropdownMenu>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          <Button
-            variant={activeFilter === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveFilter("all")}
-            className="min-w-fit"
-          >
-            All Items
-          </Button>
-
-          {hasExpiredItems && (
+        <div className="flex items-center gap-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide flex-1">
             <Button
-              variant={activeFilter === "expired" ? "default" : "outline"}
+              variant={activeFilter === "all" ? "default" : "outline"}
               size="sm"
-              onClick={() => setActiveFilter("expired")}
-              className="min-w-fit text-red-500 border-red-200"
-            >
-              <AlertCircle className="mr-1 h-3.5 w-3.5" />
-              Expired
-            </Button>
-          )}
-
-          <Button
-            variant={activeFilter === "expiring-soon" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveFilter("expiring-soon")}
-            className="min-w-fit text-amber-500 border-amber-200"
-          >
-            <AlertCircle className="mr-1 h-3.5 w-3.5" />
-            Expiring Soon
-          </Button>
-
-          {hasMissingExpiryItems && (
-            <Button
-              variant={activeFilter === "missing-expiry" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveFilter("missing-expiry")}
-              className="min-w-fit text-yellow-500 border-yellow-200"
-            >
-              <Clock className="mr-1 h-3.5 w-3.5" />
-              Set Expiry
-            </Button>
-          )}
-
-          {getCategories().map((category) => (
-            <Button
-              key={category}
-              variant={activeFilter === category ? "default" : "outline"}
-              size="sm"
-              onClick={() => setActiveFilter(category)}
+              onClick={() => setActiveFilter("all")}
               className="min-w-fit"
             >
-              {category}
+              All Items
+              {items.length > 0 && (
+                <span className="ml-1.5 text-xs font-normal opacity-70">{items.length}</span>
+              )}
             </Button>
-          ))}
+
+            {hasExpiredItems && (
+              <Button
+                variant={activeFilter === "expired" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setActiveFilter("expired")}
+                className="min-w-fit text-red-500 border-red-200"
+              >
+                <AlertCircle className="mr-1 h-3.5 w-3.5" />
+                Expired
+                <span className="ml-1.5 text-xs font-normal opacity-70">{expiredCount}</span>
+              </Button>
+            )}
+
+            <Button
+              variant={activeFilter === "expiring-soon" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveFilter("expiring-soon")}
+              className="min-w-fit text-amber-500 border-amber-200"
+            >
+              <AlertCircle className="mr-1 h-3.5 w-3.5" />
+              Expiring Soon
+              {expiringSoonCount > 0 && (
+                <span className="ml-1.5 text-xs font-normal opacity-70">{expiringSoonCount}</span>
+              )}
+            </Button>
+
+            {hasMissingExpiryItems && (
+              <Button
+                variant={activeFilter === "missing-expiry" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setActiveFilter("missing-expiry")}
+                className="min-w-fit text-yellow-500 border-yellow-200"
+              >
+                <Clock className="mr-1 h-3.5 w-3.5" />
+                Set Expiry
+                <span className="ml-1.5 text-xs font-normal opacity-70">{missingExpiryCount}</span>
+              </Button>
+            )}
+
+            {getCategories().map((category) => (
+              <Button
+                key={category}
+                variant={activeFilter === category ? "default" : "outline"}
+                size="sm"
+                onClick={() => setActiveFilter(category)}
+                className="min-w-fit"
+              >
+                {category}
+              </Button>
+            ))}
+          </div>
+
+          {/* Select Items / Cancel Selection — hidden when list is empty */}
+          {filteredItems.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
+            >
+              {selectionMode ? "Cancel" : "Select"}
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Bulk action bar — only visible in selection mode */}
+      {selectionMode && (
+        <div className="flex items-center gap-2 p-3 bg-muted rounded-lg mb-4">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded"
+            checked={selectedIds.size === filteredItems.length && filteredItems.length > 0}
+            onChange={toggleSelectAll}
+          />
+          <span className="text-sm flex-1 text-muted-foreground">
+            {selectedIds.size} of {filteredItems.length} selected
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            disabled={selectedIds.size === 0}
+            onClick={handleBulkConsume}
+          >
+            <Check className="h-3.5 w-3.5 mr-1" />
+            Consume
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs"
+            disabled={selectedIds.size === 0}
+            onClick={handleBulkWaste}
+          >
+            <Trash className="h-3.5 w-3.5 mr-1" />
+            Waste
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 text-xs text-destructive hover:text-destructive"
+            disabled={selectedIds.size === 0}
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            Delete
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 mb-20">
         {isLoading ? (
@@ -647,24 +813,35 @@ useEffect(() => {
                 <Card
                   className={`${getExpiryColor(item.expiryDate)} border-l-4 relative cursor-pointer transition-all ${
                     swipedItems[item.id] ? "opacity-50" : ""
-                  }`}
-                  onClick={() => setDetailItem(item)}
+                  } ${selectionMode && selectedIds.has(item.id) ? "ring-2 ring-primary" : ""}`}
+                  onClick={() => selectionMode ? toggleItemSelection(item.id) : setDetailItem(item)}
                 >
                   <CardContent className="pt-4">
                     <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center">
-                          <h3 className="font-medium">{item.name}</h3>
-                          {item.quantity && item.quantity > 1 && (
-                            <span className="ml-2 text-sm text-muted-foreground">x{item.quantity}</span>
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        {selectionMode && (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded mt-0.5 shrink-0"
+                            checked={selectedIds.has(item.id)}
+                            onChange={() => toggleItemSelection(item.id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center">
+                            <h3 className="font-medium">{item.name}</h3>
+                            {item.quantity && item.quantity > 1 && (
+                              <span className="ml-2 text-sm text-muted-foreground">x{item.quantity}</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{item.location}</p>
+                          {item.rating && item.rating > 0 && (
+                            <StarRating value={item.rating} size="sm" readOnly />
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground">{item.location}</p>
-                        {item.rating && item.rating > 0 && (
-                          <StarRating value={item.rating} size="sm" readOnly />
-                        )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <Badge variant="outline">{item.category}</Badge>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

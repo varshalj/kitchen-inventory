@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Camera, Upload, FileText, X, Check, Loader2, ShoppingCart, Plus, Minus, ScanLine, Sparkles, ImageIcon } from "lucide-react"
@@ -267,6 +267,37 @@ export function AddItemForm() {
     if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
 
+  // Autocomplete state for the name field in the manual tab
+  const [allInventoryNames, setAllInventoryNames] = useState<string[]>([])
+  const [nameSuggestions, setNameSuggestions] = useState<string[]>([])
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false)
+
+  const computeNameSuggestions = useCallback(
+    (query: string) => {
+      if (!query.trim()) { setNameSuggestions([]); return }
+      const q = query.toLowerCase()
+      const seen = new Set<string>()
+      const results: string[] = []
+      for (const name of allInventoryNames) {
+        const lower = name.toLowerCase()
+        if (seen.has(lower)) continue
+        if (lower.includes(q)) {
+          seen.add(lower)
+          results.push(name)
+          if (results.length >= 5) break
+        }
+      }
+      setNameSuggestions(results)
+    },
+    [allInventoryNames]
+  )
+
+  const handleNameInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleInputChange(e)
+    computeNameSuggestions(e.target.value)
+    setShowNameSuggestions(true)
+  }
+
   const [suggestedItems, setSuggestedItems] = useState<
     Array<{ name: string; category: string; expiryDate: string; location: string; quantity: number; price: string; reason: string }>
   >([])
@@ -274,10 +305,26 @@ export function AddItemForm() {
   useEffect(() => {
     const loadSuggestions = async () => {
       try {
-        const response = await fetchWithAuth("/api/inventory?archived=true")
-        if (!response.ok) return
-        const archived = await response.json()
-        if (!Array.isArray(archived)) return
+        const [archivedRes, activeRes] = await Promise.all([
+          fetchWithAuth("/api/inventory?archived=true"),
+          fetchWithAuth("/api/inventory?archived=false"),
+        ])
+
+        // Build name list for autocomplete from both active + archived
+        const names: string[] = []
+        if (activeRes.ok) {
+          const activeItems = await activeRes.json()
+          if (Array.isArray(activeItems)) {
+            activeItems.forEach((i: any) => { if (i.name) names.push(i.name) })
+          }
+        }
+
+        if (!archivedRes.ok) { setAllInventoryNames(names); return }
+        const archived = await archivedRes.json()
+        if (!Array.isArray(archived)) { setAllInventoryNames(names); return }
+
+        archived.forEach((i: any) => { if (i.name) names.push(i.name) })
+        setAllInventoryNames(names)
 
         const consumed = archived
           .filter((item: any) => item.archiveReason === "consumed")
@@ -664,14 +711,39 @@ export function AddItemForm() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Item Name</Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    required
-                    autoFocus={false}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="name"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleNameInputChange}
+                      onFocus={() => formData.name && setShowNameSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
+                      onKeyDown={(e) => { if (e.key === "Escape") setShowNameSuggestions(false) }}
+                      required
+                      autoFocus={false}
+                      autoComplete="off"
+                    />
+                    {showNameSuggestions && nameSuggestions.length > 0 && (
+                      <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg overflow-hidden">
+                        {nameSuggestions.map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              setFormData((prev) => ({ ...prev, name: suggestion }))
+                              setNameSuggestions([])
+                              setShowNameSuggestions(false)
+                            }}
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">

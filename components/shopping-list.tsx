@@ -216,7 +216,14 @@ export function ShoppingList() {
 
         toast({
           title: `${item.name} added to inventory`,
-          description: "Remember to set the expiry date in your dashboard.",
+          description: (
+            <div>
+              <span>Remember to set the expiry date in your dashboard.</span>
+              <div className="mt-2 h-0.5 w-full bg-muted overflow-hidden rounded-full origin-left">
+                <div className="h-full bg-muted-foreground/50 origin-left animate-[toast-progress_5s_linear_forwards]" />
+              </div>
+            </div>
+          ),
           action: createdInventoryItem
             ? (
                 <ToastAction
@@ -270,7 +277,14 @@ export function ShoppingList() {
 
     toast({
       title: "Item removed",
-      description: `${item.name} was removed from your list.`,
+      description: (
+        <div>
+          <span>{item.name} was removed from your list.</span>
+          <div className="mt-2 h-0.5 w-full bg-muted overflow-hidden rounded-full origin-left">
+            <div className="h-full bg-muted-foreground/50 origin-left animate-[toast-progress_5s_linear_forwards]" />
+          </div>
+        </div>
+      ),
       action: (
         <ToastAction
           altText="Undo"
