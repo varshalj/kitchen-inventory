@@ -31,11 +31,14 @@ export async function POST(request: NextRequest) {
     if (!updated)
       return NextResponse.json({ error: "Update blocked by RLS" }, { status: 403 })
 
+    let shoppingItemId: string | undefined
+
     if (action === "consume" && addToShoppingList) {
-      await shoppingRepo.create(supabase, {
+      const createdShoppingItem = await shoppingRepo.create(supabase, {
         id: crypto.randomUUID(),
         name: updated.name,
-        quantity: 1,
+        quantity: updated.quantity ?? 1,
+        unit: updated.unit || undefined,
         category: updated.category,
         completed: false,
         addedOn: new Date().toISOString(),
@@ -43,9 +46,10 @@ export async function POST(request: NextRequest) {
         brand: updated.brand || undefined,
         orderedFrom: updated.orderedFrom || undefined,
       })
+      shoppingItemId = createdShoppingItem.id
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, shoppingItemId })
   } catch (error) {
     console.error("OPERATIONS ERROR:", error)
     return NextResponse.json({ error: "Operation failed" }, { status: 500 })

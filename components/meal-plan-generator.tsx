@@ -65,10 +65,13 @@ export function MealPlanGenerator({ items, onClose }: MealPlanGeneratorProps) {
     const formatItemsList = (itemsList: InventoryItem[]) => {
       return itemsList
         .map((item) => {
+          const qty = item.quantity ?? 1
+          const unit = item.unit && item.unit !== "pcs" ? item.unit : "pcs"
+          const qtyStr = unit === "pcs" ? `${qty} pcs` : `${qty}${unit}`
           const expiryInfo = item.expiryDate
             ? `expiry: ${new Date(item.expiryDate).toLocaleDateString()}`
             : "no expiry date"
-          return `- ${item.name} (quantity: ${item.quantity || 1}, category: ${item.category}, ${expiryInfo})`
+          return `- ${item.name} (quantity: ${qtyStr}, category: ${item.category}, ${expiryInfo})`
         })
         .join("\n")
     }

@@ -4,9 +4,11 @@ import { Home, BarChart2, ShoppingCart, User, Plus } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useShoppingCount } from "@/contexts/shopping-count-context"
 
 export function BottomNavigation() {
   const pathname = usePathname()
+  const { incompleteCount } = useShoppingCount()
 
   const isActive = (path: string) => {
     if (path === "/dashboard" && pathname === "/dashboard") return true
@@ -51,7 +53,14 @@ export function BottomNavigation() {
         </Link>
 
         <Link href="/shopping-list" className={navLinkClass("/shopping-list")}>
-          <ShoppingCart className="h-5 w-5 transition-transform duration-200" />
+          <div className="relative">
+            <ShoppingCart className="h-5 w-5 transition-transform duration-200" />
+            {incompleteCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+                {incompleteCount > 9 ? "9+" : incompleteCount}
+              </span>
+            )}
+          </div>
           <span>Shopping</span>
           {isActive("/shopping-list") && (
             <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />

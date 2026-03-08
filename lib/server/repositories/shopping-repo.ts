@@ -12,6 +12,7 @@ function toDb(item: Partial<ShoppingItem>) {
 
   if (item.name !== undefined) payload.name = item.name
   if (item.quantity !== undefined) payload.quantity = item.quantity
+  if (item.unit !== undefined) payload.unit = item.unit
   if (item.category !== undefined) payload.category = item.category
   if (item.notes !== undefined) payload.notes = item.notes
   if (item.completed !== undefined) payload.completed = item.completed
@@ -32,6 +33,7 @@ function toDomain(row: any): ShoppingItem {
     id: row.id,
     name: row.name,
     quantity: row.quantity,
+    unit: row.unit ?? undefined,
     category: row.category,
     notes: row.notes,
     completed: row.completed,
@@ -92,6 +94,26 @@ export const shoppingRepo = {
     if (findError) throw findError
 
     if (existing?.[0]) {
+      const existingUnit = existing[0].unit ?? null
+      const incomingUnit = item.unit ?? null
+      const unitMatches = existingUnit === incomingUnit
+
+      if (!unitMatches) {
+        // Different units — create a separate row instead of merging
+        const { data, error } = await supabase
+          .from(TABLE)
+          .insert({
+            id: crypto.randomUUID(),
+            ...toDb(item),
+            user_id: user.id,
+          })
+          .select()
+
+        if (error) throw error
+        if (!data?.[0]) throw new Error("Insert failed")
+        return toDomain(data[0])
+      }
+
       const mergedQuantity =
         (existing[0].quantity ?? 0) + (item.quantity ?? 1)
 

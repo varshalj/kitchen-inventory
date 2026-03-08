@@ -13,7 +13,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -27,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
+import { ToastAction } from "@/components/ui/toast"
 import { MainLayout } from "@/components/main-layout"
 import { EditItemForm } from "@/components/edit-item-form"
 import { useToast } from "@/hooks/use-toast"
@@ -47,9 +47,6 @@ export function InventoryDashboard() {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeFilter, setActiveFilter] = useState("all")
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
-  const [deleteConfirmItem, setDeleteConfirmItem] = useState<InventoryItem | null>(null)
-  const [consumeConfirmItem, setConsumeConfirmItem] = useState<InventoryItem | null>(null)
-  const [wasteConfirmItem, setWasteConfirmItem] = useState<InventoryItem | null>(null)
   const [touchStart, setTouchStart] = useState<{ id: string; x: number } | null>(null)
   const [swipedItems, setSwipedItems] = useState<{ [key: string]: string }>({})
   const [sortBy, setSortBy] = useState("expiryDate")
@@ -57,14 +54,18 @@ export function InventoryDashboard() {
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null)
   const [reviewItem, setReviewItem] = useState<{ item: InventoryItem; type: "consumed" | "wasted" } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [actionState, setActionState] = useState<{ status: "idle" | "pending" | "success" | "error"; message?: string }>({
-    status: "idle",
-  })
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const { toast } = useToast()
   const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
+  const pendingActions = useRef<Map<string, {
+    type: "delete" | "consume" | "waste"
+    item: InventoryItem
+    shoppingItemId?: string
+    timer?: ReturnType<typeof setTimeout>
+    cleanupTimer?: ReturnType<typeof setTimeout>
+  }>>(new Map())
 
 useEffect(() => {
   const load = async () => {
@@ -212,17 +213,12 @@ useEffect(() => {
   }
 
   const confirmSwipeAction = (id: string, action: string) => {
-    if (action === "delete") {
-      const item = items.find((item) => item.id === id)
-      if (item) {
-        setDeleteConfirmItem(item)
-      }
-    } else if (action === "consumed") {
-      // Mark item as consumed
-      const item = items.find((item) => item.id === id)
-      if (item) {
-        setConsumeConfirmItem(item)
-      }
+    const item = items.find((i) => i.id === id)
+
+    if (action === "delete" && item) {
+      handleDeleteItem(item)
+    } else if (action === "consumed" && item) {
+      void handleConsumeItem(item)
     }
 
     // Reset swiped state
@@ -233,53 +229,64 @@ useEffect(() => {
     })
   }
 
-  const handleDeleteItem = async () => {
-    if (!deleteConfirmItem) return
+  const progressBar = (
+    <div className="mt-2 h-0.5 w-full bg-muted overflow-hidden rounded-full">
+      <div className="h-full bg-muted-foreground/50 origin-left animate-[toast-progress_5s_linear_forwards]" />
+    </div>
+  )
 
-    try {
-      const response = await fetchWithAuth(`/api/inventory/${deleteConfirmItem.id}`, {
-        method: "DELETE",
-      })
+  const handleDeleteItem = (item: InventoryItem) => {
+    // Optimistic remove
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    triggerHaptic(HAPTIC_SUCCESS)
 
-      if (!response.ok) {
-        const body = await response.text()
-        throw new Error(body || "Failed to delete inventory item")
+    const timer = setTimeout(async () => {
+      try {
+        await fetchWithAuth(`/api/inventory/${item.id}`, { method: "DELETE" })
+      } catch {
+        setItems((prev) => [item, ...prev])
+        toastWithNudge({ title: "Delete Failed", description: "Could not delete item.", variant: "destructive" })
       }
+      pendingActions.current.delete(item.id)
+    }, 5000)
 
-      setItems(items.filter((item) => item.id !== deleteConfirmItem.id))
-      setDeleteConfirmItem(null)
-      triggerHaptic(HAPTIC_SUCCESS)
-      toast({
-        title: "Item Deleted",
-        description: `${deleteConfirmItem.name} has been removed from your inventory.`,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to delete item"
-      triggerHaptic(HAPTIC_ERROR)
-      toastWithNudge({
-        title: "Delete Failed",
-        description: message,
-        variant: "destructive",
-      })
-    }
+    pendingActions.current.set(item.id, { type: "delete", item, timer })
+
+    toast({
+      title: "Item deleted",
+      description: (
+        <div>
+          <span>{item.name} will be removed.</span>
+          {progressBar}
+        </div>
+      ),
+      action: (
+        <ToastAction
+          altText="Undo"
+          onClick={() => {
+            const pending = pendingActions.current.get(item.id)
+            if (!pending) return
+            clearTimeout(pending.timer)
+            pendingActions.current.delete(item.id)
+            setItems((prev) => [item, ...prev])
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
+    })
   }
 
-  const handleConsumeItem = async () => {
-    if (!consumeConfirmItem) {
-      return
-    }
-
-    setActionState({ status: "pending", message: "Saving consume operation..." })
+  const handleConsumeItem = async (item: InventoryItem) => {
+    // Optimistic remove
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    triggerHaptic(HAPTIC_SUCCESS)
 
     try {
       const response = await fetchWithAuth("/api/inventory/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId: consumeConfirmItem.id,
-          action: "consume",
-          addToShoppingList: true,
-        }),
+        body: JSON.stringify({ itemId: item.id, action: "consume", addToShoppingList: true }),
       })
 
       const payload = await response.json()
@@ -287,47 +294,74 @@ useEffect(() => {
         throw new Error(payload.error || "Consume operation failed")
       }
 
-      setItems((prev) => prev.filter((item) => item.id !== consumeConfirmItem.id))
+      const shoppingItemId: string | undefined = payload.shoppingItemId
 
-      if (!consumeConfirmItem.rating) {
-        setReviewItem({ item: consumeConfirmItem, type: "consumed" })
+      const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
+      pendingActions.current.set(item.id, { type: "consume", item, shoppingItemId, cleanupTimer })
+
+      if (!item.rating) {
+        setReviewItem({ item, type: "consumed" })
       }
 
-      setActionState({ status: "success" })
-      setConsumeConfirmItem(null)
-      triggerHaptic(HAPTIC_SUCCESS)
       toast({
-        title: "Item Consumed",
-        description: `${consumeConfirmItem.name} has been consumed and archived.`,
+        title: "Item consumed",
+        description: (
+          <div>
+            <span>{item.name} moved to archive &amp; added to shopping list.</span>
+            {progressBar}
+          </div>
+        ),
+        action: (
+          <ToastAction
+            altText="Undo"
+            onClick={async () => {
+              const pending = pendingActions.current.get(item.id)
+              if (!pending) return
+              clearTimeout(pending.cleanupTimer)
+              pendingActions.current.delete(item.id)
+              try {
+                await fetchWithAuth(`/api/inventory/${item.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    archived: false,
+                    archiveReason: null,
+                    consumedOn: null,
+                    quantity: item.quantity,
+                  }),
+                })
+                if (pending.shoppingItemId) {
+                  await fetchWithAuth(`/api/shopping/${pending.shoppingItemId}`, { method: "DELETE" })
+                }
+                setItems((prev) => [item, ...prev])
+                setReviewItem(null)
+              } catch {
+                toastWithNudge({ title: "Undo Failed", description: "Could not restore item.", variant: "destructive" })
+              }
+            }}
+          >
+            Undo
+          </ToastAction>
+        ),
       })
     } catch (error) {
+      setItems((prev) => [item, ...prev])
       const message = error instanceof Error ? error.message : "Consume operation failed"
-      setActionState({ status: "error", message })
       triggerHaptic(HAPTIC_ERROR)
-      toastWithNudge({
-        title: "Consume Failed",
-        description: message,
-        variant: "destructive",
-      })
+      toastWithNudge({ title: "Consume Failed", description: message, variant: "destructive" })
     }
   }
 
-  const handleWasteItem = async () => {
-    if (!wasteConfirmItem) {
-      return
-    }
-
-    setActionState({ status: "pending", message: "Saving waste operation..." })
+  const handleWasteItem = async (item: InventoryItem) => {
+    // Optimistic remove
+    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    triggerHaptic(HAPTIC_SUCCESS)
 
     try {
       const response = await fetchWithAuth("/api/inventory/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemId: wasteConfirmItem.id,
-          action: "waste",
-          addToShoppingList: false,
-        }),
+        body: JSON.stringify({ itemId: item.id, action: "waste", addToShoppingList: false }),
       })
 
       const payload = await response.json()
@@ -335,28 +369,56 @@ useEffect(() => {
         throw new Error(payload.error || "Waste operation failed")
       }
 
-      setItems((prev) => prev.filter((item) => item.id !== wasteConfirmItem.id))
+      const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
+      pendingActions.current.set(item.id, { type: "waste", item, cleanupTimer })
 
-      if (!wasteConfirmItem.rating) {
-        setReviewItem({ item: wasteConfirmItem, type: "wasted" })
+      if (!item.rating) {
+        setReviewItem({ item, type: "wasted" })
       }
 
-      setActionState({ status: "success" })
-      setWasteConfirmItem(null)
-      triggerHaptic(HAPTIC_SUCCESS)
       toast({
-        title: "Item Wasted",
-        description: `${wasteConfirmItem.name} has been marked as wasted.`,
+        title: "Item marked as wasted",
+        description: (
+          <div>
+            <span>{item.name} moved to archive.</span>
+            {progressBar}
+          </div>
+        ),
+        action: (
+          <ToastAction
+            altText="Undo"
+            onClick={async () => {
+              const pending = pendingActions.current.get(item.id)
+              if (!pending) return
+              clearTimeout(pending.cleanupTimer)
+              pendingActions.current.delete(item.id)
+              try {
+                await fetchWithAuth(`/api/inventory/${item.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    archived: false,
+                    archiveReason: null,
+                    wastedOn: null,
+                    quantity: item.quantity,
+                  }),
+                })
+                setItems((prev) => [item, ...prev])
+                setReviewItem(null)
+              } catch {
+                toastWithNudge({ title: "Undo Failed", description: "Could not restore item.", variant: "destructive" })
+              }
+            }}
+          >
+            Undo
+          </ToastAction>
+        ),
       })
     } catch (error) {
+      setItems((prev) => [item, ...prev])
       const message = error instanceof Error ? error.message : "Waste operation failed"
-      setActionState({ status: "error", message })
       triggerHaptic(HAPTIC_ERROR)
-      toastWithNudge({
-        title: "Waste Failed",
-        description: message,
-        variant: "destructive",
-      })
+      toastWithNudge({ title: "Waste Failed", description: message, variant: "destructive" })
     }
   }
 
@@ -541,20 +603,6 @@ useEffect(() => {
           <span>{items.length === 0 && !isLoading ? "Add items to create a meal plan" : "Create Meal Plan"}</span>
         </Button>
       </div>
-
-      {actionState.status !== "idle" && (
-        <div
-          className={`mb-3 rounded-md border px-3 py-2 text-sm ${
-            actionState.status === "pending"
-              ? "border-blue-200 bg-blue-50 text-blue-700"
-              : actionState.status === "success"
-                ? "border-green-200 bg-green-50 text-green-700"
-                : "border-red-200 bg-red-50 text-red-700"
-          }`}
-        >
-          {actionState.message}
-        </div>
-      )}
 
       <div className="sticky top-0 z-10 bg-background pt-2 pb-4 space-y-3">
         <div className="flex gap-2">
@@ -831,8 +879,12 @@ useEffect(() => {
                         <div className="min-w-0">
                           <div className="flex items-center">
                             <h3 className="font-medium">{item.name}</h3>
-                            {item.quantity && item.quantity > 1 && (
-                              <span className="ml-2 text-sm text-muted-foreground">x{item.quantity}</span>
+                            {item.quantity && item.quantity >= 1 && (
+                              <span className="ml-2 text-sm text-muted-foreground">
+                                {item.unit && item.unit !== "pcs"
+                                  ? `${item.quantity}${item.unit}`
+                                  : item.quantity > 1 ? `×${item.quantity}` : ""}
+                              </span>
                             )}
                           </div>
                           <p className="text-sm text-muted-foreground">{item.location}</p>
@@ -869,15 +921,15 @@ useEffect(() => {
                               <Edit className="mr-2 h-4 w-4" />
                               <span>Edit</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setConsumeConfirmItem(item) }}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void handleConsumeItem(item) }}>
                               <Check className="mr-2 h-4 w-4" />
                               <span>Mark as Consumed</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setWasteConfirmItem(item) }}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void handleWasteItem(item) }}>
                               <Trash className="mr-2 h-4 w-4" />
                               <span>Mark as Wasted</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setDeleteConfirmItem(item) }}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDeleteItem(item) }}>
                               <Trash2 className="mr-2 h-4 w-4" />
                               <span>Delete</span>
                             </DropdownMenuItem>
@@ -930,72 +982,6 @@ useEffect(() => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteConfirmItem} onOpenChange={(open) => !open && setDeleteConfirmItem(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Item</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this item? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmItem(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteItem} className="active:scale-95 transition-transform">
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Consume Confirmation Dialog */}
-      <Dialog open={!!consumeConfirmItem} onOpenChange={(open) => !open && setConsumeConfirmItem(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Mark as Consumed</DialogTitle>
-            <DialogDescription>
-              This will mark {consumeConfirmItem?.name} as consumed, add it to your shopping list, and move it to the
-              archive.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConsumeConfirmItem(null)}>
-              Cancel
-            </Button>
-            <Button variant="default" onClick={handleConsumeItem} className="active:scale-95 transition-transform">
-              <ShoppingCart className="mr-2 h-4 w-4" />
-              Mark as Consumed
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Waste Confirmation Dialog */}
-      <Dialog open={!!wasteConfirmItem} onOpenChange={(open) => !open && setWasteConfirmItem(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Mark as Wasted</DialogTitle>
-            <DialogDescription>
-              This will mark {wasteConfirmItem?.name} as wasted and move it to the archive for waste analytics.
-            </DialogDescription>
-          </DialogHeader>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWasteConfirmItem(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleWasteItem} className="active:scale-95 transition-transform">
-              <Trash className="mr-2 h-4 w-4" />
-              Mark as Wasted
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Review Prompt Dialog */}
       <Dialog open={!!reviewItem} onOpenChange={(open) => !open && setReviewItem(null)}>
         <DialogContent className="sm:max-w-md">
@@ -1022,7 +1008,7 @@ useEffect(() => {
         open={!!detailItem}
         onOpenChange={(open) => !open && setDetailItem(null)}
         onEdit={(item) => setEditItem(item)}
-        onDelete={(item) => setDeleteConfirmItem(item)}
+        onDelete={(item) => { setDetailItem(null); handleDeleteItem(item) }}
       />
 
       {/* Bug Report Dialog (opened contextually after errors) */}

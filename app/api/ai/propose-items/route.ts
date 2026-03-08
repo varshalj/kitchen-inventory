@@ -13,7 +13,8 @@ const proposalSchema = z.object({
   name: z.string().min(1),
   category: z.string().min(1),
   expiryDate: z.string().min(1),
-  quantity: z.number().int().positive(),
+  quantity: z.number().positive(),
+  unit: z.string().optional(),
   price: z.string().optional(),
 })
 
@@ -37,13 +38,20 @@ You MUST return a JSON object with exactly these keys:
   - "name" (string): the item name
   - "category" (string): one of Fruits, Vegetables, Dairy, Meat, Grains, Canned, Frozen, Snacks, Beverages, Condiments, Other
   - "expiryDate" (string): estimated expiry date in YYYY-MM-DD format, calculated from today (${today})
-  - "quantity" (integer): quantity, default 1
+  - "quantity" (number): numeric quantity value, can be decimal (e.g. 0.5, 2.5). Default 1.
+  - "unit" (string): the unit for quantity. Valid units: pcs, g, kg, oz, lb, ml, L, fl oz, cup. Use "pcs" for countable items (e.g. eggs, apples). Use weight/volume units for bulk items (e.g. 500g flour, 1L milk). Default "pcs".
   - "price" (string, optional): price if visible
 - "confidence" (number): a number between 0 and 1
 - "reasoning" (string): a brief explanation of what was detected
 
+Examples:
+- 500g flour → {"quantity": 500, "unit": "g"}
+- 1 litre milk → {"quantity": 1, "unit": "L"}
+- 6 eggs → {"quantity": 6, "unit": "pcs"}
+- 250ml juice → {"quantity": 250, "unit": "ml"}
+
 Example response:
-{"proposals":[{"name":"Milk","category":"Dairy","expiryDate":"${new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0]}","quantity":1}],"confidence":0.9,"reasoning":"Detected 1 dairy item"}`
+{"proposals":[{"name":"Milk","category":"Dairy","expiryDate":"${new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0]}","quantity":1,"unit":"L"}],"confidence":0.9,"reasoning":"Detected 1 dairy item"}`
 }
 
 function getOpenAIClient(): OpenAI | null {
@@ -88,7 +96,10 @@ function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unkn
         out.quantity = 1
       }
       if (typeof out.quantity === "string") {
-        out.quantity = parseInt(out.quantity, 10) || 1
+        out.quantity = parseFloat(out.quantity) || 1
+      }
+      if (!out.unit || typeof out.unit !== "string") {
+        out.unit = "pcs"
       }
       if (typeof out.price === "number") {
         out.price = String(out.price)

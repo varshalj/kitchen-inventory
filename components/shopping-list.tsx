@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { MainLayout } from "@/components/main-layout"
-import { QuantityInput } from "@/components/quantity-input"
+import { QuantityWithUnits, formatQuantityUnit } from "@/components/quantity-with-units"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
@@ -32,6 +32,7 @@ import {
   deleteInventoryItem,
 } from "@/lib/client/api"
 import type { ShoppingItem, InventoryItem } from "@/lib/types"
+import { useShoppingCount } from "@/contexts/shopping-count-context"
 import { cn } from "@/lib/utils"
 
 type SortBy = "recent" | "name" | "quantity"
@@ -39,11 +40,12 @@ type SortBy = "recent" | "name" | "quantity"
 export function ShoppingList() {
   const { toast } = useToast()
   const { settings } = useUserSettings()
+  const { setIncompleteCount } = useShoppingCount()
   const [items, setItems] = useState<ShoppingItem[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [editItem, setEditItem] = useState<ShoppingItem | null>(null)
   const [buyItem, setBuyItem] = useState<ShoppingItem | null>(null)
-  const [newItem, setNewItem] = useState({ name: "", quantity: 1, notes: "" })
+  const [newItem, setNewItem] = useState({ name: "", quantity: 1, unit: "pcs", notes: "" })
   const [showCompleted, setShowCompleted] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -64,6 +66,7 @@ export function ShoppingList() {
         ])
         setItems(shoppingItems)
         setInventoryItems(invItems)
+        setIncompleteCount(shoppingItems.filter((i) => !i.completed).length)
       } catch {
         setItems([])
         setInventoryItems([])
@@ -147,7 +150,7 @@ export function ShoppingList() {
         const uncompleted = { ...existing, completed: false }
         await updateShoppingItem(uncompleted)
         setItems((prev) => prev.map((i) => (i.id === existing.id ? uncompleted : i)))
-        setNewItem({ name: "", quantity: 1, notes: "" })
+        setNewItem({ name: "", quantity: 1, unit: "pcs", notes: "" })
         setSuggestions([])
         triggerHaptic(HAPTIC_SUCCESS)
         toast({
@@ -161,6 +164,7 @@ export function ShoppingList() {
     const itemPayload = {
       name,
       quantity: newItem.quantity || 1,
+      unit: newItem.unit || "pcs",
       notes: newItem.notes || undefined,
       completed: false,
       addedOn: new Date().toISOString(),
@@ -168,8 +172,12 @@ export function ShoppingList() {
     }
 
     const addedItem = await addToShoppingList(itemPayload as unknown as ShoppingItem)
-    setItems((prev) => [...prev, addedItem])
-    setNewItem({ name: "", quantity: 1, notes: "" })
+    setItems((prev) => {
+      const updated = [...prev, addedItem]
+      setIncompleteCount(updated.filter((i) => !i.completed).length)
+      return updated
+    })
+    setNewItem({ name: "", quantity: 1, unit: "pcs", notes: "" })
     setSuggestions([])
     triggerHaptic(HAPTIC_SUCCESS)
     toast({
@@ -186,7 +194,11 @@ export function ShoppingList() {
     const newCompleted = !item.completed
 
     // Optimistic update
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, completed: newCompleted } : i)))
+    setItems((prev) => {
+      const updated = prev.map((i) => (i.id === id ? { ...i, completed: newCompleted } : i))
+      setIncompleteCount(updated.filter((i) => !i.completed).length)
+      return updated
+    })
     triggerHaptic()
 
     try {
@@ -259,7 +271,11 @@ export function ShoppingList() {
   // Feature 3 — Undo Delete (deferred delete)
   const handleDeleteItem = (item: ShoppingItem) => {
     // Optimistic remove
-    setItems((prev) => prev.filter((i) => i.id !== item.id))
+    setItems((prev) => {
+      const updated = prev.filter((i) => i.id !== item.id)
+      setIncompleteCount(updated.filter((i) => !i.completed).length)
+      return updated
+    })
     triggerHaptic(HAPTIC_SUCCESS)
 
     const timer = setTimeout(async () => {
@@ -291,7 +307,11 @@ export function ShoppingList() {
           onClick={() => {
             clearTimeout(pendingDeletes.current.get(item.id)!)
             pendingDeletes.current.delete(item.id)
-            setItems((prev) => [item, ...prev])
+            setItems((prev) => {
+              const updated = [item, ...prev]
+              setIncompleteCount(updated.filter((i) => !i.completed).length)
+              return updated
+            })
           }}
         >
           Undo
@@ -380,42 +400,48 @@ export function ShoppingList() {
                     ref={suggestionsRef}
                     className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg overflow-hidden"
                   >
-                    {suggestions.map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
-                        onMouseDown={(e) => {
-                          e.preventDefault() // prevent blur before click
-                          handleSelectSuggestion(suggestion)
-                        }}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
+                    {suggestions.map((suggestion) => {
+                      const inList = items.some(
+                        (i) => !i.completed && i.name.toLowerCase() === suggestion.toLowerCase()
+                      )
+                      return (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center justify-between ${inList ? "opacity-60" : ""}`}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            handleSelectSuggestion(suggestion)
+                          }}
+                        >
+                          <span>{suggestion}</span>
+                          {inList && (
+                            <span className="ml-2 text-xs text-amber-600 font-medium shrink-0">In list</span>
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="flex gap-4">
-              <QuantityInput
-                id="item-quantity"
-                label="Quantity"
-                value={newItem.quantity}
-                onChange={(value) => setNewItem({ ...newItem, quantity: value })}
-                className="w-1/3"
-              />
+            <QuantityWithUnits
+              id="item-quantity"
+              label="Quantity"
+              value={newItem.quantity}
+              unit={newItem.unit}
+              onChange={(value, unit) => setNewItem({ ...newItem, quantity: value, unit })}
+            />
 
-              <div className="space-y-2 flex-1">
-                <Label htmlFor="item-notes">Notes (Optional)</Label>
-                <Input
-                  id="item-notes"
-                  value={newItem.notes}
-                  onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
-                  placeholder="Brand, size, etc."
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="item-notes">Notes (Optional)</Label>
+              <Input
+                id="item-notes"
+                value={newItem.notes}
+                onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
+                placeholder="Brand, size, etc."
+              />
             </div>
 
             <Button
@@ -528,8 +554,10 @@ export function ShoppingList() {
                             <span className="text-muted-foreground font-normal">{item.brand} </span>
                           )}
                           {item.name}
-                          {item.quantity > 1 && (
-                            <span className="text-sm font-normal ml-1">×{item.quantity}</span>
+                          {(item.quantity > 1 || (item.unit && item.unit !== "pcs")) && (
+                            <span className="text-sm font-normal ml-1">
+                              {formatQuantityUnit(item.quantity, item.unit)}
+                            </span>
                           )}
                         </div>
 
@@ -635,12 +663,12 @@ export function ShoppingList() {
                   />
                 </div>
 
-                <QuantityInput
+                <QuantityWithUnits
                   id="edit-quantity"
                   label="Quantity"
                   value={editItem.quantity}
-                  onChange={(value) => setEditItem({ ...editItem, quantity: value })}
-                  className="space-y-2"
+                  unit={editItem.unit ?? "pcs"}
+                  onChange={(value, unit) => setEditItem({ ...editItem, quantity: value, unit })}
                 />
 
                 <div className="space-y-2">

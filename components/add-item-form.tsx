@@ -18,7 +18,7 @@ import { MainLayout } from "@/components/main-layout"
 import { addInventoryItem } from "@/lib/client/api"
 import type { InventoryItem } from "@/lib/types"
 import { useUserSettings } from "@/hooks/use-user-settings"
-import { QuantityInput } from "@/components/quantity-input"
+import { QuantityWithUnits } from "@/components/quantity-with-units"
 import { CurrencyInput } from "@/components/currency-input"
 import { useToast } from "@/hooks/use-toast"
 import { BugReportDialog } from "@/components/bug-report-dialog"
@@ -74,6 +74,7 @@ export function AddItemForm() {
     expiryDate: "",
     location: "",
     quantity: 1,
+    unit: "pcs",
     notes: "",
     price: "",
     currency: settings?.currency || "INR",
@@ -194,6 +195,7 @@ export function AddItemForm() {
       if (activeTab === "manual") {
         await addInventoryItem({
           ...formData,
+          unit: formData.unit || "pcs",
           addedOn: new Date().toISOString(),
         } as unknown as InventoryItem)
         toast({ title: "Item Saved", description: `${formData.name} has been added to your inventory.` })
@@ -772,23 +774,22 @@ export function AddItemForm() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <QuantityInput
-                    id="quantity"
-                    label="Quantity"
-                    value={formData.quantity}
-                    onChange={(value) => setFormData((prev) => ({ ...prev, quantity: value }))}
-                  />
+                <QuantityWithUnits
+                  id="quantity"
+                  label="Quantity"
+                  value={formData.quantity}
+                  unit={formData.unit}
+                  onChange={(value, unit) => setFormData((prev) => ({ ...prev, quantity: value, unit }))}
+                />
 
-                  <CurrencyInput
-                    id="price"
-                    label="Price"
-                    value={formData.price}
-                    currency={formData.currency}
-                    onValueChange={(val) => setFormData((prev) => ({ ...prev, price: val }))}
-                    onCurrencyChange={(cur) => setFormData((prev) => ({ ...prev, currency: cur }))}
-                  />
-                </div>
+                <CurrencyInput
+                  id="price"
+                  label="Price"
+                  value={formData.price}
+                  currency={formData.currency}
+                  onValueChange={(val) => setFormData((prev) => ({ ...prev, price: val }))}
+                  onCurrencyChange={(cur) => setFormData((prev) => ({ ...prev, currency: cur }))}
+                />
 
                 <div className="space-y-2">
                   <Label htmlFor="expiryDate">Expiry Date</Label>

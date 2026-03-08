@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { installConsoleCapture } from "@/lib/console-capture"
 import { ScreenshotBugNudge } from "@/components/screenshot-bug-nudge"
 import { OnboardingTour } from "@/components/onboarding-tour"
+import { ShoppingCountProvider } from "@/contexts/shopping-count-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -17,10 +18,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <UserSettingsProvider>
-        {children}
-        <Toaster />
-        <ScreenshotBugNudge />
-        <OnboardingTour />
+        <ShoppingCountProvider>
+          {children}
+          <Toaster />
+          <ScreenshotBugNudge />
+          <OnboardingTour />
+        </ShoppingCountProvider>
       </UserSettingsProvider>
     </ThemeProvider>
   )

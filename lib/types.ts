@@ -5,10 +5,11 @@ export interface InventoryItem {
   expiryDate: string
   location: string
   quantity?: number
+  unit?: string
   archived?: boolean
   addedOn?: string
-  consumedOn?: string
-  wastedOn?: string
+  consumedOn?: string | null
+  wastedOn?: string | null
   partiallyConsumed?: boolean
   used?: boolean
   partiallyUsed?: boolean
@@ -16,7 +17,7 @@ export interface InventoryItem {
   notes?: string
   price?: string
   brand?: string
-  archiveReason?: "consumed" | "wasted" | "other"
+  archiveReason?: "consumed" | "wasted" | "other" | null
   orderedFrom?: string
   syncedFromEmail?: boolean
   emailSource?: string
@@ -30,6 +31,7 @@ export interface ShoppingItem {
   id: string
   name: string
   quantity: number
+  unit?: string
   category?: string
   notes?: string
   completed: boolean

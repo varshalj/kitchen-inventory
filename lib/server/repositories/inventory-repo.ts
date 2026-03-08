@@ -15,10 +15,11 @@ function toDb(item: Partial<InventoryItem>) {
   if (item.expiryDate !== undefined) payload.expiry_date = item.expiryDate || null
   if (item.location !== undefined) payload.location = item.location
   if (item.quantity !== undefined) payload.quantity = item.quantity
+  if (item.unit !== undefined) payload.unit = item.unit
   if (item.archived !== undefined) payload.archived = item.archived
-  if (item.consumedOn !== undefined) payload.consumed_on = item.consumedOn
-  if (item.wastedOn !== undefined) payload.wasted_on = item.wastedOn
-  if (item.archiveReason !== undefined) payload.archive_reason = item.archiveReason
+  if (item.consumedOn !== undefined) payload.consumed_on = item.consumedOn ?? null
+  if (item.wastedOn !== undefined) payload.wasted_on = item.wastedOn ?? null
+  if (item.archiveReason !== undefined) payload.archive_reason = item.archiveReason ?? null
   if (item.notes !== undefined) payload.notes = item.notes
   if (item.price !== undefined) payload.price = item.price
   if (item.brand !== undefined) payload.brand = item.brand
@@ -45,6 +46,7 @@ function toDomain(row: any): InventoryItem {
     expiryDate: row.expiry_date ?? "",
     location: row.location,
     quantity: row.quantity,
+    unit: row.unit ?? undefined,
     archived: row.archived,
     addedOn: row.added_on,
     consumedOn: row.consumed_on,
