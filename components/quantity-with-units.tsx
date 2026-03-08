@@ -104,7 +104,7 @@ export function QuantityWithUnits({
           value={value === 0 ? "" : value}
           onChange={handleValueChange}
           min={min}
-          step={step}
+          step="any"
           className="w-16 text-center px-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           aria-label="Quantity"
         />

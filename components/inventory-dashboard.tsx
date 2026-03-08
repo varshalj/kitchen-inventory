@@ -63,8 +63,11 @@ export function InventoryDashboard() {
     type: "delete" | "consume" | "waste"
     item: InventoryItem
     shoppingItemId?: string
+    wasNewInsert?: boolean
+    previousShoppingQuantity?: number
     timer?: ReturnType<typeof setTimeout>
     cleanupTimer?: ReturnType<typeof setTimeout>
+    reviewTimer?: ReturnType<typeof setTimeout>
   }>>(new Map())
 
 useEffect(() => {
@@ -295,13 +298,24 @@ useEffect(() => {
       }
 
       const shoppingItemId: string | undefined = payload.shoppingItemId
+      const wasNewInsert: boolean = payload.wasNewInsert ?? true
+      const previousShoppingQuantity: number | undefined = payload.previousShoppingQuantity
+
+      // Delay the review prompt until after the undo window closes
+      const reviewTimer = !item.rating
+        ? setTimeout(() => setReviewItem({ item, type: "consumed" }), 5500)
+        : undefined
 
       const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
-      pendingActions.current.set(item.id, { type: "consume", item, shoppingItemId, cleanupTimer })
-
-      if (!item.rating) {
-        setReviewItem({ item, type: "consumed" })
-      }
+      pendingActions.current.set(item.id, {
+        type: "consume",
+        item,
+        shoppingItemId,
+        wasNewInsert,
+        previousShoppingQuantity,
+        cleanupTimer,
+        reviewTimer,
+      })
 
       toast({
         title: "Item consumed",
@@ -318,6 +332,7 @@ useEffect(() => {
               const pending = pendingActions.current.get(item.id)
               if (!pending) return
               clearTimeout(pending.cleanupTimer)
+              clearTimeout(pending.reviewTimer)
               pendingActions.current.delete(item.id)
               try {
                 await fetchWithAuth(`/api/inventory/${item.id}`, {
@@ -331,10 +346,19 @@ useEffect(() => {
                   }),
                 })
                 if (pending.shoppingItemId) {
-                  await fetchWithAuth(`/api/shopping/${pending.shoppingItemId}`, { method: "DELETE" })
+                  if (pending.wasNewInsert) {
+                    // Was a fresh insert — safe to delete entirely
+                    await fetchWithAuth(`/api/shopping/${pending.shoppingItemId}`, { method: "DELETE" })
+                  } else {
+                    // Was a merge — restore the previous quantity
+                    await fetchWithAuth(`/api/shopping/${pending.shoppingItemId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ quantity: pending.previousShoppingQuantity ?? 1 }),
+                    })
+                  }
                 }
                 setItems((prev) => [item, ...prev])
-                setReviewItem(null)
               } catch {
                 toastWithNudge({ title: "Undo Failed", description: "Could not restore item.", variant: "destructive" })
               }
@@ -369,12 +393,13 @@ useEffect(() => {
         throw new Error(payload.error || "Waste operation failed")
       }
 
-      const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
-      pendingActions.current.set(item.id, { type: "waste", item, cleanupTimer })
+      // Delay the review prompt until after the undo window closes
+      const reviewTimer = !item.rating
+        ? setTimeout(() => setReviewItem({ item, type: "wasted" }), 5500)
+        : undefined
 
-      if (!item.rating) {
-        setReviewItem({ item, type: "wasted" })
-      }
+      const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
+      pendingActions.current.set(item.id, { type: "waste", item, cleanupTimer, reviewTimer })
 
       toast({
         title: "Item marked as wasted",
@@ -391,6 +416,7 @@ useEffect(() => {
               const pending = pendingActions.current.get(item.id)
               if (!pending) return
               clearTimeout(pending.cleanupTimer)
+              clearTimeout(pending.reviewTimer)
               pendingActions.current.delete(item.id)
               try {
                 await fetchWithAuth(`/api/inventory/${item.id}`, {
@@ -404,7 +430,6 @@ useEffect(() => {
                   }),
                 })
                 setItems((prev) => [item, ...prev])
-                setReviewItem(null)
               } catch {
                 toastWithNudge({ title: "Undo Failed", description: "Could not restore item.", variant: "destructive" })
               }
@@ -879,13 +904,13 @@ useEffect(() => {
                         <div className="min-w-0">
                           <div className="flex items-center">
                             <h3 className="font-medium">{item.name}</h3>
-                            {item.quantity && item.quantity >= 1 && (
+                            {(item.quantity ?? 0) >= 1 ? (
                               <span className="ml-2 text-sm text-muted-foreground">
                                 {item.unit && item.unit !== "pcs"
                                   ? `${item.quantity}${item.unit}`
-                                  : item.quantity > 1 ? `×${item.quantity}` : ""}
+                                  : (item.quantity ?? 0) > 1 ? `×${item.quantity}` : null}
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <p className="text-sm text-muted-foreground">{item.location}</p>
                           {item.rating && item.rating > 0 && (

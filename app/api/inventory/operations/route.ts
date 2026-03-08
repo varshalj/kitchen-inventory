@@ -32,8 +32,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Update blocked by RLS" }, { status: 403 })
 
     let shoppingItemId: string | undefined
+    let wasNewInsert = true
+    let previousShoppingQuantity: number | undefined
 
     if (action === "consume" && addToShoppingList) {
+      // Check if item already exists in active shopping list before merging
+      const { data: existingItems } = await supabase
+        .from("shopping_items")
+        .select("id, quantity")
+        .eq("name", updated.name)
+        .eq("completed", false)
+        .eq("user_id", user.id)
+        .limit(1)
+
+      const existingShoppingItem = existingItems?.[0]
+      wasNewInsert = !existingShoppingItem
+      previousShoppingQuantity = existingShoppingItem?.quantity
+
       const createdShoppingItem = await shoppingRepo.create(supabase, {
         id: crypto.randomUUID(),
         name: updated.name,
@@ -49,7 +64,7 @@ export async function POST(request: NextRequest) {
       shoppingItemId = createdShoppingItem.id
     }
 
-    return NextResponse.json({ success: true, shoppingItemId })
+    return NextResponse.json({ success: true, shoppingItemId, wasNewInsert, previousShoppingQuantity })
   } catch (error) {
     console.error("OPERATIONS ERROR:", error)
     return NextResponse.json({ error: "Operation failed" }, { status: 500 })
