@@ -93,7 +93,7 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <QuantityWithUnits
             id="edit-quantity"
             label="Quantity"
