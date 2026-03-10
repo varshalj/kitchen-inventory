@@ -18,6 +18,7 @@ export interface InventoryItem {
   price?: string
   brand?: string
   archiveReason?: "consumed" | "wasted" | "other" | null
+  wastageReason?: "expired" | "spoiled" | "unused" | "excess" | null
   orderedFrom?: string
   syncedFromEmail?: boolean
   emailSource?: string

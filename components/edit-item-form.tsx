@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { InventoryItem } from "@/lib/types"
 import { useUserSettings } from "@/hooks/use-user-settings"
-import { QuantityInput } from "@/components/quantity-input"
+import { QuantityWithUnits } from "@/components/quantity-with-units"
 import { CurrencyInput } from "@/components/currency-input"
 import { StarRating } from "@/components/star-rating"
 import { cn } from "@/lib/utils"
@@ -32,6 +32,7 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
     rating: item.rating || 0,
     reviewTags: item.reviewTags || [],
     reviewNote: item.reviewNote || "",
+    unit: item.unit || "pcs",
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -93,11 +94,12 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <QuantityInput
+          <QuantityWithUnits
             id="edit-quantity"
             label="Quantity"
             value={formData.quantity || 1}
-            onChange={(value) => setFormData((prev) => ({ ...prev, quantity: value }))}
+            unit={formData.unit}
+            onChange={(value, unit) => setFormData((prev) => ({ ...prev, quantity: value, unit }))}
           />
 
           <CurrencyInput
@@ -117,6 +119,7 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
             type="date"
             value={formData.expiryDate.split("T")[0]}
             onChange={handleInputChange}
+            onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
             required
           />
         </div>

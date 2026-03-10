@@ -257,6 +257,7 @@ useEffect(() => {
 
     toast({
       title: "Item deleted",
+      duration: 5000,
       description: (
         <div>
           <span>{item.name} will be removed.</span>
@@ -319,6 +320,7 @@ useEffect(() => {
 
       toast({
         title: "Item consumed",
+        duration: 5000,
         description: (
           <div>
             <span>{item.name} moved to archive &amp; added to shopping list.</span>
@@ -401,11 +403,38 @@ useEffect(() => {
       const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
       pendingActions.current.set(item.id, { type: "waste", item, cleanupTimer, reviewTimer })
 
+      const wasteReasons = [
+        { key: "expired", label: "Expired" },
+        { key: "spoiled", label: "Spoiled" },
+        { key: "unused", label: "Unused" },
+        { key: "excess", label: "Too much" },
+      ] as const
+
       toast({
         title: "Item marked as wasted",
+        duration: 5000,
         description: (
           <div>
             <span>{item.name} moved to archive.</span>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <span className="text-xs text-muted-foreground mr-1">Why?</span>
+              {wasteReasons.map((r) => (
+                <button
+                  key={r.key}
+                  type="button"
+                  className="text-xs px-2 py-0.5 rounded-full border border-border bg-muted hover:bg-muted/80 transition-colors"
+                  onClick={() => {
+                    fetchWithAuth(`/api/inventory/${item.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ wastageReason: r.key }),
+                    })
+                  }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
             {progressBar}
           </div>
         ),
@@ -426,6 +455,7 @@ useEffect(() => {
                     archived: false,
                     archiveReason: null,
                     wastedOn: null,
+                    wastageReason: null,
                     quantity: item.quantity,
                   }),
                 })
@@ -462,6 +492,7 @@ useEffect(() => {
       setReviewItem(null)
       toast({
         title: "Review Saved",
+        duration: 3000,
         description: "Your rating will help personalize future recommendations.",
       })
     }
@@ -490,6 +521,7 @@ useEffect(() => {
       setEditItem(null)
       toast({
         title: "Item Updated",
+        duration: 3000,
         description: `${savedItem.name} has been updated.`,
       })
     } catch (error) {
@@ -560,7 +592,7 @@ useEffect(() => {
       setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
       exitSelectionMode()
       triggerHaptic(HAPTIC_SUCCESS)
-      toast({ title: "Items Consumed", description: `${targets.length} item${targets.length !== 1 ? "s" : ""} marked as consumed.` })
+      toast({ title: "Items Consumed", duration: 3000, description: `${targets.length} item${targets.length !== 1 ? "s" : ""} marked as consumed.` })
     } catch {
       triggerHaptic(HAPTIC_ERROR)
       toastWithNudge({ title: "Bulk Consume Failed", description: "Some items could not be updated.", variant: "destructive" })
@@ -583,7 +615,7 @@ useEffect(() => {
       setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
       exitSelectionMode()
       triggerHaptic(HAPTIC_SUCCESS)
-      toast({ title: "Items Wasted", description: `${targets.length} item${targets.length !== 1 ? "s" : ""} marked as wasted.` })
+      toast({ title: "Items Wasted", duration: 3000, description: `${targets.length} item${targets.length !== 1 ? "s" : ""} marked as wasted.` })
     } catch {
       triggerHaptic(HAPTIC_ERROR)
       toastWithNudge({ title: "Bulk Waste Failed", description: "Some items could not be updated.", variant: "destructive" })
@@ -602,7 +634,7 @@ useEffect(() => {
       setItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
       exitSelectionMode()
       triggerHaptic(HAPTIC_SUCCESS)
-      toast({ title: "Items Deleted", description: `${targets.length} item${targets.length !== 1 ? "s" : ""} removed.` })
+      toast({ title: "Items Deleted", duration: 3000, description: `${targets.length} item${targets.length !== 1 ? "s" : ""} removed.` })
     } catch {
       triggerHaptic(HAPTIC_ERROR)
       toastWithNudge({ title: "Bulk Delete Failed", description: "Some items could not be deleted.", variant: "destructive" })

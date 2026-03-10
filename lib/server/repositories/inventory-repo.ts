@@ -20,6 +20,7 @@ function toDb(item: Partial<InventoryItem>) {
   if (item.consumedOn !== undefined) payload.consumed_on = item.consumedOn ?? null
   if (item.wastedOn !== undefined) payload.wasted_on = item.wastedOn ?? null
   if (item.archiveReason !== undefined) payload.archive_reason = item.archiveReason ?? null
+  if (item.wastageReason !== undefined) payload.wastage_reason = item.wastageReason ?? null
   if (item.notes !== undefined) payload.notes = item.notes
   if (item.price !== undefined) payload.price = item.price
   if (item.brand !== undefined) payload.brand = item.brand
@@ -52,6 +53,7 @@ function toDomain(row: any): InventoryItem {
     consumedOn: row.consumed_on,
     wastedOn: row.wasted_on,
     archiveReason: row.archive_reason,
+    wastageReason: row.wastage_reason ?? null,
     notes: row.notes,
     price: row.price,
     brand: row.brand,

@@ -303,6 +303,7 @@ export function AddItemForm() {
   const [suggestedItems, setSuggestedItems] = useState<
     Array<{ name: string; category: string; expiryDate: string; location: string; quantity: number; price: string; reason: string }>
   >([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true)
 
   useEffect(() => {
     const loadSuggestions = async () => {
@@ -353,6 +354,8 @@ export function AddItemForm() {
         setSuggestedItems(suggestions)
       } catch {
         // ignore
+      } finally {
+        setSuggestionsLoading(false)
       }
     }
     loadSuggestions()
@@ -589,6 +592,7 @@ export function AddItemForm() {
                                             type="date"
                                             value={item.expiryDate}
                                             onChange={(e) => updateExtractedItem(index, "expiryDate", e.target.value)}
+                                            onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
                                             className="h-8 text-xs"
                                             disabled={item.decision === "rejected"}
                                           />
@@ -799,6 +803,7 @@ export function AddItemForm() {
                     type="date"
                     value={formData.expiryDate}
                     onChange={handleInputChange}
+                    onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
                     required
                   />
                 </div>
@@ -874,34 +879,57 @@ export function AddItemForm() {
                   Based on your inventory and usage patterns, we suggest adding these items:
                 </p>
 
-                <div className="space-y-3">
-                  {suggestedItems.map((item, index) => (
-                    <Card key={index} className="overflow-hidden">
-                      <CardHeader className="p-3 pb-0">
-                        <CardTitle className="text-base">{item.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-3 pt-2">
-                        <div className="text-sm text-muted-foreground mb-2">{item.reason}</div>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                          <div className="bg-muted px-2 py-1 rounded-md">{item.category}</div>
-                          <div className="bg-muted px-2 py-1 rounded-md">Qty: {item.quantity}</div>
-                          <div className="bg-muted px-2 py-1 rounded-md">{item.location}</div>
-                          {item.price && (
-                            <div className="bg-muted px-2 py-1 rounded-md">
-                              Last price: {settings?.currency === "USD" ? "$" : settings?.currency === "EUR" ? "\u20AC" : "\u20B9"}{item.price}
-                            </div>
-                          )}
+                {suggestionsLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="rounded-lg border p-3 space-y-2 animate-pulse">
+                        <div className="h-4 w-1/2 rounded bg-muted" />
+                        <div className="h-3 w-3/4 rounded bg-muted" />
+                        <div className="flex gap-2 mt-2">
+                          <div className="h-6 w-16 rounded bg-muted" />
+                          <div className="h-6 w-12 rounded bg-muted" />
                         </div>
-                      </CardContent>
-                      <div className="border-t p-3 flex justify-end">
-                        <Button type="button" size="sm" onClick={() => handleAddSuggestedItem(item)}>
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add to Inventory
-                        </Button>
                       </div>
-                    </Card>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : suggestedItems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <ShoppingCart className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                    <p className="text-sm font-medium text-muted-foreground">No suggestions yet</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1 max-w-[220px]">
+                      Add items and mark them as consumed to get personalised restock suggestions here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {suggestedItems.map((item, index) => (
+                      <Card key={index} className="overflow-hidden">
+                        <CardHeader className="p-3 pb-0">
+                          <CardTitle className="text-base">{item.name}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-3 pt-2">
+                          <div className="text-sm text-muted-foreground mb-2">{item.reason}</div>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <div className="bg-muted px-2 py-1 rounded-md">{item.category}</div>
+                            <div className="bg-muted px-2 py-1 rounded-md">Qty: {item.quantity}</div>
+                            <div className="bg-muted px-2 py-1 rounded-md">{item.location}</div>
+                            {item.price && (
+                              <div className="bg-muted px-2 py-1 rounded-md">
+                                Last price: {settings?.currency === "USD" ? "$" : settings?.currency === "EUR" ? "\u20AC" : "\u20B9"}{item.price}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                        <div className="border-t p-3 flex justify-end">
+                          <Button type="button" size="sm" onClick={() => handleAddSuggestedItem(item)}>
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add to Inventory
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </div>
             </TabsContent>
           </div>
