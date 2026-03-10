@@ -15,7 +15,7 @@ import {
 import { QuantityWithUnits } from "@/components/quantity-with-units"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { fetchWithAuth } from "@/lib/api-client"
-import { cn } from "@/lib/utils"
+import { cn, findFuzzyMatch } from "@/lib/utils"
 
 export interface VoiceParsedItem {
   name: string
@@ -23,6 +23,8 @@ export interface VoiceParsedItem {
   unit: string
   category?: string
   included: boolean
+  /** Name of an existing list item that closely matches this one */
+  fuzzyMatchedName?: string
 }
 
 interface VoiceCaptureProps {
@@ -52,7 +54,8 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     stop: stopListening,
   } = useSpeechRecognition({ lang: "en-IN" })
 
-  const existingSet = new Set(existingNames.map((n) => n.toLowerCase()))
+  // Keep a plain array for fuzzy lookups — we need the original casing for display
+  const activeExistingNames = existingNames
 
   const transcriptRef = useRef(transcript)
   const interimRef = useRef(interimTranscript)
@@ -100,13 +103,19 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
       }
 
       const data = await response.json()
-      const items: VoiceParsedItem[] = (data.items || []).map((item: any) => ({
-        name: item.name || "Unknown",
-        quantity: item.quantity || 1,
-        unit: item.unit || "pcs",
-        category: item.category,
-        included: true,
-      }))
+      const items: VoiceParsedItem[] = (data.items || []).map((item: any) => {
+        const name = item.name || "Unknown"
+        const fuzzyMatch = findFuzzyMatch(name, activeExistingNames)
+        return {
+          name,
+          quantity: item.quantity || 1,
+          unit: item.unit || "pcs",
+          category: item.category,
+          // Auto-uncheck if a near-duplicate already exists in the list
+          included: fuzzyMatch === null,
+          fuzzyMatchedName: fuzzyMatch ?? undefined,
+        }
+      })
 
       if (items.length === 0) {
         setParseError("Could not detect any items. Please try again.")
@@ -254,45 +263,57 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                 </p>
 
                 {parsedItems.map((item, index) => {
-                  const isDuplicate = existingSet.has(item.name.toLowerCase())
+                  const matchedName = item.fuzzyMatchedName
                   return (
                     <div
                       key={index}
                       className={cn(
-                        "flex items-start gap-3 rounded-lg border p-3 transition-all",
-                        item.included ? "bg-background" : "opacity-50 bg-muted/30"
+                        "rounded-lg border p-3 transition-all space-y-2",
+                        item.included ? "bg-background" : "opacity-60 bg-muted/30",
+                        matchedName && !item.included ? "border-amber-300" : ""
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={item.included}
-                        onChange={() => toggleItem(index)}
-                        className="h-4 w-4 rounded mt-1 shrink-0 accent-primary"
-                        aria-label={`Include ${item.name}`}
-                      />
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <div className="flex items-center gap-2">
+                      {/* Near-duplicate warning banner */}
+                      {matchedName && (
+                        <div className="flex items-center justify-between rounded-md bg-amber-50 border border-amber-200 px-2 py-1.5">
+                          <p className="text-xs text-amber-700">
+                            Similar to <span className="font-semibold">{matchedName}</span> already in list
+                          </p>
+                          <button
+                            type="button"
+                            className="text-xs text-amber-700 underline ml-2 shrink-0"
+                            onClick={() => toggleItem(index)}
+                          >
+                            {item.included ? "Undo" : "Add anyway"}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={item.included}
+                          onChange={() => toggleItem(index)}
+                          className="h-4 w-4 rounded mt-1 shrink-0 accent-primary"
+                          aria-label={`Include ${item.name}`}
+                        />
+                        <div className="flex-1 min-w-0 space-y-2">
                           <Input
                             value={item.name}
                             onChange={(e) => updateItem(index, "name", e.target.value)}
                             className="h-8 text-sm font-medium"
                             disabled={!item.included}
                           />
-                          {isDuplicate && (
-                            <span className="text-xs text-amber-600 font-medium shrink-0 whitespace-nowrap">
-                              In list
-                            </span>
-                          )}
+                          <QuantityWithUnits
+                            value={item.quantity}
+                            unit={item.unit}
+                            onChange={(val, unit) => {
+                              updateItem(index, "quantity", val)
+                              updateItem(index, "unit", unit)
+                            }}
+                            min={0.1}
+                          />
                         </div>
-                        <QuantityWithUnits
-                          value={item.quantity}
-                          unit={item.unit}
-                          onChange={(val, unit) => {
-                            updateItem(index, "quantity", val)
-                            updateItem(index, "unit", unit)
-                          }}
-                          min={0.1}
-                        />
                       </div>
                     </div>
                   )

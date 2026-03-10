@@ -33,7 +33,7 @@ import {
 } from "@/lib/client/api"
 import type { ShoppingItem, InventoryItem } from "@/lib/types"
 import { useShoppingCount } from "@/contexts/shopping-count-context"
-import { cn } from "@/lib/utils"
+import { cn, findFuzzyMatch } from "@/lib/utils"
 import { VoiceCapture, type VoiceParsedItem } from "@/components/voice-capture"
 
 type SortBy = "recent" | "name" | "quantity"
@@ -189,7 +189,13 @@ export function ShoppingList() {
 
   const handleVoiceConfirm = async (voiceItems: VoiceParsedItem[]) => {
     let addedCount = 0
+    const activeNames = items.filter((i) => !i.completed).map((i) => i.name)
+
     for (const vi of voiceItems) {
+      // Safety net: if a fuzzy duplicate slipped through the review screen, skip it
+      const existingMatch = findFuzzyMatch(vi.name, activeNames)
+      if (existingMatch) continue
+
       const payload = {
         name: vi.name,
         quantity: vi.quantity || 1,
@@ -202,6 +208,8 @@ export function ShoppingList() {
         const addedItem = await addToShoppingList(payload as unknown as ShoppingItem)
         setItems((prev) => {
           const updated = [...prev, addedItem]
+          // Add the new name so subsequent items in the same batch don't duplicate it
+          activeNames.push(vi.name)
           setIncompleteCount(updated.filter((i) => !i.completed).length)
           return updated
         })
