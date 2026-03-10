@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown } from "lucide-react"
+import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -34,6 +34,7 @@ import {
 import type { ShoppingItem, InventoryItem } from "@/lib/types"
 import { useShoppingCount } from "@/contexts/shopping-count-context"
 import { cn } from "@/lib/utils"
+import { VoiceCapture, type VoiceParsedItem } from "@/components/voice-capture"
 
 type SortBy = "recent" | "name" | "quantity"
 
@@ -184,6 +185,38 @@ export function ShoppingList() {
       title: "Item Added",
       description: `${name} added to your shopping list.`,
     })
+  }
+
+  const handleVoiceConfirm = async (voiceItems: VoiceParsedItem[]) => {
+    let addedCount = 0
+    for (const vi of voiceItems) {
+      const payload = {
+        name: vi.name,
+        quantity: vi.quantity || 1,
+        unit: vi.unit || "pcs",
+        completed: false,
+        addedOn: new Date().toISOString(),
+        addedFrom: "voice" as const,
+      }
+      try {
+        const addedItem = await addToShoppingList(payload as unknown as ShoppingItem)
+        setItems((prev) => {
+          const updated = [...prev, addedItem]
+          setIncompleteCount(updated.filter((i) => !i.completed).length)
+          return updated
+        })
+        addedCount++
+      } catch {
+        // skip individual failures
+      }
+    }
+    if (addedCount > 0) {
+      triggerHaptic(HAPTIC_SUCCESS)
+      toast({
+        title: `${addedCount} item${addedCount !== 1 ? "s" : ""} added`,
+        description: "Voice items added to your shopping list.",
+      })
+    }
   }
 
   // Feature 6 — Smart Inventory Auto-Add on completion
@@ -444,13 +477,20 @@ export function ShoppingList() {
               />
             </div>
 
-            <Button
-              className="w-full active:scale-95 transition-transform"
-              onClick={handleAddItem}
-              disabled={!newItem.name.trim()}
-            >
-              <Plus className="h-4 w-4 mr-2" /> Add to Shopping List
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                className="flex-1 active:scale-95 transition-transform"
+                onClick={handleAddItem}
+                disabled={!newItem.name.trim()}
+              >
+                <Plus className="h-4 w-4 mr-2" /> Add to Shopping List
+              </Button>
+              <VoiceCapture
+                target="shopping"
+                onConfirm={handleVoiceConfirm}
+                existingNames={items.filter((i) => !i.completed).map((i) => i.name)}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
