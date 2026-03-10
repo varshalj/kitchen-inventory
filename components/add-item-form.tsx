@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Camera, Upload, FileText, X, Check, Loader2, ShoppingCart, Plus, Minus, ScanLine, Sparkles, ImageIcon } from "lucide-react"
+import { ArrowLeft, Camera, Upload, FileText, X, Check, Loader2, ShoppingCart, Plus, ScanLine, Sparkles, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,7 +25,6 @@ import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 
 type DetectedType = "receipt" | "food" | "package" | null
-type ReviewDecision = "pending" | "confirmed" | "edited" | "rejected"
 type ProposalResponse = {
   proposals: Array<{
     name: string
@@ -60,9 +59,10 @@ export function AddItemForm() {
       category: string
       expiryDate: string
       quantity: number
+      unit: string
       confidence: number
       price?: string
-      decision: ReviewDecision
+      included: boolean
     }>
   >([])
   const [reviewSummary, setReviewSummary] = useState<{ confidence: number; threshold: number; reasoning: string } | null>(null)
@@ -137,8 +137,8 @@ export function AddItemForm() {
       }, stepDuration * 2)
       const timer3 = setTimeout(() => setAnalyzeStep(3), stepDuration * 3)
       const timer4 = setTimeout(async () => {
-        setIsAnalyzing(false)
-
+        // Keep isAnalyzing=true until the real API response lands so there
+        // is never a blank gap between the fake checklist and the item list.
         try {
           const response = await fetchWithAuth("/api/ai/propose-items", {
             method: "POST",
@@ -161,8 +161,9 @@ export function AddItemForm() {
           setExtractedItems(
             payload.proposals.map((proposal) => ({
               ...proposal,
+              unit: (proposal as any).unit || "pcs",
               confidence: payload.confidence,
-              decision: "pending",
+              included: true,
             }))
           )
 
@@ -175,6 +176,8 @@ export function AddItemForm() {
           setScanError("Could not generate AI proposals. Please try again.")
           setExtractedItems([])
           setReviewSummary(null)
+        } finally {
+          setIsAnalyzing(false)
         }
       }, stepDuration * 4)
 
@@ -200,7 +203,7 @@ export function AddItemForm() {
         } as unknown as InventoryItem)
         toast({ title: "Item Saved", description: `${formData.name} has been added to your inventory.` })
       } else if (extractedItems.length > 0) {
-        const approved = extractedItems.filter((entry) => entry.decision === "confirmed" || entry.decision === "edited")
+        const approved = extractedItems.filter((entry) => entry.included)
         for (const item of approved) {
           await addInventoryItem({
             name: item.name,
@@ -208,6 +211,7 @@ export function AddItemForm() {
             expiryDate: new Date(item.expiryDate).toISOString(),
             location: formData.location || "Refrigerator",
             quantity: item.quantity,
+            unit: item.unit || "pcs",
             addedOn: new Date().toISOString(),
             notes: formData.notes,
             price: item.price || formData.price,
@@ -228,20 +232,16 @@ export function AddItemForm() {
     }
   }
 
-  const setItemDecision = (index: number, decision: ReviewDecision) => {
-    setExtractedItems((items) => items.map((item, i) => (i === index ? { ...item, decision } : item)))
+  const toggleItemIncluded = (index: number) => {
+    setExtractedItems((items) =>
+      items.map((item, i) => (i === index ? { ...item, included: !item.included } : item))
+    )
   }
 
   const updateExtractedItem = (index: number, field: string, value: string | number) => {
     setExtractedItems((items) =>
       items.map((item, i) =>
-        i === index
-          ? {
-              ...item,
-              [field]: value,
-              decision: item.decision === "rejected" ? "edited" : item.decision === "pending" ? "edited" : item.decision,
-            }
-          : item
+        i === index ? { ...item, [field]: value, included: true } : item
       )
     )
   }
@@ -380,9 +380,10 @@ export function AddItemForm() {
     }
   }
 
-  const approvedCount = extractedItems.filter((i) => i.decision === "confirmed" || i.decision === "edited").length
-  const pendingCount = extractedItems.filter((i) => i.decision === "pending").length
-  const bulkApplyEnabled = !!reviewSummary && reviewSummary.confidence >= reviewSummary.threshold
+  const includedCount = extractedItems.filter((i) => i.included).length
+  const approvedCount = includedCount
+  const pendingCount = 0
+  const bulkApplyEnabled = true
 
   return (
     <MainLayout>
@@ -531,123 +532,100 @@ export function AddItemForm() {
                         {scanError && <p className="text-sm text-destructive">{scanError}</p>}
                         {extractedItems.length > 0 && (
                           <div className="space-y-4">
-                            <div className="space-y-2">
+                            <div className="flex items-center justify-between">
                               <h3 className="font-medium">
-                                {approvedCount} approved • {pendingCount} pending review
+                                {includedCount} of {extractedItems.length} item{extractedItems.length !== 1 ? "s" : ""} selected
                               </h3>
                               {reviewSummary && (
-                                <div className="text-xs text-muted-foreground space-y-1">
-                                  <p>
-                                    Model confidence: {Math.round(reviewSummary.confidence * 100)}% (threshold {Math.round(reviewSummary.threshold * 100)}%)
-                                  </p>
-                                  <p>{reviewSummary.reasoning}</p>
-                                  {!bulkApplyEnabled && <p className="text-amber-600">Bulk apply is disabled until confidence threshold is met.</p>}
-                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {Math.round(reviewSummary.confidence * 100)}% confidence
+                                </span>
                               )}
                             </div>
 
                             <div className="space-y-3">
                               {extractedItems.map((item, index) => (
-                                <Card key={index} className={`border transition-colors ${item.decision === "rejected" ? "opacity-60" : "border-primary bg-primary/[0.02]"}`}>
-                                  <CardContent className="p-3">
-                                    <div className="flex items-start gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <Input
-                                            value={item.name}
-                                            onChange={(e) => updateExtractedItem(index, "name", e.target.value)}
-                                            className="h-8 text-sm font-medium"
-                                            disabled={item.decision === "rejected"}
-                                          />
-                                          <Badge variant="outline" className="text-[10px] shrink-0">
-                                            {Math.round(item.confidence * 100)}%
-                                          </Badge>
-                                        </div>
-
-                                        <div className="grid grid-cols-3 gap-2">
-                                          <Select
-                                            value={item.category}
-                                            onValueChange={(value) => updateExtractedItem(index, "category", value)}
-                                            disabled={item.decision === "rejected"}
-                                          >
-                                            <SelectTrigger className="h-8 text-xs">
-                                              <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="Fruits">Fruits</SelectItem>
-                                              <SelectItem value="Vegetables">Vegetables</SelectItem>
-                                              <SelectItem value="Dairy">Dairy</SelectItem>
-                                              <SelectItem value="Meat">Meat</SelectItem>
-                                              <SelectItem value="Grains">Grains</SelectItem>
-                                              <SelectItem value="Canned">Canned</SelectItem>
-                                              <SelectItem value="Frozen">Frozen</SelectItem>
-                                              <SelectItem value="Snacks">Snacks</SelectItem>
-                                              <SelectItem value="Beverages">Beverages</SelectItem>
-                                              <SelectItem value="Condiments">Condiments</SelectItem>
-                                              <SelectItem value="Other">Other</SelectItem>
-                                            </SelectContent>
-                                          </Select>
-
-                                          <Input
-                                            type="date"
-                                            value={item.expiryDate}
-                                            onChange={(e) => updateExtractedItem(index, "expiryDate", e.target.value)}
-                                            onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                                            className="h-8 text-xs"
-                                            disabled={item.decision === "rejected"}
-                                          />
-
-                                          <div className="flex items-center border rounded-md">
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 p-0 shrink-0"
-                                              onClick={() =>
-                                                updateExtractedItem(index, "quantity", Math.max(1, item.quantity - 1))
-                                              }
-                                              disabled={item.decision === "rejected"}
-                                            >
-                                              <Minus className="h-3 w-3" />
-                                            </Button>
-                                            <span className="text-xs text-center flex-1">{item.quantity}</span>
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-8 w-8 p-0 shrink-0"
-                                              onClick={() => updateExtractedItem(index, "quantity", item.quantity + 1)}
-                                              disabled={item.decision === "rejected"}
-                                            >
-                                              <Plus className="h-3 w-3" />
-                                            </Button>
-                                          </div>
-                                        </div>
-
-                                        <div className="mt-2">
-                                          <CurrencyInput
-                                            compact
-                                            value={item.price || ""}
-                                            onValueChange={(val) => updateExtractedItem(index, "price", val)}
-                                          />
-                                        </div>
-
-                                        <div className="mt-2 flex gap-2">
-                                          <Button type="button" size="sm" variant="outline" onClick={() => setItemDecision(index, "confirmed")}>
-                                            Confirm
-                                          </Button>
-                                          <Button type="button" size="sm" variant="outline" onClick={() => setItemDecision(index, "edited")}>
-                                            Mark Edited
-                                          </Button>
-                                          <Button type="button" size="sm" variant="ghost" onClick={() => setItemDecision(index, "rejected")}>
-                                            Reject
-                                          </Button>
-                                          <Badge variant="secondary" className="ml-auto capitalize">
-                                            {item.decision}
-                                          </Badge>
-                                        </div>
-                                      </div>
+                                <Card
+                                  key={index}
+                                  className={`border transition-all ${
+                                    item.included
+                                      ? "border-primary bg-primary/[0.02]"
+                                      : "opacity-50 border-muted"
+                                  }`}
+                                >
+                                  <CardContent className="p-3 space-y-3">
+                                    {/* Row 1: checkbox + name + confidence */}
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={item.included}
+                                        onChange={() => toggleItemIncluded(index)}
+                                        className="h-4 w-4 rounded shrink-0 accent-primary"
+                                        aria-label={`Include ${item.name}`}
+                                      />
+                                      <Input
+                                        value={item.name}
+                                        onChange={(e) => updateExtractedItem(index, "name", e.target.value)}
+                                        className="h-8 text-sm font-medium flex-1"
+                                        disabled={!item.included}
+                                      />
+                                      <Badge variant="outline" className="text-[10px] shrink-0">
+                                        {Math.round(item.confidence * 100)}%
+                                      </Badge>
                                     </div>
+
+                                    {/* Row 2: category + expiry date */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <Select
+                                        value={item.category}
+                                        onValueChange={(value) => updateExtractedItem(index, "category", value)}
+                                        disabled={!item.included}
+                                      >
+                                        <SelectTrigger className="h-9 text-sm">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Fruits">Fruits</SelectItem>
+                                          <SelectItem value="Vegetables">Vegetables</SelectItem>
+                                          <SelectItem value="Dairy">Dairy</SelectItem>
+                                          <SelectItem value="Meat">Meat</SelectItem>
+                                          <SelectItem value="Grains">Grains</SelectItem>
+                                          <SelectItem value="Canned">Canned</SelectItem>
+                                          <SelectItem value="Frozen">Frozen</SelectItem>
+                                          <SelectItem value="Snacks">Snacks</SelectItem>
+                                          <SelectItem value="Beverages">Beverages</SelectItem>
+                                          <SelectItem value="Condiments">Condiments</SelectItem>
+                                          <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+
+                                      <Input
+                                        type="date"
+                                        value={item.expiryDate}
+                                        onChange={(e) => updateExtractedItem(index, "expiryDate", e.target.value)}
+                                        onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
+                                        className="h-9 text-sm"
+                                        disabled={!item.included}
+                                      />
+                                    </div>
+
+                                    {/* Row 3: quantity + unit */}
+                                    <QuantityWithUnits
+                                      value={item.quantity}
+                                      unit={item.unit}
+                                      onChange={(value, unit) => {
+                                        updateExtractedItem(index, "quantity", value)
+                                        updateExtractedItem(index, "unit", unit)
+                                      }}
+                                      min={0.1}
+                                    />
+
+                                    {/* Row 4: price */}
+                                    <CurrencyInput
+                                      compact
+                                      value={item.price || ""}
+                                      onValueChange={(val) => updateExtractedItem(index, "price", val)}
+                                    />
                                   </CardContent>
                                 </Card>
                               ))}
@@ -940,14 +918,14 @@ export function AddItemForm() {
               className="w-full"
               disabled={
                 (activeTab === "scan" &&
-                  (isAnalyzing || !imagePreview || approvedCount === 0 || pendingCount > 0 || !bulkApplyEnabled)) ||
+                  (isAnalyzing || !imagePreview || includedCount === 0)) ||
                 (activeTab === "manual" &&
                   (!formData.name || !formData.category || !formData.expiryDate || !formData.location)) ||
                 activeTab === "suggested"
               }
             >
               {activeTab === "scan"
-                ? `Save${approvedCount > 0 ? ` (${approvedCount} item${approvedCount > 1 ? "s" : ""})` : ""}`
+                ? `Save${includedCount > 0 ? ` (${includedCount} item${includedCount > 1 ? "s" : ""})` : ""}`
                 : "Save Item"}
             </Button>
           </div>

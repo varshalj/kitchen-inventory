@@ -79,7 +79,9 @@ export function QuantityWithUnits({
   }
 
   const handleUnitChange = (newUnit: string) => {
-    onChange(value, newUnit)
+    // Clear quantity when the unit changes so the user can type a fresh value
+    // without having to delete the previous one first.
+    onChange(0, newUnit)
   }
 
   return (

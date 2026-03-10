@@ -945,9 +945,9 @@ useEffect(() => {
                             ) : null}
                           </div>
                           <p className="text-sm text-muted-foreground">{item.location}</p>
-                          {item.rating && item.rating > 0 && (
-                            <StarRating value={item.rating} size="sm" readOnly />
-                          )}
+                          {(item.rating ?? 0) > 0 ? (
+                            <StarRating value={item.rating!} size="sm" readOnly />
+                          ) : null}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
