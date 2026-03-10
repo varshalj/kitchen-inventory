@@ -17,6 +17,8 @@ import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { fetchWithAuth } from "@/lib/api-client"
 import { cn, findFuzzyMatch } from "@/lib/utils"
 
+const MAX_DURATION_MS = 30000
+
 export interface VoiceParsedItem {
   name: string
   quantity: number
@@ -43,6 +45,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
   const [parsedItems, setParsedItems] = useState<VoiceParsedItem[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
 
   const {
     supported,
@@ -52,39 +55,57 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     error: speechError,
     start: startListening,
     stop: stopListening,
-  } = useSpeechRecognition({ lang: "en-IN" })
+  } = useSpeechRecognition({ lang: "en-IN", maxDuration: MAX_DURATION_MS })
 
-  // Keep a plain array for fuzzy lookups — we need the original casing for display
-  const activeExistingNames = existingNames
-
+  // Stable refs so callbacks always read the latest values
   const transcriptRef = useRef(transcript)
   const interimRef = useRef(interimTranscript)
+  const existingNamesRef = useRef(existingNames)
+  const isParsingRef = useRef(false) // guard against double-calls
   useEffect(() => { transcriptRef.current = transcript }, [transcript])
   useEffect(() => { interimRef.current = interimTranscript }, [interimTranscript])
+  useEffect(() => { existingNamesRef.current = existingNames }, [existingNames])
+
+  // Elapsed-time counter for the ring animation
+  useEffect(() => {
+    if (phase !== "listening") {
+      setElapsed(0)
+      return
+    }
+    const interval = setInterval(() => setElapsed((e) => e + 100), 100)
+    return () => clearInterval(interval)
+  }, [phase])
 
   const handleOpen = () => {
     setOpen(true)
     setPhase("idle")
     setParsedItems([])
     setParseError(null)
+    isParsingRef.current = false
   }
 
   const handleStartListening = () => {
     setPhase("listening")
     setParseError(null)
+    isParsingRef.current = false
     startListening()
   }
 
   const handleStopAndParse = useCallback(async () => {
+    // Prevent double-invocation (manual tap + auto-stop firing simultaneously)
+    if (isParsingRef.current) return
+    isParsingRef.current = true
+
     stopListening()
 
-    // Wait for the final transcript to settle after recognition ends
+    // Wait for recognition's onend to fire and set the final transcript in state/refs
     await new Promise((r) => setTimeout(r, 400))
 
     const finalTranscript = transcriptRef.current || interimRef.current
     if (!finalTranscript.trim()) {
-      setParseError("No speech detected. Tap the mic and try again.")
+      setParseError("Didn't catch anything. Tap the mic and try again.")
       setPhase("idle")
+      isParsingRef.current = false
       return
     }
 
@@ -105,13 +126,13 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
       const data = await response.json()
       const items: VoiceParsedItem[] = (data.items || []).map((item: any) => {
         const name = item.name || "Unknown"
-        const fuzzyMatch = findFuzzyMatch(name, activeExistingNames)
+        // Use the latest existingNames from the ref to avoid stale closure
+        const fuzzyMatch = findFuzzyMatch(name, existingNamesRef.current)
         return {
           name,
           quantity: item.quantity || 1,
           unit: item.unit || "pcs",
           category: item.category,
-          // Auto-uncheck if a near-duplicate already exists in the list
           included: fuzzyMatch === null,
           fuzzyMatchedName: fuzzyMatch ?? undefined,
         }
@@ -120,16 +141,25 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
       if (items.length === 0) {
         setParseError("Could not detect any items. Please try again.")
         setPhase("idle")
+        isParsingRef.current = false
         return
       }
 
       setParsedItems(items)
       setPhase("review")
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Failed to parse voice input")
+      setParseError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
       setPhase("idle")
+      isParsingRef.current = false
     }
   }, [stopListening, target])
+
+  // Auto-trigger parse when recognition ends on its own (silence / max duration)
+  useEffect(() => {
+    if (speechState === "idle" && phase === "listening") {
+      void handleStopAndParse()
+    }
+  }, [speechState, phase, handleStopAndParse])
 
   const toggleItem = (index: number) => {
     setParsedItems((prev) =>
@@ -158,6 +188,15 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
       setSaving(false)
     }
   }
+
+  // SVG ring progress — drains over MAX_DURATION_MS
+  const radius = 44
+  const circumference = 2 * Math.PI * radius
+  const ringProgress = Math.min(elapsed / MAX_DURATION_MS, 1)
+  const strokeDashoffset = circumference * ringProgress
+
+  const elapsedSec = Math.floor(elapsed / 1000)
+  const elapsedLabel = `0:${String(elapsedSec).padStart(2, "0")}`
 
   if (!supported) {
     return (
@@ -192,7 +231,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
           <SheetHeader>
             <SheetTitle>Voice Add</SheetTitle>
             <SheetDescription>
-              Speak your items naturally, e.g. "milk, eggs and two kilos potatoes"
+              Speak your items naturally — e.g. &ldquo;milk, eggs and two kilos of potatoes&rdquo;
             </SheetDescription>
           </SheetHeader>
 
@@ -200,36 +239,73 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
             {/* Listening / idle state */}
             {(phase === "idle" || phase === "listening") && (
               <div className="flex flex-col items-center py-6 gap-4">
-                <button
-                  type="button"
-                  onClick={phase === "listening" ? handleStopAndParse : handleStartListening}
-                  className={cn(
-                    "h-20 w-20 rounded-full flex items-center justify-center transition-all",
-                    phase === "listening"
-                      ? "bg-red-500 text-white animate-pulse shadow-lg shadow-red-500/30"
-                      : "bg-muted hover:bg-muted/80 text-foreground"
+
+                {/* Mic button with draining ring */}
+                <div className="relative h-24 w-24 flex items-center justify-center">
+                  {phase === "listening" && (
+                    <svg
+                      className="absolute inset-0 w-full h-full -rotate-90"
+                      viewBox="0 0 100 100"
+                    >
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r={radius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={strokeDashoffset}
+                        className="text-red-300 transition-none"
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   )}
-                  aria-label={phase === "listening" ? "Stop recording" : "Start recording"}
-                >
+                  <button
+                    type="button"
+                    onClick={phase === "listening" ? handleStopAndParse : handleStartListening}
+                    className={cn(
+                      "h-20 w-20 rounded-full flex items-center justify-center transition-all z-10",
+                      phase === "listening"
+                        ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                        : "bg-muted hover:bg-muted/80 text-foreground"
+                    )}
+                    aria-label={phase === "listening" ? "Stop recording" : "Start recording"}
+                  >
+                    <Mic className="h-8 w-8" />
+                  </button>
+                </div>
+
+                {/* Status copy */}
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-medium">
+                    {phase === "listening" ? "Go ahead, I'm listening…" : "Tap the mic and say your items"}
+                  </p>
                   {phase === "listening" ? (
-                    <Mic className="h-8 w-8" />
+                    <p className="text-xs text-muted-foreground">
+                      Pause when done &nbsp;·&nbsp; {elapsedLabel}
+                    </p>
                   ) : (
-                    <Mic className="h-8 w-8" />
+                    <p className="text-xs text-muted-foreground">
+                      Hindi, English or mixed — all work
+                    </p>
                   )}
-                </button>
+                </div>
 
-                <p className="text-sm text-muted-foreground text-center">
-                  {phase === "listening"
-                    ? "Listening... Tap to stop"
-                    : "Tap the mic and speak your items"}
-                </p>
-
-                {/* Live transcript preview */}
-                {phase === "listening" && (transcript || interimTranscript) && (
-                  <div className="w-full rounded-lg bg-muted/50 p-3 text-sm text-center min-h-[3rem]">
-                    {transcript && <span>{transcript} </span>}
-                    {interimTranscript && (
-                      <span className="text-muted-foreground italic">{interimTranscript}</span>
+                {/* Live transcript preview — always visible during listening */}
+                {phase === "listening" && (
+                  <div className="w-full rounded-lg bg-muted/50 border border-border p-3 text-sm text-center min-h-[3rem] flex items-center justify-center">
+                    {transcript || interimTranscript ? (
+                      <>
+                        {transcript && <span>{transcript} </span>}
+                        {interimTranscript && (
+                          <span className="text-muted-foreground italic">{interimTranscript}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground/50 italic text-xs">
+                        Your words will appear here…
+                      </span>
                     )}
                   </div>
                 )}
@@ -246,10 +322,10 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
             {phase === "parsing" && (
               <div className="flex flex-col items-center py-10 gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Parsing your items...</p>
-                {transcript && (
+                <p className="text-sm text-muted-foreground">Working out your items…</p>
+                {transcriptRef.current && (
                   <p className="text-xs text-muted-foreground/70 text-center max-w-[280px]">
-                    &ldquo;{transcript}&rdquo;
+                    &ldquo;{transcriptRef.current}&rdquo;
                   </p>
                 )}
               </div>

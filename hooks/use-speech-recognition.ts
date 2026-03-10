@@ -85,7 +85,8 @@ export function useSpeechRecognition(
     let finalParts: string[] = []
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Reset silence timer on every result
+      // Start (or reset) the silence timer only after first speech is detected.
+      // This gives the user unlimited time to begin speaking.
       if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current)
       silenceTimerRef.current = setTimeout(() => {
         recognition.stop()
@@ -132,15 +133,10 @@ export function useSpeechRecognition(
       if (!hadErrorRef.current) setState("idle")
     }
 
-    // Hard cap timer
+    // Hard cap timer — only this fires at start. Silence timer starts on first result.
     maxTimerRef.current = setTimeout(() => {
       recognition.stop()
     }, maxDuration)
-
-    // Start silence timer
-    silenceTimerRef.current = setTimeout(() => {
-      recognition.stop()
-    }, silenceTimeout)
 
     recognition.start()
   }, [supported, lang, silenceTimeout, maxDuration, clearTimers])
