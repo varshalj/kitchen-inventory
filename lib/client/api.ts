@@ -76,3 +76,28 @@ export async function updateShoppingItem(item: ShoppingItem): Promise<ShoppingIt
 export async function deleteShoppingItem(id: string): Promise<void> {
   await parseResponse(await fetchWithAuth(`/api/shopping/${id}`, { method: "DELETE" }))
 }
+
+// Recipe imports
+export async function startRecipeImport(url: string): Promise<{ importId: string; status: string; duplicate?: boolean; message?: string }> {
+  return parseResponse(
+    await fetchWithAuth("/api/recipes/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    }),
+  )
+}
+
+export async function pollRecipeImport(importId: string): Promise<any> {
+  return parseResponse(await fetchWithAuth(`/api/recipes/import/${importId}`, { cache: "no-store" }))
+}
+
+export async function saveRecipe(recipe: any): Promise<any> {
+  return parseResponse(
+    await fetchWithAuth("/api/recipes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(recipe),
+    }),
+  )
+}

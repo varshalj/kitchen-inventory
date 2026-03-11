@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
-import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock } from "lucide-react"
+import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -39,7 +39,9 @@ import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { ItemDetailSheet } from "@/components/item-detail-sheet"
 import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
-import type { InventoryItem } from "@/lib/types"
+import { RecipeImportSheet } from "@/components/recipe-import-sheet"
+import { RecipeReviewScreen } from "@/components/recipe-review-screen"
+import type { InventoryItem, ParsedRecipe, PantryMatch } from "@/lib/types"
 
 export function InventoryDashboard() {
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -56,6 +58,15 @@ export function InventoryDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showRecipeImport, setShowRecipeImport] = useState(false)
+  const [recipeReviewData, setRecipeReviewData] = useState<{
+    importId: string
+    recipe: ParsedRecipe
+    pantryMatches: PantryMatch[]
+    compatibilityScore: number
+    sourceUrl: string
+    sourcePlatform: string
+  } | null>(null)
   const { toast } = useToast()
   const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
@@ -647,9 +658,9 @@ useEffect(() => {
         <h1 className="text-2xl font-bold">Kitchen Inventory</h1>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-6 flex gap-2">
         <Button
-          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50"
+          className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 disabled:opacity-50"
           onClick={() => setShowMealPlanModal(true)}
           disabled={isLoading || items.length === 0}
         >
@@ -657,7 +668,15 @@ useEffect(() => {
             <ShoppingCart className="h-5 w-5" />
             <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-yellow-300" />
           </div>
-          <span>{items.length === 0 && !isLoading ? "Add items to create a meal plan" : "Create Meal Plan"}</span>
+          <span>{items.length === 0 && !isLoading ? "Add items first" : "Meal Plan"}</span>
+        </Button>
+        <Button
+          variant="outline"
+          className="flex items-center gap-2"
+          onClick={() => setShowRecipeImport(true)}
+        >
+          <ChefHat className="h-4 w-4" />
+          <span>Import Recipe</span>
         </Button>
       </div>
 
@@ -1086,6 +1105,32 @@ useEffect(() => {
           <MealPlanGenerator items={items} onClose={() => setShowMealPlanModal(false)} />
         </DialogContent>
       </Dialog>
+
+      {/* Recipe Import Sheet */}
+      <RecipeImportSheet
+        open={showRecipeImport}
+        onOpenChange={setShowRecipeImport}
+        onRecipeReady={(data) => {
+          setShowRecipeImport(false)
+          setRecipeReviewData(data)
+        }}
+      />
+
+      {/* Recipe Review Screen (full-screen overlay) */}
+      {recipeReviewData && (
+        <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
+          <RecipeReviewScreen
+            importId={recipeReviewData.importId}
+            recipe={recipeReviewData.recipe}
+            pantryMatches={recipeReviewData.pantryMatches}
+            compatibilityScore={recipeReviewData.compatibilityScore}
+            sourceUrl={recipeReviewData.sourceUrl}
+            sourcePlatform={recipeReviewData.sourcePlatform}
+            onBack={() => setRecipeReviewData(null)}
+            onSaved={() => setRecipeReviewData(null)}
+          />
+        </div>
+      )}
     </MainLayout>
   )
 }

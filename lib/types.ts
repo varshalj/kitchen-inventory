@@ -41,3 +41,73 @@ export interface ShoppingItem {
   brand?: string
   orderedFrom?: string
 }
+
+export type RecipeImportStatus = "pending" | "extracting" | "parsing" | "ready" | "saved" | "failed"
+
+export interface RecipeImport {
+  id: string
+  url: string
+  canonicalUrl?: string
+  platform?: string
+  status: RecipeImportStatus
+  errorMessage?: string
+  rawMetadata?: Record<string, unknown>
+  parsedRecipe?: ParsedRecipe
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ParsedRecipe {
+  title: string
+  servings?: number
+  prepTimeMinutes?: number
+  cookTimeMinutes?: number
+  ingredients: ParsedIngredient[]
+  steps: string[]
+  imageUrl?: string
+}
+
+export interface ParsedIngredient {
+  name: string
+  canonicalName?: string
+  quantity?: number
+  unit?: string
+  optional?: boolean
+}
+
+export type PantryMatchStatus = "available" | "expiring" | "expired" | "missing"
+
+export interface PantryMatch {
+  ingredientName: string
+  status: PantryMatchStatus
+  pantryItemName?: string
+  expiryDate?: string
+  daysUntilExpiry?: number
+}
+
+export interface Recipe {
+  id: string
+  importId?: string
+  title: string
+  sourceUrl?: string
+  sourcePlatform?: string
+  servings?: number
+  prepTimeMinutes?: number
+  cookTimeMinutes?: number
+  instructions?: string[]
+  imageUrl?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RecipeIngredient {
+  id: string
+  recipeId: string
+  name: string
+  canonicalName?: string
+  quantity?: number
+  unit?: string
+  optional?: boolean
+  sortOrder?: number
+}
