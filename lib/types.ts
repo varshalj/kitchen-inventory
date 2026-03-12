@@ -72,6 +72,8 @@ export interface ParsedIngredient {
   canonicalName?: string
   quantity?: number
   unit?: string
+  preparation?: string
+  ingredientGroup?: string
   optional?: boolean
 }
 
@@ -110,6 +112,8 @@ export interface RecipeIngredient {
   canonicalName?: string
   quantity?: number
   unit?: string
+  preparation?: string
+  ingredientGroup?: string
   optional?: boolean
   sortOrder?: number
 }

@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react"
 import {
-  ChefHat,
   Clock,
   Users,
   Check,
@@ -10,7 +9,6 @@ import {
   X,
   ShoppingCart,
   Save,
-  Pencil,
   ArrowLeft,
   Flame,
 } from "lucide-react"
@@ -128,6 +126,8 @@ export function RecipeReviewScreen({
           canonicalName: ing.canonicalName,
           quantity: ing.quantity,
           unit: ing.unit,
+          preparation: ing.preparation,
+          ingredientGroup: ing.ingredientGroup,
           optional: ing.optional,
           sortOrder: i,
         })),
@@ -304,33 +304,47 @@ export function RecipeReviewScreen({
             {ingredients.map((ing, i) => {
               const config = STATUS_CONFIG[ing.pantryStatus]
               const Icon = config.icon
+              const prevGroup = i > 0 ? ingredients[i - 1].ingredientGroup : undefined
+              const showGroupHeader = ing.ingredientGroup && ing.ingredientGroup !== prevGroup
               return (
-                <Card key={i} className="overflow-hidden">
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <Input
-                        value={ing.name}
-                        onChange={(e) => updateIngredient(i, { name: e.target.value })}
-                        className="text-sm flex-1 h-8"
+                <div key={i}>
+                  {showGroupHeader && (
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2 pb-1">
+                      {ing.ingredientGroup}
+                    </p>
+                  )}
+                  <Card className="overflow-hidden">
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 space-y-0.5">
+                          <Input
+                            value={ing.name}
+                            onChange={(e) => updateIngredient(i, { name: e.target.value })}
+                            className="text-sm h-8"
+                          />
+                          {ing.preparation && (
+                            <p className="text-xs text-muted-foreground pl-1">{ing.preparation}</p>
+                          )}
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] shrink-0 ${config.color}`}
+                        >
+                          <Icon className="h-3 w-3 mr-1" />
+                          {config.label}
+                          {ing.pantryStatus === "expiring" && ing.daysUntilExpiry != null && (
+                            <span className="ml-0.5">({ing.daysUntilExpiry}d)</span>
+                          )}
+                        </Badge>
+                      </div>
+                      <QuantityWithUnits
+                        value={ing.quantity ?? 0}
+                        unit={ing.unit || "pcs"}
+                        onChange={(val, u) => updateIngredient(i, { quantity: val, unit: u })}
                       />
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] shrink-0 ${config.color}`}
-                      >
-                        <Icon className="h-3 w-3 mr-1" />
-                        {config.label}
-                        {ing.pantryStatus === "expiring" && ing.daysUntilExpiry != null && (
-                          <span className="ml-0.5">({ing.daysUntilExpiry}d)</span>
-                        )}
-                      </Badge>
-                    </div>
-                    <QuantityWithUnits
-                      value={ing.quantity ?? 0}
-                      unit={ing.unit || "pcs"}
-                      onChange={(val, u) => updateIngredient(i, { quantity: val, unit: u })}
-                    />
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </div>
               )
             })}
           </div>

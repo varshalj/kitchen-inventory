@@ -72,11 +72,14 @@ function IngredientRow({ ingredient }: { ingredient: IngredientWithMatch }) {
       </div>
       <div className="flex-1 min-w-0">
         <span className="text-sm font-medium leading-snug">
-          {quantityStr ? `${quantityStr} ` : ""}{ingredient.name}
+          {quantityStr ? `${quantityStr} ` : ""}{ingredient.canonicalName || ingredient.name}
           {ingredient.optional && (
             <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
           )}
         </span>
+        {ingredient.preparation && (
+          <p className="text-xs text-muted-foreground">{ingredient.preparation}</p>
+        )}
         {ingredient.pantryStatus === "expiring" && ingredient.daysUntilExpiry != null && (
           <p className="text-xs text-amber-600">
             Expires in {ingredient.daysUntilExpiry} day{ingredient.daysUntilExpiry !== 1 ? "s" : ""}
@@ -267,9 +270,20 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
           {ingredients.length === 0 ? (
             <p className="py-4 text-sm text-muted-foreground text-center">No ingredients recorded</p>
           ) : (
-            ingredients.map((ing) => (
-              <IngredientRow key={ing.id} ingredient={ing} />
-            ))
+            ingredients.map((ing, idx) => {
+              const prevGroup = idx > 0 ? ingredients[idx - 1].ingredientGroup : undefined
+              const showGroupHeader = ing.ingredientGroup && ing.ingredientGroup !== prevGroup
+              return (
+                <div key={ing.id}>
+                  {showGroupHeader && (
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-3 pb-1 border-b">
+                      {ing.ingredientGroup}
+                    </p>
+                  )}
+                  <IngredientRow ingredient={ing} />
+                </div>
+              )
+            })
           )}
         </div>
       </div>

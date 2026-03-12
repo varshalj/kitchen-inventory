@@ -195,7 +195,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady }: RecipeI
                 Import Recipe
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Supports most recipe blogs. YouTube support coming soon.
+                Supports recipe blogs and YouTube cooking videos
               </p>
             </>
           )}
