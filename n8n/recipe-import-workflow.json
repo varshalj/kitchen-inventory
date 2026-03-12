@@ -1,5 +1,5 @@
 {
-  "name": "Recipe Import - Blog Extraction",
+  "name": "Recipe Import - Blog & YouTube",
   "nodes": [
     {
       "parameters": {
@@ -17,13 +17,151 @@
     },
     {
       "parameters": {
-        "jsCode": "// Validate URL and extract metadata\nconst input = $input.first().json;\nconst url = input.url || '';\nconst importId = input.importId || '';\nconst callbackUrl = input.callbackUrl || '';\nconst callbackSecret = input.callbackSecret || '';\nconst platform = input.platform || 'blog';\n\nif (!url || !importId || !callbackUrl) {\n  throw new Error('Missing required fields: url, importId, callbackUrl');\n}\n\ntry {\n  new URL(url);\n} catch (e) {\n  throw new Error('Invalid URL: ' + url);\n}\n\nreturn {\n  json: {\n    url,\n    importId,\n    callbackUrl,\n    callbackSecret,\n    platform,\n    domain: new URL(url).hostname.replace('www.', '')\n  }\n};"
+        "jsCode": "// Validate URL and extract metadata\n// Handle both flat payload and n8n-wrapped payload (body key)\nconst rawInput = $input.first().json;\nconst payload = rawInput.body || rawInput;\n\nconst url = payload.url || '';\nconst importId = payload.importId || '';\nconst callbackUrl = payload.callbackUrl || '';\nconst callbackSecret = payload.callbackSecret || '';\nlet platform = payload.platform || 'blog';\n\nif (!url || !importId || !callbackUrl) {\n  throw new Error('Missing required fields: url, importId, callbackUrl');\n}\n\n// Validate URL using regex (new URL() is not available in n8n Code sandbox)\nif (!/^https?:\\/\\//i.test(url)) {\n  throw new Error('Invalid URL: must start with http:// or https://');\n}\n\n// Extract domain without new URL()\nconst domainMatch = url.match(/^https?:\\/\\/(?:www\\.)?([^/\\s]+)/i);\nconst domain = domainMatch ? domainMatch[1] : '';\n\n// Override platform detection from URL patterns\nif (url.includes('youtube.com/watch') || url.includes('youtu.be/')) {\n  platform = 'youtube';\n}\n\n// Extract YouTube video ID if applicable\nlet videoId = null;\nif (platform === 'youtube') {\n  const ytMatch = url.match(/[?&]v=([^&#]+)/) || url.match(/youtu\\.be\\/([^?&#]+)/);\n  videoId = ytMatch ? ytMatch[1] : null;\n  if (!videoId) {\n    throw new Error('Could not extract YouTube video ID from URL: ' + url);\n  }\n}\n\nreturn {\n  json: {\n    url,\n    importId,\n    callbackUrl,\n    callbackSecret,\n    platform,\n    domain,\n    videoId\n  }\n};"
       },
       "id": "validate-url",
       "name": "Validate URL",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-youtube",
+              "leftValue": "={{ $json.platform }}",
+              "rightValue": "youtube",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "is-youtube",
+      "name": "Is YouTube?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.youtube.com/watch?v={{ $json.videoId }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          },
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "fetch-yt-page",
+      "name": "Fetch YouTube Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 120],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract YouTube transcript URL from ytInitialPlayerResponse\nconst pageHtml = $input.first().json.data || $input.first().json.body || '';\nconst prev = $('Validate URL').first().json;\n\nif (!pageHtml || pageHtml.length < 500) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      error: 'Failed to fetch YouTube page',\n      rawContent: ''\n    }\n  };\n}\n\n// Extract video title\nconst titleMatch = pageHtml.match(/<title[^>]*>([^<]+)<\\/title>/i);\nconst videoTitle = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'YouTube Recipe';\n\n// Extract ytInitialPlayerResponse JSON blob\nconst playerMatch = pageHtml.match(/var ytInitialPlayerResponse\\s*=\\s*(\\{.+?\\});\\s*(?:var |const |let |<\\/script>)/s);\nif (!playerMatch) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      error: 'Could not find ytInitialPlayerResponse in page'\n    }\n  };\n}\n\nlet playerData;\ntry {\n  playerData = JSON.parse(playerMatch[1]);\n} catch (e) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      error: 'Failed to parse ytInitialPlayerResponse: ' + e.message\n    }\n  };\n}\n\n// Navigate to caption tracks\nconst captionsRenderer = playerData?.captions?.playerCaptionsTracklistRenderer;\nconst tracks = captionsRenderer?.captionTracks;\n\nif (!tracks || tracks.length === 0) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      error: 'No caption tracks found for this video'\n    }\n  };\n}\n\n// Prefer English, fall back to first available\nconst englishTrack = tracks.find(t => t.languageCode === 'en' || t.languageCode === 'en-US');\nconst track = englishTrack || tracks[0];\nconst baseUrl = track.baseUrl;\n\nif (!baseUrl) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      error: 'Caption track has no baseUrl'\n    }\n  };\n}\n\nconst transcriptUrl = baseUrl + '&fmt=json3';\n\nreturn {\n  json: {\n    url: prev.url,\n    importId: prev.importId,\n    callbackUrl: prev.callbackUrl,\n    callbackSecret: prev.callbackSecret,\n    videoTitle,\n    transcriptUrl,\n    error: null\n  }\n};"
+      },
+      "id": "extract-transcript-url",
+      "name": "Extract Transcript URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 120]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.transcriptUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-transcript",
+      "name": "Fetch Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 120],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build transcript text from YouTube json3 caption format\nconst transcriptData = $input.first().json;\nconst prev = $('Extract Transcript URL').first().json;\n\nif (prev.error) {\n  // Pass through the error\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      error: prev.error,\n      rawContent: ''\n    }\n  };\n}\n\n// json3 format: { events: [{ segs: [{ utf8: 'text' }], tStartMs, dDurationMs }] }\nlet transcriptText = '';\n\nif (transcriptData && transcriptData.events) {\n  const segments = [];\n  for (const event of transcriptData.events) {\n    if (!event.segs) continue;\n    const text = event.segs\n      .map(s => s.utf8 || '')\n      .join('')\n      .replace(/\\n/g, ' ')\n      .trim();\n    if (text) segments.push(text);\n  }\n  transcriptText = segments.join(' ');\n} else {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      error: 'No transcript events found',\n      rawContent: ''\n    }\n  };\n}\n\n// Trim to 6000 chars for GPT context\nconst trimmedTranscript = transcriptText.substring(0, 6000);\n\nreturn {\n  json: {\n    url: prev.url,\n    importId: prev.importId,\n    callbackUrl: prev.callbackUrl,\n    callbackSecret: prev.callbackSecret,\n    videoTitle: prev.videoTitle,\n    transcriptText: trimmedTranscript\n  }\n};"
+      },
+      "id": "format-transcript",
+      "name": "Format Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1570, 120]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a recipe extraction assistant. Given the transcript of a cooking video, extract the recipe into structured JSON.\n\nReturn a JSON object with:\n- \"title\" (string): recipe name\n- \"servings\" (number or null): number of servings\n- \"prepTimeMinutes\" (number or null): prep time in minutes\n- \"cookTimeMinutes\" (number or null): cook time in minutes\n- \"ingredients\" (array): each with {\"name\": string, \"canonicalName\": string, \"quantity\": number or null, \"unit\": string or null, \"optional\": boolean}\n- \"steps\" (array of strings): cooking steps in order\n- \"imageUrl\" (string or null): always null for YouTube\n\nFor ingredients:\n- \"name\" is the full ingredient text as mentioned in the video\n- \"canonicalName\" is the normalized ingredient name in English (e.g. \"All-Purpose Flour\")\n- Extract quantity and unit when possible\n- Valid units: pcs, g, kg, oz, lb, ml, L, cup, tbsp, tsp, fl oz\n\nIf no recipe is found in the transcript, return: {\"error\": \"No recipe found in this video\"}"
+            },
+            {
+              "role": "user",
+              "content": "=Extract the recipe from this YouTube video transcript.\n\nVideo title: {{ $json.videoTitle }}\nURL: {{ $json.url }}\n\n---\n{{ $json.transcriptText }}"
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.2,
+          "maxTokens": 2048,
+          "responseFormat": "json_object"
+        }
+      },
+      "id": "gpt-parse-yt",
+      "name": "GPT Parse YouTube",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [1790, 120],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format YouTube GPT response for callback\nconst gptResponse = $input.first().json;\nconst prevData = $('Format Transcript').first().json;\n\n// Pass through errors from upstream nodes\nif (prevData.error) {\n  return {\n    json: {\n      callbackUrl: prevData.callbackUrl,\n      callbackSecret: prevData.callbackSecret,\n      importId: prevData.importId,\n      error: prevData.error,\n      rawContent: prevData.transcriptText || ''\n    }\n  };\n}\n\nlet parsedRecipe;\ntry {\n  const content = gptResponse.message?.content || gptResponse.text || JSON.stringify(gptResponse);\n  parsedRecipe = typeof content === 'string' ? JSON.parse(content) : content;\n} catch (e) {\n  return {\n    json: {\n      callbackUrl: prevData.callbackUrl,\n      callbackSecret: prevData.callbackSecret,\n      importId: prevData.importId,\n      error: 'Failed to parse GPT response: ' + e.message,\n      rawContent: prevData.transcriptText || ''\n    }\n  };\n}\n\nif (parsedRecipe.error) {\n  return {\n    json: {\n      callbackUrl: prevData.callbackUrl,\n      callbackSecret: prevData.callbackSecret,\n      importId: prevData.importId,\n      error: parsedRecipe.error,\n      rawContent: prevData.transcriptText || ''\n    }\n  };\n}\n\nreturn {\n  json: {\n    callbackUrl: prevData.callbackUrl,\n    callbackSecret: prevData.callbackSecret,\n    importId: prevData.importId,\n    recipe: parsedRecipe,\n    rawContent: prevData.transcriptText || '',\n    rawMetadata: { title: parsedRecipe.title, url: prevData.url, source: 'youtube-transcript' }\n  }\n};"
+      },
+      "id": "format-yt-result",
+      "name": "Format YT Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2010, 120]
     },
     {
       "parameters": {
@@ -48,18 +186,18 @@
       "name": "Fetch Blog HTML",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [690, 300],
+      "position": [910, 480],
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "// Try to extract JSON-LD Recipe structured data from HTML\nconst html = $input.first().json.data || $input.first().json.body || '';\nconst url = $('Validate URL').first().json.url;\nconst importId = $('Validate URL').first().json.importId;\nconst callbackUrl = $('Validate URL').first().json.callbackUrl;\nconst callbackSecret = $('Validate URL').first().json.callbackSecret;\n\n// Check for fetch error\nif (!html || html.length < 100) {\n  return {\n    json: {\n      hasJsonLd: false,\n      rawText: '',\n      importId,\n      callbackUrl,\n      callbackSecret,\n      url,\n      error: 'Failed to fetch page content'\n    }\n  };\n}\n\n// Extract JSON-LD scripts\nconst jsonLdRegex = /<script[^>]*type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi;\nlet match;\nlet recipe = null;\n\nwhile ((match = jsonLdRegex.exec(html)) !== null) {\n  try {\n    let parsed = JSON.parse(match[1].trim());\n    \n    // Handle @graph arrays\n    if (parsed['@graph']) {\n      parsed = parsed['@graph'];\n    }\n    \n    // Ensure it's an array\n    const items = Array.isArray(parsed) ? parsed : [parsed];\n    \n    for (const item of items) {\n      if (item['@type'] === 'Recipe' || \n          (Array.isArray(item['@type']) && item['@type'].includes('Recipe'))) {\n        recipe = item;\n        break;\n      }\n    }\n    if (recipe) break;\n  } catch (e) {\n    // Invalid JSON-LD, skip\n  }\n}\n\n// Extract title from HTML as fallback\nconst titleMatch = html.match(/<title[^>]*>([^<]+)<\\/title>/i);\nconst htmlTitle = titleMatch ? titleMatch[1].trim() : '';\n\nif (recipe) {\n  // Parse JSON-LD Recipe into our format\n  const ingredients = (recipe.recipeIngredient || []).map((ing, i) => {\n    // Basic parsing: try to split quantity/unit from name\n    const text = typeof ing === 'string' ? ing : '';\n    return {\n      name: text,\n      canonicalName: text,\n      quantity: null,\n      unit: null,\n      optional: false\n    };\n  });\n  \n  const steps = [];\n  const instructions = recipe.recipeInstructions || [];\n  if (Array.isArray(instructions)) {\n    for (const step of instructions) {\n      if (typeof step === 'string') {\n        steps.push(step);\n      } else if (step.text) {\n        steps.push(step.text);\n      } else if (step.itemListElement) {\n        for (const sub of step.itemListElement) {\n          if (sub.text) steps.push(sub.text);\n          else if (typeof sub === 'string') steps.push(sub);\n        }\n      }\n    }\n  } else if (typeof instructions === 'string') {\n    steps.push(instructions);\n  }\n\n  // Parse ISO 8601 duration (e.g., PT30M, PT1H15M)\n  function parseDuration(dur) {\n    if (!dur) return null;\n    const match = dur.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?/);\n    if (!match) return null;\n    return (parseInt(match[1] || '0') * 60) + parseInt(match[2] || '0');\n  }\n\n  const parsedRecipe = {\n    title: recipe.name || htmlTitle || 'Untitled Recipe',\n    servings: recipe.recipeYield ? parseInt(String(recipe.recipeYield)) || null : null,\n    prepTimeMinutes: parseDuration(recipe.prepTime),\n    cookTimeMinutes: parseDuration(recipe.cookTime),\n    ingredients: ingredients,\n    steps: steps,\n    imageUrl: Array.isArray(recipe.image) ? recipe.image[0] : (recipe.image?.url || recipe.image || null)\n  };\n\n  return {\n    json: {\n      hasJsonLd: true,\n      parsedRecipe,\n      importId,\n      callbackUrl,\n      callbackSecret,\n      url,\n      rawText: html.substring(0, 5000)\n    }\n  };\n}\n\n// No JSON-LD found — strip HTML to text for GPT\nconst textContent = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<nav[\\s\\S]*?<\\/nav>/gi, '')\n  .replace(/<footer[\\s\\S]*?<\\/footer>/gi, '')\n  .replace(/<header[\\s\\S]*?<\\/header>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .substring(0, 6000);\n\nreturn {\n  json: {\n    hasJsonLd: false,\n    rawText: textContent,\n    htmlTitle,\n    importId,\n    callbackUrl,\n    callbackSecret,\n    url\n  }\n};"
+        "jsCode": "// Try to extract JSON-LD Recipe structured data from HTML\nconst html = $input.first().json.data || $input.first().json.body || '';\nconst url = $('Validate URL').first().json.url;\nconst importId = $('Validate URL').first().json.importId;\nconst callbackUrl = $('Validate URL').first().json.callbackUrl;\nconst callbackSecret = $('Validate URL').first().json.callbackSecret;\n\n// Check for fetch error\nif (!html || html.length < 100) {\n  return {\n    json: {\n      hasJsonLd: false,\n      rawText: '',\n      importId,\n      callbackUrl,\n      callbackSecret,\n      url,\n      error: 'Failed to fetch page content'\n    }\n  };\n}\n\n// Extract JSON-LD scripts\nconst jsonLdRegex = /<script[^>]*type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi;\nlet match;\nlet recipe = null;\n\nwhile ((match = jsonLdRegex.exec(html)) !== null) {\n  try {\n    let parsed = JSON.parse(match[1].trim());\n    \n    // Handle @graph arrays\n    if (parsed['@graph']) {\n      parsed = parsed['@graph'];\n    }\n    \n    // Ensure it's an array\n    const items = Array.isArray(parsed) ? parsed : [parsed];\n    \n    for (const item of items) {\n      if (item['@type'] === 'Recipe' || \n          (Array.isArray(item['@type']) && item['@type'].includes('Recipe'))) {\n        recipe = item;\n        break;\n      }\n    }\n    if (recipe) break;\n  } catch (e) {\n    // Invalid JSON-LD, skip\n  }\n}\n\n// Extract title from HTML as fallback\nconst titleMatch = html.match(/<title[^>]*>([^<]+)<\\/title>/i);\nconst htmlTitle = titleMatch ? titleMatch[1].trim() : '';\n\nif (recipe) {\n  // Parse JSON-LD Recipe into our format\n  const ingredients = (recipe.recipeIngredient || []).map((ing) => {\n    const text = typeof ing === 'string' ? ing : '';\n    return {\n      name: text,\n      canonicalName: text,\n      quantity: null,\n      unit: null,\n      optional: false\n    };\n  });\n  \n  const steps = [];\n  const instructions = recipe.recipeInstructions || [];\n  if (Array.isArray(instructions)) {\n    for (const step of instructions) {\n      if (typeof step === 'string') {\n        steps.push(step);\n      } else if (step.text) {\n        steps.push(step.text);\n      } else if (step.itemListElement) {\n        for (const sub of step.itemListElement) {\n          if (sub.text) steps.push(sub.text);\n          else if (typeof sub === 'string') steps.push(sub);\n        }\n      }\n    }\n  } else if (typeof instructions === 'string') {\n    steps.push(instructions);\n  }\n\n  // Parse ISO 8601 duration (e.g., PT30M, PT1H15M)\n  function parseDuration(dur) {\n    if (!dur) return null;\n    const m = dur.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?/);\n    if (!m) return null;\n    return (parseInt(m[1] || '0') * 60) + parseInt(m[2] || '0');\n  }\n\n  const parsedRecipe = {\n    title: recipe.name || htmlTitle || 'Untitled Recipe',\n    servings: recipe.recipeYield ? parseInt(String(recipe.recipeYield)) || null : null,\n    prepTimeMinutes: parseDuration(recipe.prepTime),\n    cookTimeMinutes: parseDuration(recipe.cookTime),\n    ingredients: ingredients,\n    steps: steps,\n    imageUrl: Array.isArray(recipe.image) ? recipe.image[0] : (recipe.image?.url || recipe.image || null)\n  };\n\n  return {\n    json: {\n      hasJsonLd: true,\n      parsedRecipe,\n      importId,\n      callbackUrl,\n      callbackSecret,\n      url,\n      rawText: html.substring(0, 5000)\n    }\n  };\n}\n\n// No JSON-LD found — strip HTML to text for GPT\nconst textContent = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<nav[\\s\\S]*?<\\/nav>/gi, '')\n  .replace(/<footer[\\s\\S]*?<\\/footer>/gi, '')\n  .replace(/<header[\\s\\S]*?<\\/header>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .substring(0, 6000);\n\nreturn {\n  json: {\n    hasJsonLd: false,\n    rawText: textContent,\n    htmlTitle,\n    importId,\n    callbackUrl,\n    callbackSecret,\n    url\n  }\n};"
       },
       "id": "extract-json-ld",
       "name": "Extract JSON-LD",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [910, 300]
+      "position": [1130, 480]
     },
     {
       "parameters": {
@@ -87,7 +225,7 @@
       "name": "Has JSON-LD?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1130, 300]
+      "position": [1350, 480]
     },
     {
       "parameters": {
@@ -115,7 +253,7 @@
       "name": "GPT Parse Recipe",
       "type": "@n8n/n8n-nodes-langchain.openAi",
       "typeVersion": 1.8,
-      "position": [1350, 420],
+      "position": [1570, 600],
       "credentials": {
         "openAiApi": {
           "id": "YOUR_OPENAI_CREDENTIAL_ID",
@@ -131,7 +269,7 @@
       "name": "Format GPT Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1570, 420]
+      "position": [1790, 600]
     },
     {
       "parameters": {
@@ -141,7 +279,7 @@
       "name": "Format JSON-LD Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1350, 180]
+      "position": [1570, 360]
     },
     {
       "parameters": {
@@ -171,7 +309,7 @@
       "name": "Send Callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1790, 300]
+      "position": [2230, 360]
     }
   ],
   "connections": {
@@ -190,7 +328,91 @@
       "main": [
         [
           {
+            "node": "Is YouTube?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is YouTube?": {
+      "main": [
+        [
+          {
+            "node": "Fetch YouTube Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Fetch Blog HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch YouTube Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Transcript URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Transcript URL": {
+      "main": [
+        [
+          {
+            "node": "Fetch Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Transcript": {
+      "main": [
+        [
+          {
+            "node": "Format Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Transcript": {
+      "main": [
+        [
+          {
+            "node": "GPT Parse YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT Parse YouTube": {
+      "main": [
+        [
+          {
+            "node": "Format YT Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format YT Result": {
+      "main": [
+        [
+          {
+            "node": "Send Callback",
             "type": "main",
             "index": 0
           }
@@ -277,6 +499,6 @@
   "staticData": null,
   "tags": [],
   "triggerCount": 0,
-  "updatedAt": "2026-03-11T00:00:00.000Z",
-  "versionId": "1"
+  "updatedAt": "2026-03-12T00:00:00.000Z",
+  "versionId": "2"
 }

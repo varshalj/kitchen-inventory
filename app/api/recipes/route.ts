@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { recipeRepo, recipeImportRepo } from "@/lib/server/repositories/recipe-repo"
+import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
+import { computePantryMatches, computeCompatibilityScore } from "@/lib/server/pantry-match"
+import type { ParsedIngredient } from "@/lib/types"
 
 export async function GET(_request: NextRequest) {
   try {
@@ -57,6 +60,29 @@ export async function POST(request: NextRequest) {
         sortOrder: ing.sortOrder ?? i,
       })),
     )
+
+    // Compute and store pantry compatibility score immediately on save
+    try {
+      const pantryItems = await inventoryRepo.list(supabase, false)
+      const pantryForMatching = pantryItems.map((p) => ({
+        name: p.name,
+        expiryDate: p.expiryDate,
+      }))
+      const parsedIngredients: ParsedIngredient[] = result.ingredients.map((ing) => ({
+        name: ing.name,
+        canonicalName: ing.canonicalName,
+        quantity: ing.quantity,
+        unit: ing.unit,
+        optional: ing.optional ?? false,
+      }))
+      const pantryMatches = computePantryMatches(parsedIngredients, pantryForMatching)
+      const score = computeCompatibilityScore(pantryMatches)
+      await recipeRepo.updateScore(supabase, result.recipe.id, score)
+      result.recipe.pantryCompatibilityScore = score
+      result.recipe.pantryLastChecked = new Date().toISOString()
+    } catch {
+      // Non-critical — recipe is saved either way
+    }
 
     // Mark import as saved if there's an importId
     if (body.importId) {

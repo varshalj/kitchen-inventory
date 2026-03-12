@@ -97,6 +97,8 @@ export interface Recipe {
   instructions?: string[]
   imageUrl?: string
   notes?: string
+  pantryCompatibilityScore?: number
+  pantryLastChecked?: string
   createdAt: string
   updatedAt: string
 }

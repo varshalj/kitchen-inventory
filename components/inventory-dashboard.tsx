@@ -41,6 +41,7 @@ import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
+import { supabase as supabaseClient } from "@/lib/supabase-client"
 import type { InventoryItem, ParsedRecipe, PantryMatch } from "@/lib/types"
 
 export function InventoryDashboard() {
@@ -58,6 +59,7 @@ export function InventoryDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [userInitials, setUserInitials] = useState("")
   const [showRecipeImport, setShowRecipeImport] = useState(false)
   const [recipeReviewData, setRecipeReviewData] = useState<{
     importId: string
@@ -84,6 +86,24 @@ export function InventoryDashboard() {
 useEffect(() => {
   const load = async () => {
     try {
+      // Fetch user initials for avatar
+      if (supabaseClient) {
+        const { data: { user } } = await supabaseClient.auth.getUser()
+        if (user) {
+          const email = user.email ?? ""
+          const name = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ""
+          if (name) {
+            const parts = name.trim().split(/\s+/)
+            setUserInitials(parts.length >= 2
+              ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+              : parts[0].slice(0, 2).toUpperCase()
+            )
+          } else if (email) {
+            setUserInitials(email.slice(0, 2).toUpperCase())
+          }
+        }
+      }
+
       const response = await fetchWithAuth("/api/inventory?archived=false")
       if (!response.ok) {
         const body = await response.text()
@@ -656,6 +676,14 @@ useEffect(() => {
     <MainLayout>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Kitchen Inventory</h1>
+        <Link href="/profile">
+          <button
+            className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold hover:opacity-90 transition-opacity"
+            aria-label="Go to profile"
+          >
+            {userInitials || "?"}
+          </button>
+        </Link>
       </div>
 
       <div className="mb-6 flex gap-2">

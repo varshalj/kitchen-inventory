@@ -142,6 +142,8 @@ function recipeToDomain(row: any): Recipe {
     instructions: row.instructions ?? undefined,
     imageUrl: row.image_url ?? undefined,
     notes: row.notes ?? undefined,
+    pantryCompatibilityScore: row.pantry_compatibility_score ?? undefined,
+    pantryLastChecked: row.pantry_last_checked ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -240,10 +242,27 @@ export const recipeRepo = {
       .from("recipes")
       .select("*")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
+      .order("pantry_compatibility_score", { ascending: false, nullsFirst: false })
 
     if (error) throw error
     return (data ?? []).map(recipeToDomain)
+  },
+
+  async updateScore(
+    supabase: SupabaseClient,
+    id: string,
+    score: number,
+  ): Promise<void> {
+    const { error } = await supabase
+      .from("recipes")
+      .update({
+        pantry_compatibility_score: score,
+        pantry_last_checked: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+
+    if (error) throw error
   },
 
   async getById(supabase: SupabaseClient, id: string): Promise<{ recipe: Recipe; ingredients: RecipeIngredient[] } | null> {

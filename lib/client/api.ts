@@ -101,3 +101,17 @@ export async function saveRecipe(recipe: any): Promise<any> {
     }),
   )
 }
+
+export async function getRecipes(): Promise<any[]> {
+  return parseResponse(await fetchWithAuth("/api/recipes", { cache: "no-store" }))
+}
+
+export async function getRecipeById(id: string): Promise<any> {
+  return parseResponse(await fetchWithAuth(`/api/recipes/${id}`, { cache: "no-store" }))
+}
+
+export async function recalculateRecipeScores(): Promise<{ updated: number; lastChecked: string }> {
+  return parseResponse(
+    await fetchWithAuth("/api/recipes/recalculate", { method: "POST" }),
+  )
+}

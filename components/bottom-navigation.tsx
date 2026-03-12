@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, BarChart2, ShoppingCart, User, Plus } from "lucide-react"
+import { Home, BarChart2, ShoppingCart, ChefHat, Plus } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -14,7 +14,7 @@ export function BottomNavigation() {
     if (path === "/dashboard" && pathname === "/dashboard") return true
     if (path === "/analytics" && pathname === "/analytics") return true
     if (path === "/shopping-list" && pathname === "/shopping-list") return true
-    if (path === "/profile" && pathname === "/profile") return true
+    if (path === "/recipes" && (pathname === "/recipes" || pathname.startsWith("/recipes/"))) return true
     return false
   }
 
@@ -67,10 +67,10 @@ export function BottomNavigation() {
           )}
         </Link>
 
-        <Link href="/profile" className={navLinkClass("/profile")}>
-          <User className="h-5 w-5 transition-transform duration-200" />
-          <span>Profile</span>
-          {isActive("/profile") && (
+        <Link href="/recipes" className={navLinkClass("/recipes")}>
+          <ChefHat className="h-5 w-5 transition-transform duration-200" />
+          <span>Recipes</span>
+          {isActive("/recipes") && (
             <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />
           )}
         </Link>

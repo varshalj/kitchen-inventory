@@ -2,64 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { recipeImportRepo } from "@/lib/server/repositories/recipe-repo"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
-import { findFuzzyMatch } from "@/lib/utils"
-import type { PantryMatch, ParsedIngredient } from "@/lib/types"
-
-function computePantryMatches(
-  ingredients: ParsedIngredient[],
-  pantryItems: { name: string; expiryDate: string }[],
-): PantryMatch[] {
-  const now = new Date()
-  const pantryNames = pantryItems.map((p) => p.name)
-
-  return ingredients.map((ing) => {
-    const lookupName = ing.canonicalName || ing.name
-    const matchedName = findFuzzyMatch(lookupName, pantryNames)
-
-    if (!matchedName) {
-      return { ingredientName: ing.name, status: "missing" as const }
-    }
-
-    const pantryItem = pantryItems.find(
-      (p) => p.name.toLowerCase() === matchedName.toLowerCase(),
-    )
-
-    if (!pantryItem?.expiryDate) {
-      return { ingredientName: ing.name, status: "available" as const, pantryItemName: matchedName }
-    }
-
-    const expiry = new Date(pantryItem.expiryDate)
-    const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 3600 * 24))
-
-    if (daysUntilExpiry < 0) {
-      return {
-        ingredientName: ing.name,
-        status: "expired" as const,
-        pantryItemName: matchedName,
-        expiryDate: pantryItem.expiryDate,
-        daysUntilExpiry,
-      }
-    }
-
-    if (daysUntilExpiry <= 3) {
-      return {
-        ingredientName: ing.name,
-        status: "expiring" as const,
-        pantryItemName: matchedName,
-        expiryDate: pantryItem.expiryDate,
-        daysUntilExpiry,
-      }
-    }
-
-    return {
-      ingredientName: ing.name,
-      status: "available" as const,
-      pantryItemName: matchedName,
-      expiryDate: pantryItem.expiryDate,
-      daysUntilExpiry,
-    }
-  })
-}
+import { computePantryMatches, computeCompatibilityScore } from "@/lib/server/pantry-match"
 
 export async function GET(
   _request: NextRequest,
@@ -103,14 +46,7 @@ export async function GET(
       const pantryMatches = computePantryMatches(ingredients, pantryForMatching)
 
       response.pantryMatches = pantryMatches
-
-      const totalIngredients = ingredients.length
-      const availableCount = pantryMatches.filter(
-        (m) => m.status === "available" || m.status === "expiring",
-      ).length
-      response.compatibilityScore = totalIngredients > 0
-        ? Math.round((availableCount / totalIngredients) * 100)
-        : 0
+      response.compatibilityScore = computeCompatibilityScore(pantryMatches)
     }
 
     return NextResponse.json(response)
