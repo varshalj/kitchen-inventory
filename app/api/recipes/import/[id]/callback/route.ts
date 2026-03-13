@@ -40,6 +40,16 @@ export async function POST(
     }
 
     const parsedRecipe = body.recipe || body.parsedRecipe
+    if (parsedRecipe && Array.isArray(parsedRecipe.steps)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'callback:normalize-steps',message:'steps before normalization',data:{firstStep:parsedRecipe.steps[0],firstStepType:typeof parsedRecipe.steps[0]},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
+      // #endregion
+      parsedRecipe.steps = parsedRecipe.steps.map((s: any) => {
+        if (typeof s === 'string') return s
+        if (s && typeof s === 'object') return s.step || s.text || s.instruction || s.description || JSON.stringify(s)
+        return String(s)
+      })
+    }
     if (!parsedRecipe || !parsedRecipe.title) {
       await recipeImportRepo.updateFromCallback(supabase, id, {
         status: "failed",
