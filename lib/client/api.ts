@@ -137,6 +137,36 @@ export async function updateRecipe(
   )
 }
 
+export async function suggestInventoryItems(query: string): Promise<string[]> {
+  return parseResponse(
+    await fetchWithAuth(`/api/inventory/suggest?q=${encodeURIComponent(query)}`, { cache: "no-store" }),
+  )
+}
+
+export async function getPendingImports(): Promise<any> {
+  return parseResponse(await fetchWithAuth("/api/recipes/import/pending", { cache: "no-store" }))
+}
+
+export async function parseRecipeText(text: string): Promise<any> {
+  return parseResponse(
+    await fetchWithAuth("/api/recipes/parse-text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    }),
+  )
+}
+
+export async function updateFullRecipe(id: string, data: any): Promise<any> {
+  return parseResponse(
+    await fetchWithAuth(`/api/recipes/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  )
+}
+
 export async function deleteRecipe(id: string): Promise<void> {
   await fetchWithAuth(`/api/recipes/${id}`, { method: "DELETE" })
 }

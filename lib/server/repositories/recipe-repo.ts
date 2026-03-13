@@ -337,6 +337,83 @@ export const recipeRepo = {
     return recipeToDomain(rows[0])
   },
 
+  async updateFull(
+    supabase: SupabaseClient,
+    id: string,
+    recipe: {
+      title: string
+      servings?: number | null
+      prepTimeMinutes?: number | null
+      cookTimeMinutes?: number | null
+      totalTimeMinutes?: number | null
+      instructions?: string[]
+      imageUrl?: string | null
+      notes?: string | null
+    },
+    ingredients: Omit<RecipeIngredient, "id" | "recipeId">[],
+  ): Promise<{ recipe: Recipe; ingredients: RecipeIngredient[] }> {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
+    const payload: any = {
+      title: recipe.title,
+      updated_at: new Date().toISOString(),
+    }
+    if (recipe.servings !== undefined) payload.servings = recipe.servings
+    if (recipe.prepTimeMinutes !== undefined) payload.prep_time_minutes = recipe.prepTimeMinutes
+    if (recipe.cookTimeMinutes !== undefined) payload.cook_time_minutes = recipe.cookTimeMinutes
+    if (recipe.totalTimeMinutes !== undefined) payload.total_time_minutes = recipe.totalTimeMinutes
+    if (recipe.instructions !== undefined) payload.instructions = recipe.instructions
+    if (recipe.imageUrl !== undefined) payload.image_url = recipe.imageUrl
+    if (recipe.notes !== undefined) payload.notes = recipe.notes
+
+    const { data: recipeRows, error: recipeError } = await supabase
+      .from("recipes")
+      .update(payload)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+
+    if (recipeError) throw recipeError
+    if (!recipeRows?.[0]) throw new Error("Recipe not found or unauthorized")
+
+    // Replace all ingredients: delete old, insert new
+    const { error: delError } = await supabase
+      .from("recipe_ingredients")
+      .delete()
+      .eq("recipe_id", id)
+    if (delError) throw delError
+
+    let savedIngredients: RecipeIngredient[] = []
+    if (ingredients.length > 0) {
+      const ingredientRows = ingredients.map((ing, i) => ({
+        id: crypto.randomUUID(),
+        recipe_id: id,
+        name: ing.name,
+        canonical_name: ing.canonicalName || null,
+        quantity: ing.quantity ?? null,
+        unit: ing.unit || null,
+        optional: ing.optional ?? false,
+        sort_order: ing.sortOrder ?? i,
+        preparation: ing.preparation || null,
+        ingredient_group: ing.ingredientGroup || null,
+      }))
+
+      const { data: ingData, error: ingError } = await supabase
+        .from("recipe_ingredients")
+        .insert(ingredientRows)
+        .select()
+
+      if (ingError) throw ingError
+      savedIngredients = (ingData ?? []).map(ingredientToDomain)
+    }
+
+    return {
+      recipe: recipeToDomain(recipeRows[0]),
+      ingredients: savedIngredients,
+    }
+  },
+
   async delete(supabase: SupabaseClient, id: string): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")

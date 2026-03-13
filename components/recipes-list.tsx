@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   ArrowUpDown,
   Search,
+  Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/main-layout"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
-import { getRecipes, recalculateRecipeScores } from "@/lib/client/api"
+import { getRecipes, recalculateRecipeScores, getPendingImports } from "@/lib/client/api"
 import { useToast } from "@/hooks/use-toast"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
@@ -54,7 +55,14 @@ function ScoreBadge({ score }: { score?: number }) {
 
 function PlatformChip({ platform }: { platform?: string }) {
   if (!platform) return null
-  const label = platform === "youtube" ? "YouTube" : platform.charAt(0).toUpperCase() + platform.slice(1)
+  const labels: Record<string, string> = {
+    youtube: "YouTube",
+    instagram: "Instagram",
+    twitter: "X / Twitter",
+    tiktok: "TikTok",
+    blog: "Blog",
+  }
+  const label = labels[platform] || platform.charAt(0).toUpperCase() + platform.slice(1)
   return (
     <span className="inline-flex items-center rounded-full bg-secondary text-secondary-foreground border px-2 py-0.5 text-xs">
       {label}
@@ -142,6 +150,14 @@ export function RecipesList() {
     sourceUrl: string
     sourcePlatform: string
   } | null>(null)
+  const [pendingBanner, setPendingBanner] = useState<{
+    importId: string
+    recipe: ParsedRecipe
+    pantryMatches: PantryMatch[]
+    compatibilityScore: number
+    url: string
+    platform: string
+  } | null>(null)
 
   const loadRecipes = useCallback(async () => {
     try {
@@ -157,6 +173,21 @@ export function RecipesList() {
 
   useEffect(() => {
     loadRecipes()
+    getPendingImports()
+      .then((data) => {
+        if (data.ready && data.ready.length > 0) {
+          const item = data.ready[0]
+          setPendingBanner({
+            importId: item.importId,
+            recipe: item.recipe,
+            pantryMatches: item.pantryMatches || [],
+            compatibilityScore: item.compatibilityScore ?? 0,
+            url: item.url || "",
+            platform: item.platform || "blog",
+          })
+        }
+      })
+      .catch(() => {})
   }, [loadRecipes])
 
   const handleRefresh = async () => {
@@ -267,6 +298,33 @@ export function RecipesList() {
         </div>
       )}
 
+      {/* Resume banner for abandoned imports */}
+      {pendingBanner && !recipeReviewData && (
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <Sparkles className="h-5 w-5 shrink-0 text-primary" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Your recipe is ready for review</p>
+            <p className="text-xs text-muted-foreground truncate">{pendingBanner.recipe.title}</p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              setRecipeReviewData({
+                importId: pendingBanner.importId,
+                recipe: pendingBanner.recipe,
+                pantryMatches: pendingBanner.pantryMatches,
+                compatibilityScore: pendingBanner.compatibilityScore,
+                sourceUrl: pendingBanner.url,
+                sourcePlatform: pendingBanner.platform,
+              })
+              setPendingBanner(null)
+            }}
+          >
+            Review
+          </Button>
+        </div>
+      )}
+
       {/* Search input */}
       {!isLoading && recipes.length > 0 && (
         <div className="mb-3 relative">
@@ -355,6 +413,7 @@ export function RecipesList() {
         open={showImport}
         onOpenChange={setShowImport}
         onRecipeReady={handleRecipeReady}
+        onGoHome={() => setShowImport(false)}
       />
     </MainLayout>
   )

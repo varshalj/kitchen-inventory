@@ -82,6 +82,42 @@ export async function PATCH(
   }
 }
 
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const supabase = await createSupabaseFromRequest()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (!user || authError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const result = await recipeRepo.updateFull(
+      supabase,
+      id,
+      {
+        title: body.title,
+        servings: body.servings,
+        prepTimeMinutes: body.prepTimeMinutes,
+        cookTimeMinutes: body.cookTimeMinutes,
+        totalTimeMinutes: body.totalTimeMinutes,
+        instructions: body.instructions,
+        imageUrl: body.imageUrl,
+        notes: body.notes,
+      },
+      body.ingredients || [],
+    )
+
+    return NextResponse.json(result)
+  } catch (error) {
+    console.error("RECIPE PUT ERROR:", error)
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+  }
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

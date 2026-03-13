@@ -20,6 +20,9 @@ function detectPlatform(url: string): string {
   try {
     const host = new URL(url).hostname.replace("www.", "")
     if (host.includes("youtube.com") || host.includes("youtu.be")) return "youtube"
+    if (host.includes("instagram.com")) return "instagram"
+    if (host.includes("twitter.com") || host.includes("x.com")) return "twitter"
+    if (host.includes("tiktok.com")) return "tiktok"
     return "blog"
   } catch {
     return "unknown"
@@ -52,16 +55,26 @@ export async function POST(request: NextRequest) {
 
     // Deduplication: check if this URL was already imported
     const existing = await recipeImportRepo.findByCanonicalUrl(supabase, canonicalUrl)
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/recipes/import/route.ts:54',message:'Duplicate check result',data:{canonicalUrl,existingId:existing?.id||null,existingStatus:existing?.status||null,hasDuplicate:!!existing},timestamp:Date.now(),hypothesisId:'H-duplicate'})}).catch(()=>{});
-    // #endregion
     if (existing) {
-      return NextResponse.json({
-        importId: existing.id,
-        status: existing.status,
-        duplicate: true,
-        message: "This recipe has already been imported.",
-      })
+      // Verify the recipe still exists in the recipes table
+      const { data: recipeRows } = await supabase
+        .from("recipes")
+        .select("id")
+        .eq("import_id", existing.id)
+        .eq("user_id", user.id)
+        .limit(1)
+
+      if (recipeRows && recipeRows.length > 0) {
+        return NextResponse.json({
+          importId: existing.id,
+          status: existing.status,
+          duplicate: true,
+          message: "This recipe has already been imported.",
+        })
+      }
+
+      // Recipe was deleted directly from DB; reset import status
+      await recipeImportRepo.updateStatus(supabase, existing.id, "deleted")
     }
 
     const importId = crypto.randomUUID()

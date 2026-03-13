@@ -19,9 +19,6 @@ import {
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Sheet,
   SheetContent,
@@ -30,11 +27,12 @@ import {
 } from "@/components/ui/sheet"
 import { ToastAction } from "@/components/ui/toast"
 import { MainLayout } from "@/components/main-layout"
+import { RecipeReviewScreen } from "@/components/recipe-review-screen"
 import { useToast } from "@/hooks/use-toast"
-import { getRecipeById, addToShoppingList, updateRecipe, deleteRecipe } from "@/lib/client/api"
+import { getRecipeById, addToShoppingList, deleteRecipe } from "@/lib/client/api"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
-import type { Recipe, RecipeIngredient, PantryMatch, PantryMatchStatus } from "@/lib/types"
+import type { Recipe, RecipeIngredient, ParsedRecipe, PantryMatch, PantryMatchStatus } from "@/lib/types"
 
 const STATUS_CONFIG: Record<PantryMatchStatus, { label: string; color: string; icon: typeof Check }> = {
   available: { label: "In pantry", color: "bg-green-100 text-green-800 border-green-200", icon: Check },
@@ -142,7 +140,10 @@ function formatRecipeAsText(recipe: Recipe, ingredients: IngredientWithMatch[]):
 
   if (recipe.instructions && recipe.instructions.length > 0) {
     lines.push("STEPS")
-    recipe.instructions.forEach((step, i) => lines.push(`${i + 1}. ${step}`))
+    recipe.instructions.forEach((rawStep, i) => {
+      const step = typeof rawStep === "string" ? rawStep : (rawStep as any)?.step || (rawStep as any)?.text || JSON.stringify(rawStep)
+      lines.push(`${i + 1}. ${step}`)
+    })
     lines.push("")
   }
 
@@ -163,15 +164,9 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
   const [compatibilityScore, setCompatibilityScore] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isAddingToList, setIsAddingToList] = useState(false)
-
-  // Edit sheet state
-  const [showEdit, setShowEdit] = useState(false)
-  const [editTitle, setEditTitle] = useState("")
-  const [editServings, setEditServings] = useState<string>("")
-  const [editPrepTime, setEditPrepTime] = useState<string>("")
-  const [editCookTime, setEditCookTime] = useState<string>("")
-  const [editNotes, setEditNotes] = useState("")
-  const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [showGrocerySheet, setShowGrocerySheet] = useState(false)
+  const [selectedGroceryItems, setSelectedGroceryItems] = useState<Set<number>>(new Set())
+  const [isEditing, setIsEditing] = useState(false)
 
   // Delete state
   const [isDeleting, setIsDeleting] = useState(false)
@@ -207,17 +202,6 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
     loadRecipe()
   }, [loadRecipe])
 
-  // Sync edit fields when recipe loads
-  useEffect(() => {
-    if (recipe) {
-      setEditTitle(recipe.title)
-      setEditServings(recipe.servings != null ? String(recipe.servings) : "")
-      setEditPrepTime(recipe.prepTimeMinutes != null ? String(recipe.prepTimeMinutes) : "")
-      setEditCookTime(recipe.cookTimeMinutes != null ? String(recipe.cookTimeMinutes) : "")
-      setEditNotes(recipe.notes ?? "")
-    }
-  }, [recipe])
-
   // Cleanup timer on unmount
   useEffect(() => {
     return () => {
@@ -227,12 +211,36 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
 
   const missingIngredients = ingredients.filter((i) => i.pantryStatus === "missing")
 
-  const handleAddMissingToList = async () => {
-    if (missingIngredients.length === 0) return
+  const openGrocerySheet = () => {
+    setSelectedGroceryItems(new Set())
+    setShowGrocerySheet(true)
+  }
+
+  const toggleGroceryItem = (index: number) => {
+    setSelectedGroceryItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  }
+
+  const toggleAllGroceryItems = () => {
+    if (selectedGroceryItems.size === missingIngredients.length) {
+      setSelectedGroceryItems(new Set())
+    } else {
+      setSelectedGroceryItems(new Set(missingIngredients.map((_, i) => i)))
+    }
+  }
+
+  const handleAddSelectedToList = async () => {
+    if (selectedGroceryItems.size === 0) return
     setIsAddingToList(true)
     triggerHaptic([30])
     let addedCount = 0
-    for (const ing of missingIngredients) {
+    for (const idx of selectedGroceryItems) {
+      const ing = missingIngredients[idx]
+      if (!ing) continue
       try {
         await addToShoppingList({
           id: "",
@@ -252,43 +260,13 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
       triggerHaptic(HAPTIC_SUCCESS)
       toast({
         title: `${addedCount} item${addedCount !== 1 ? "s" : ""} added to shopping list`,
-        description: "Missing ingredients have been added",
       })
     } else {
       triggerHaptic(HAPTIC_ERROR)
       toast({ title: "Failed to add items", variant: "destructive" })
     }
     setIsAddingToList(false)
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editTitle.trim()) {
-      toast({ title: "Title is required", variant: "destructive" })
-      return
-    }
-    setIsSavingEdit(true)
-    try {
-      const updated = await updateRecipe(id, {
-        title: editTitle.trim(),
-        servings: editServings ? parseInt(editServings) : null,
-        prepTimeMinutes: editPrepTime ? parseInt(editPrepTime) : null,
-        cookTimeMinutes: editCookTime ? parseInt(editCookTime) : null,
-        notes: editNotes.trim() || null,
-      })
-      setRecipe((prev) => prev ? { ...prev, ...updated } : updated)
-      setShowEdit(false)
-      triggerHaptic(HAPTIC_SUCCESS)
-      toast({ title: "Recipe updated" })
-    } catch (err) {
-      triggerHaptic(HAPTIC_ERROR)
-      toast({
-        title: "Failed to update",
-        description: err instanceof Error ? err.message : "Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSavingEdit(false)
-    }
+    setShowGrocerySheet(false)
   }
 
   const handleDelete = () => {
@@ -367,6 +345,54 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
     )
   }
 
+  if (isEditing && recipe) {
+    const editRecipe: ParsedRecipe = {
+      title: recipe.title,
+      servings: recipe.servings,
+      prepTimeMinutes: recipe.prepTimeMinutes,
+      cookTimeMinutes: recipe.cookTimeMinutes,
+      totalTimeMinutes: recipe.totalTimeMinutes,
+      imageUrl: recipe.imageUrl,
+      ingredients: ingredients.map((ing) => ({
+        name: ing.name,
+        canonicalName: ing.canonicalName,
+        quantity: ing.quantity,
+        unit: ing.unit,
+        preparation: ing.preparation,
+        ingredientGroup: ing.ingredientGroup,
+        optional: ing.optional,
+      })),
+      steps: (recipe.instructions || []).map((s: any) =>
+        typeof s === "string" ? s : s?.step || s?.text || JSON.stringify(s),
+      ),
+    }
+
+    const editPantryMatches: PantryMatch[] = ingredients.map((ing) => ({
+      ingredientName: ing.name,
+      status: ing.pantryStatus,
+      pantryItemName: ing.pantryItemName,
+      daysUntilExpiry: ing.daysUntilExpiry,
+    }))
+
+    return (
+      <RecipeReviewScreen
+        mode="edit"
+        recipeId={id}
+        recipe={editRecipe}
+        pantryMatches={editPantryMatches}
+        compatibilityScore={compatibilityScore}
+        sourceUrl={recipe.sourceUrl}
+        sourcePlatform={recipe.sourcePlatform}
+        notes={recipe.notes}
+        onBack={() => setIsEditing(false)}
+        onSaved={() => {
+          setIsEditing(false)
+          loadRecipe()
+        }}
+      />
+    )
+  }
+
   const prepTime = recipe.prepTimeMinutes ?? 0
   const cookTime = recipe.cookTimeMinutes ?? 0
   const displayTime = prepTime + cookTime > 0 ? prepTime + cookTime : (recipe.totalTimeMinutes ?? 0)
@@ -387,7 +413,7 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
             variant="ghost"
             size="icon"
             className="h-9 w-9"
-            onClick={() => setShowEdit(true)}
+            onClick={() => setIsEditing(true)}
             title="Edit recipe"
           >
             <Pencil className="h-4 w-4" />
@@ -452,7 +478,7 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
               className="flex items-center gap-1 text-primary hover:underline"
             >
               <ExternalLink className="h-4 w-4" />
-              {recipe.sourcePlatform === "youtube" ? "YouTube" : "Source"}
+              {({ youtube: "YouTube", instagram: "Instagram", twitter: "X", tiktok: "TikTok" } as Record<string, string>)[recipe.sourcePlatform!] || "Source"}
             </a>
           )}
         </div>
@@ -476,14 +502,9 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
               size="sm"
               variant="outline"
               className="gap-1.5 text-xs"
-              onClick={handleAddMissingToList}
-              disabled={isAddingToList}
+              onClick={openGrocerySheet}
             >
-              {isAddingToList ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <ShoppingCart className="h-3 w-3" />
-              )}
+              <ShoppingCart className="h-3 w-3" />
               Add {missingIngredients.length} missing
             </Button>
           )}
@@ -515,14 +536,19 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
         <div className="mb-6">
           <h2 className="font-semibold mb-2">Steps</h2>
           <ol className="space-y-3">
-            {recipe.instructions.map((step, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold mt-0.5">
-                  {i + 1}
-                </span>
-                <p className="text-sm leading-relaxed flex-1">{step}</p>
-              </li>
-            ))}
+            {recipe.instructions.map((rawStep, i) => {
+              const step = typeof rawStep === "string"
+                ? rawStep
+                : (rawStep as any)?.step || (rawStep as any)?.text || (rawStep as any)?.instruction || JSON.stringify(rawStep)
+              return (
+                <li key={i} className="flex gap-3">
+                  <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold mt-0.5">
+                    {i + 1}
+                  </span>
+                  <p className="text-sm leading-relaxed flex-1">{step}</p>
+                </li>
+              )
+            })}
           </ol>
         </div>
       )}
@@ -535,99 +561,60 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
         </div>
       )}
 
-      {/* Add missing to list — sticky bottom CTA */}
-      {missingIngredients.length > 0 && (
-        <div className="sticky bottom-20 pb-4">
-          <Button
-            className="w-full gap-2 shadow-lg"
-            onClick={handleAddMissingToList}
-            disabled={isAddingToList}
-          >
-            {isAddingToList ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShoppingCart className="h-4 w-4" />
-            )}
-            Add {missingIngredients.length} missing ingredient{missingIngredients.length !== 1 ? "s" : ""} to shopping list
-          </Button>
-        </div>
-      )}
-
-      {/* Edit bottom sheet */}
-      <Sheet open={showEdit} onOpenChange={setShowEdit}>
-        <SheetContent side="bottom" className="rounded-t-2xl">
-          <SheetHeader className="mb-4">
-            <SheetTitle>Edit Recipe</SheetTitle>
+      {/* Grocery selector bottom sheet */}
+      <Sheet open={showGrocerySheet} onOpenChange={setShowGrocerySheet}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh]">
+          <SheetHeader className="mb-3">
+            <SheetTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              Add to Shopping List
+            </SheetTitle>
           </SheetHeader>
-          <div className="space-y-4 pb-6">
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-title">Title</Label>
-              <Input
-                id="edit-title"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-servings" className="text-xs">Servings</Label>
-                <Input
-                  id="edit-servings"
-                  type="number"
-                  min={0}
-                  value={editServings}
-                  onChange={(e) => setEditServings(e.target.value)}
-                  className="text-center"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-prep" className="text-xs">Prep (min)</Label>
-                <Input
-                  id="edit-prep"
-                  type="number"
-                  min={0}
-                  value={editPrepTime}
-                  onChange={(e) => setEditPrepTime(e.target.value)}
-                  className="text-center"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-cook" className="text-xs">Cook (min)</Label>
-                <Input
-                  id="edit-cook"
-                  type="number"
-                  min={0}
-                  value={editCookTime}
-                  onChange={(e) => setEditCookTime(e.target.value)}
-                  className="text-center"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-notes">Notes</Label>
-              <Textarea
-                id="edit-notes"
-                rows={3}
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                placeholder="Personal notes about this recipe…"
-              />
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => setShowEdit(false)}>
-                Cancel
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleSaveEdit}
-                disabled={isSavingEdit || !editTitle.trim()}
+          <div className="flex items-center justify-between mb-3 px-1">
+            <p className="text-sm text-muted-foreground">
+              {selectedGroceryItems.size} of {missingIngredients.length} selected
+            </p>
+            <button
+              onClick={toggleAllGroceryItems}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              {selectedGroceryItems.size === missingIngredients.length ? "Deselect all" : "Select all"}
+            </button>
+          </div>
+          <div className="overflow-y-auto max-h-[40vh] -mx-1 px-1 space-y-1">
+            {missingIngredients.map((ing, idx) => (
+              <label
+                key={idx}
+                className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
               >
-                {isSavingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
-              </Button>
-            </div>
+                <input
+                  type="checkbox"
+                  checked={selectedGroceryItems.has(idx)}
+                  onChange={() => toggleGroceryItem(idx)}
+                  className="h-5 w-5 rounded border-2 border-muted-foreground accent-primary shrink-0"
+                />
+                <span className="text-sm">{ing.canonicalName || ing.name}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-3 mt-4 pb-2">
+            <Button variant="outline" className="flex-1" onClick={() => setShowGrocerySheet(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleAddSelectedToList}
+              disabled={isAddingToList || selectedGroceryItems.size === 0}
+            >
+              {isAddingToList ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : null}
+              Add to List
+            </Button>
           </div>
         </SheetContent>
       </Sheet>
+
     </MainLayout>
   )
 }

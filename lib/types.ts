@@ -42,7 +42,7 @@ export interface ShoppingItem {
   orderedFrom?: string
 }
 
-export type RecipeImportStatus = "pending" | "extracting" | "parsing" | "ready" | "saved" | "failed"
+export type RecipeImportStatus = "pending" | "extracting" | "parsing" | "ready" | "saved" | "failed" | "deleted"
 
 export interface RecipeImport {
   id: string

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import {
   Clock,
   Users,
@@ -20,17 +20,20 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { QuantityWithUnits } from "@/components/quantity-with-units"
 import { useToast } from "@/hooks/use-toast"
-import { saveRecipe, addToShoppingList } from "@/lib/client/api"
+import { saveRecipe, updateFullRecipe, addToShoppingList, suggestInventoryItems } from "@/lib/client/api"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import type { ParsedRecipe, ParsedIngredient, PantryMatch, PantryMatchStatus } from "@/lib/types"
 
 interface RecipeReviewScreenProps {
-  importId: string
+  mode?: "import" | "edit"
+  recipeId?: string
+  importId?: string
   recipe: ParsedRecipe
   pantryMatches: PantryMatch[]
   compatibilityScore: number
-  sourceUrl: string
-  sourcePlatform: string
+  sourceUrl?: string
+  sourcePlatform?: string
+  notes?: string
   onBack: () => void
   onSaved: () => void
 }
@@ -49,12 +52,15 @@ const STATUS_CONFIG: Record<PantryMatchStatus, { label: string; color: string; i
 }
 
 export function RecipeReviewScreen({
+  mode = "import",
+  recipeId,
   importId,
   recipe: initialRecipe,
   pantryMatches,
   compatibilityScore,
   sourceUrl,
   sourcePlatform,
+  notes: initialNotes,
   onBack,
   onSaved,
 }: RecipeReviewScreenProps) {
@@ -64,10 +70,19 @@ export function RecipeReviewScreen({
   const [servings, setServings] = useState(initialRecipe.servings ?? 0)
   const [prepTime, setPrepTime] = useState(initialRecipe.prepTimeMinutes ?? 0)
   const [cookTime, setCookTime] = useState(initialRecipe.cookTimeMinutes ?? 0)
-  const [steps, setSteps] = useState<string[]>(initialRecipe.steps || [])
-  const [notes, setNotes] = useState("")
+  const [steps, setSteps] = useState<string[]>(() =>
+    (initialRecipe.steps || []).map((s: any) => {
+      if (typeof s === "string") return s
+      if (s && typeof s === "object") return s.step || s.text || s.instruction || s.description || JSON.stringify(s)
+      return String(s)
+    }),
+  )
+  const [notes, setNotes] = useState(initialNotes || "")
   const [saving, setSaving] = useState(false)
   const [addingToList, setAddingToList] = useState(false)
+  const [focusedIngredient, setFocusedIngredient] = useState<number | null>(null)
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [ingredients, setIngredients] = useState<EditableIngredient[]>(() => {
     return (initialRecipe.ingredients || []).map((ing) => {
@@ -87,6 +102,28 @@ export function RecipeReviewScreen({
     () => ingredients.filter((i) => i.pantryStatus === "missing"),
     [ingredients],
   )
+
+  const fetchSuggestions = useCallback((query: string) => {
+    if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current)
+    if (query.length < 2) {
+      setSuggestions([])
+      return
+    }
+    suggestTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await suggestInventoryItems(query)
+        setSuggestions(results)
+      } catch {
+        setSuggestions([])
+      }
+    }, 300)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current)
+    }
+  }, [])
 
   const updateIngredient = (index: number, updates: Partial<EditableIngredient>) => {
     setIngredients((prev) =>
@@ -110,32 +147,50 @@ export function RecipeReviewScreen({
 
     setSaving(true)
     try {
-      await saveRecipe({
-        title,
-        importId,
-        sourceUrl,
-        sourcePlatform,
-        servings: servings || undefined,
-        prepTimeMinutes: prepTime || undefined,
-        cookTimeMinutes: cookTime || undefined,
-        totalTimeMinutes: initialRecipe.totalTimeMinutes || undefined,
-        instructions: steps.filter(Boolean),
-        imageUrl: initialRecipe.imageUrl,
-        notes: notes || undefined,
-        ingredients: ingredients.map((ing, i) => ({
-          name: ing.name,
-          canonicalName: ing.canonicalName,
-          quantity: ing.quantity,
-          unit: ing.unit,
-          preparation: ing.preparation,
-          ingredientGroup: ing.ingredientGroup,
-          optional: ing.optional,
-          sortOrder: i,
-        })),
-      })
+      const ingredientPayload = ingredients.map((ing, i) => ({
+        name: ing.name,
+        canonicalName: ing.canonicalName,
+        quantity: ing.quantity,
+        unit: ing.unit,
+        preparation: ing.preparation,
+        ingredientGroup: ing.ingredientGroup,
+        optional: ing.optional,
+        sortOrder: i,
+      }))
 
-      triggerHaptic(HAPTIC_SUCCESS)
-      toast({ title: "Recipe saved!" })
+      if (mode === "edit" && recipeId) {
+        await updateFullRecipe(recipeId, {
+          title,
+          servings: servings || undefined,
+          prepTimeMinutes: prepTime || undefined,
+          cookTimeMinutes: cookTime || undefined,
+          totalTimeMinutes: initialRecipe.totalTimeMinutes || undefined,
+          instructions: steps.filter(Boolean),
+          imageUrl: initialRecipe.imageUrl,
+          notes: notes || undefined,
+          ingredients: ingredientPayload,
+        })
+        triggerHaptic(HAPTIC_SUCCESS)
+        toast({ title: "Recipe updated!" })
+      } else {
+        await saveRecipe({
+          title,
+          importId,
+          sourceUrl,
+          sourcePlatform,
+          servings: servings || undefined,
+          prepTimeMinutes: prepTime || undefined,
+          cookTimeMinutes: cookTime || undefined,
+          totalTimeMinutes: initialRecipe.totalTimeMinutes || undefined,
+          instructions: steps.filter(Boolean),
+          imageUrl: initialRecipe.imageUrl,
+          notes: notes || undefined,
+          ingredients: ingredientPayload,
+        })
+        triggerHaptic(HAPTIC_SUCCESS)
+        toast({ title: "Recipe saved!" })
+      }
+
       onSaved()
     } catch (err) {
       triggerHaptic(HAPTIC_ERROR)
@@ -195,7 +250,9 @@ export function RecipeReviewScreen({
           <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-lg font-semibold flex-1">Review Recipe</h1>
+          <h1 className="text-lg font-semibold flex-1">
+            {mode === "edit" ? "Edit Recipe" : "Review Recipe"}
+          </h1>
         </div>
 
         {/* Recipe image preview */}
@@ -331,12 +388,39 @@ export function RecipeReviewScreen({
                   <Card className="overflow-hidden">
                     <CardContent className="p-3 space-y-2">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 space-y-0.5">
+                        <div className="flex-1 space-y-0.5 relative">
                           <Input
                             value={ing.name}
-                            onChange={(e) => updateIngredient(i, { name: e.target.value })}
+                            onChange={(e) => {
+                              updateIngredient(i, { name: e.target.value })
+                              fetchSuggestions(e.target.value)
+                            }}
+                            onFocus={() => {
+                              setFocusedIngredient(i)
+                              if (ing.name.length >= 2) fetchSuggestions(ing.name)
+                            }}
+                            onBlur={() => setTimeout(() => setFocusedIngredient(null), 200)}
                             className="text-sm h-8"
                           />
+                          {focusedIngredient === i && suggestions.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-md border bg-popover shadow-md max-h-32 overflow-y-auto">
+                              {suggestions.map((s) => (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    updateIngredient(i, { name: s, canonicalName: s })
+                                    setSuggestions([])
+                                    setFocusedIngredient(null)
+                                  }}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           {ing.preparation && (
                             <p className="text-xs text-muted-foreground pl-1">{ing.preparation}</p>
                           )}
@@ -437,7 +521,7 @@ export function RecipeReviewScreen({
             disabled={saving || !title.trim()}
           >
             <Save className="h-4 w-4" />
-            {saving ? "Saving…" : "Save Recipe"}
+            {saving ? "Saving…" : mode === "edit" ? "Update Recipe" : "Save Recipe"}
           </Button>
         </div>
       </div>

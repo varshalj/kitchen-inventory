@@ -1,0 +1,82 @@
+import { NextRequest, NextResponse } from "next/server"
+import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
+import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
+import { computePantryMatches, computeCompatibilityScore } from "@/lib/server/pantry-match"
+import type { ParsedIngredient } from "@/lib/types"
+
+export async function GET(_request: NextRequest) {
+  try {
+    const supabase = await createSupabaseFromRequest()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (!user || authError) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { data: rows, error } = await supabase
+      .from("recipe_imports")
+      .select("*")
+      .eq("user_id", user.id)
+      .in("status", ["ready", "pending", "extracting", "parsing"])
+      .order("updated_at", { ascending: false })
+      .limit(5)
+
+    if (error) throw error
+
+    const readyImports = (rows || []).filter((r: any) => r.status === "ready" && r.parsed_recipe)
+    const pendingImports = (rows || []).filter((r: any) => r.status !== "ready")
+
+    // For ready imports, compute pantry matches
+    const enriched = []
+    for (const row of readyImports) {
+      const parsedRecipe = row.parsed_recipe
+      try {
+        const pantryItems = await inventoryRepo.list(supabase, false)
+        const pantryForMatching = pantryItems.map((p) => ({
+          name: p.name,
+          expiryDate: p.expiryDate,
+        }))
+        const parsedIngredients: ParsedIngredient[] = (parsedRecipe.ingredients || []).map((ing: any) => ({
+          name: ing.name,
+          canonicalName: ing.canonicalName,
+          quantity: ing.quantity,
+          unit: ing.unit,
+          optional: ing.optional ?? false,
+        }))
+        const pantryMatches = computePantryMatches(parsedIngredients, pantryForMatching)
+        const compatibilityScore = computeCompatibilityScore(pantryMatches)
+
+        enriched.push({
+          importId: row.id,
+          url: row.url,
+          platform: row.platform,
+          status: row.status,
+          recipe: parsedRecipe,
+          pantryMatches,
+          compatibilityScore,
+        })
+      } catch {
+        enriched.push({
+          importId: row.id,
+          url: row.url,
+          platform: row.platform,
+          status: row.status,
+          recipe: parsedRecipe,
+          pantryMatches: [],
+          compatibilityScore: 0,
+        })
+      }
+    }
+
+    return NextResponse.json({
+      ready: enriched,
+      pending: pendingImports.map((r: any) => ({
+        importId: r.id,
+        url: r.url,
+        status: r.status,
+      })),
+    })
+  } catch (error) {
+    console.error("PENDING IMPORTS GET ERROR:", error)
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 })
+  }
+}
