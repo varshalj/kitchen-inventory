@@ -74,7 +74,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Recipe was deleted directly from DB; reset import status
-      await recipeImportRepo.updateStatus(supabase, existing.id, "deleted")
+      // #region agent log
+      const resetResult = await supabase.from("recipe_imports").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", existing.id).eq("user_id", user.id)
+      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:reset',message:'reset import status result',data:{importId:existing.id,resetError:resetResult.error?.message||null},timestamp:Date.now(),hypothesisId:'H-3'})}).catch(()=>{});
+      // #endregion
     }
 
     const importId = crypto.randomUUID()
