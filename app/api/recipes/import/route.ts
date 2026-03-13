@@ -52,6 +52,9 @@ export async function POST(request: NextRequest) {
 
     // Deduplication: check if this URL was already imported
     const existing = await recipeImportRepo.findByCanonicalUrl(supabase, canonicalUrl)
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/recipes/import/route.ts:54',message:'Duplicate check result',data:{canonicalUrl,existingId:existing?.id||null,existingStatus:existing?.status||null,hasDuplicate:!!existing},timestamp:Date.now(),hypothesisId:'H-duplicate'})}).catch(()=>{});
+    // #endregion
     if (existing) {
       return NextResponse.json({
         importId: existing.id,

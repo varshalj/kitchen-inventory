@@ -19,6 +19,10 @@ export async function POST(
 
     const body = await request.json()
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/recipes/import/[id]/callback:22',message:'n8n callback received',data:{id,hasError:!!body.error,errorMsg:body.error||null,hasRecipe:!!(body.recipe||body.parsedRecipe),recipeTitle:(body.recipe||body.parsedRecipe)?.title||null,rawMetadata:body.rawMetadata||null},timestamp:Date.now(),hypothesisId:'H-callback'})}).catch(()=>{});
+    // #endregion
+
     // Service role client bypasses RLS — the callback is authenticated
     // by the shared secret, not by a user session.
     const supabase = supabaseAdmin

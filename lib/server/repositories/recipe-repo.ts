@@ -341,6 +341,16 @@ export const recipeRepo = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
 
+    // Get the recipe to find its import_id before deleting
+    const { data: recipeRows } = await supabase
+      .from("recipes")
+      .select("import_id")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .limit(1)
+
+    const importId = recipeRows?.[0]?.import_id
+
     const { error: ingError } = await supabase
       .from("recipe_ingredients")
       .delete()
@@ -355,5 +365,14 @@ export const recipeRepo = {
       .eq("user_id", user.id)
 
     if (recipeError) throw recipeError
+
+    // Reset import record status so the URL can be re-imported
+    if (importId) {
+      await supabase
+        .from("recipe_imports")
+        .update({ status: "deleted", updated_at: new Date().toISOString() })
+        .eq("id", importId)
+        .eq("user_id", user.id)
+    }
   },
 }

@@ -56,6 +56,43 @@
     {
       "parameters": {
         "url": "=https://defuddle.md/www.youtube.com/watch?v={{ $json.videoId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "document"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "navigate"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "none"
+            },
+            {
+              "name": "Sec-Fetch-User",
+              "value": "?1"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            }
+          ]
+        },
         "options": {
           "redirect": {
             "redirect": {
@@ -119,21 +156,32 @@
     },
     {
       "parameters": {
-        "url": "=https://www.youtube.com/watch?v={{ $('Validate URL').first().json.videoId }}",
-        "options": {
-          "redirect": {
-            "redirect": {
-              "followRedirects": true,
-              "maxRedirects": 5
+        "method": "POST",
+        "url": "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)"
             }
-          },
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ context: { client: { clientName: 'ANDROID', clientVersion: '20.10.38' } }, videoId: $('Validate URL').first().json.videoId }) }}",
+        "options": {
           "response": {
             "response": {
               "fullResponse": false,
-              "responseFormat": "text"
+              "responseFormat": "json"
             }
           },
-          "timeout": 20000
+          "timeout": 15000
         }
       },
       "id": "fetch-yt-page",
@@ -145,7 +193,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract YouTube transcript URL from ytInitialPlayerResponse\n// Falls back to video description if no captions are available\nconst pageHtml = $input.first().json.data || $input.first().json.body || '';\nconst prev = $('Validate URL').first().json;\n\nif (!pageHtml || pageHtml.length < 500) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle: '',\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'Failed to fetch YouTube page'\n    }\n  };\n}\n\nconst titleMatch = pageHtml.match(/<title[^>]*>([^<]+)<\\/title>/i);\nconst videoTitle = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : 'YouTube Recipe';\n\nconst playerMatch = pageHtml.match(/var ytInitialPlayerResponse\\s*=\\s*(\\{.+?\\});\\s*(?:var |const |let |<\\/script>)/s);\nif (!playerMatch) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'Could not find ytInitialPlayerResponse in page'\n    }\n  };\n}\n\nlet playerData;\ntry {\n  playerData = JSON.parse(playerMatch[1]);\n} catch (e) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'Failed to parse ytInitialPlayerResponse: ' + e.message\n    }\n  };\n}\n\nconst captionsRenderer = playerData?.captions?.playerCaptionsTracklistRenderer;\nconst tracks = captionsRenderer?.captionTracks;\n\nif (!tracks || tracks.length === 0) {\n  const description = playerData?.videoDetails?.shortDescription || '';\n  if (description.length > 50) {\n    return {\n      json: {\n        url: prev.url,\n        importId: prev.importId,\n        callbackUrl: prev.callbackUrl,\n        callbackSecret: prev.callbackSecret,\n        videoTitle,\n        transcriptUrl: null,\n        descriptionText: description.substring(0, 6000),\n        thumbnailUrl: prev.thumbnailUrl,\n        error: null\n      }\n    };\n  }\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'No captions or description found for this video'\n    }\n  };\n}\n\nconst englishTrack = tracks.find(t => t.languageCode === 'en' || t.languageCode === 'en-US');\nconst track = englishTrack || tracks[0];\nconst baseUrl = track.baseUrl;\n\nif (!baseUrl) {\n  const description = playerData?.videoDetails?.shortDescription || '';\n  if (description.length > 50) {\n    return {\n      json: {\n        url: prev.url,\n        importId: prev.importId,\n        callbackUrl: prev.callbackUrl,\n        callbackSecret: prev.callbackSecret,\n        videoTitle,\n        transcriptUrl: null,\n        descriptionText: description.substring(0, 6000),\n        thumbnailUrl: prev.thumbnailUrl,\n        error: null\n      }\n    };\n  }\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'Caption track has no baseUrl'\n    }\n  };\n}\n\nreturn {\n  json: {\n    url: prev.url,\n    importId: prev.importId,\n    callbackUrl: prev.callbackUrl,\n    callbackSecret: prev.callbackSecret,\n    videoTitle,\n    transcriptUrl: baseUrl + '&fmt=json3',\n    descriptionText: null,\n    thumbnailUrl: prev.thumbnailUrl,\n    error: null\n  }\n};"
+        "jsCode": "// Extract caption URL from InnerTube API response (same method as defuddle)\n// Falls back to video description if no captions are available\nconst playerData = $input.first().json;\nconst prev = $('Validate URL').first().json;\n\nconst videoTitle = playerData?.videoDetails?.title || 'YouTube Recipe';\nconst description = playerData?.videoDetails?.shortDescription || '';\n\nif (!playerData || !playerData.videoDetails) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle: '',\n      transcriptUrl: null,\n      descriptionText: description.length > 50 ? description.substring(0, 6000) : null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: description.length > 50 ? null : 'InnerTube API returned no video details'\n    }\n  };\n}\n\nconst captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;\n\nif (!captionTracks || captionTracks.length === 0) {\n  if (description.length > 50) {\n    return {\n      json: {\n        url: prev.url,\n        importId: prev.importId,\n        callbackUrl: prev.callbackUrl,\n        callbackSecret: prev.callbackSecret,\n        videoTitle,\n        transcriptUrl: null,\n        descriptionText: description.substring(0, 6000),\n        thumbnailUrl: prev.thumbnailUrl,\n        error: null\n      }\n    };\n  }\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'No captions or description found for this video'\n    }\n  };\n}\n\nconst englishTrack = captionTracks.find(t => t.languageCode === 'en' || t.languageCode === 'en-US');\nconst track = englishTrack || captionTracks[0];\nconst baseUrl = track?.baseUrl;\n\nif (!baseUrl) {\n  if (description.length > 50) {\n    return {\n      json: {\n        url: prev.url,\n        importId: prev.importId,\n        callbackUrl: prev.callbackUrl,\n        callbackSecret: prev.callbackSecret,\n        videoTitle,\n        transcriptUrl: null,\n        descriptionText: description.substring(0, 6000),\n        thumbnailUrl: prev.thumbnailUrl,\n        error: null\n      }\n    };\n  }\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'Caption track has no baseUrl'\n    }\n  };\n}\n\nreturn {\n  json: {\n    url: prev.url,\n    importId: prev.importId,\n    callbackUrl: prev.callbackUrl,\n    callbackSecret: prev.callbackSecret,\n    videoTitle,\n    transcriptUrl: baseUrl,\n    descriptionText: null,\n    thumbnailUrl: prev.thumbnailUrl,\n    error: null\n  }\n};"
       },
       "id": "extract-transcript-url",
       "name": "Extract Transcript URL",
@@ -155,12 +203,49 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-transcript-url",
+              "leftValue": "={{ $json.transcriptUrl }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "has-transcript-url",
+      "name": "Has Transcript URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1625, 180]
+    },
+    {
+      "parameters": {
         "url": "={{ $json.transcriptUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0"
+            }
+          ]
+        },
         "options": {
           "response": {
             "response": {
               "fullResponse": false,
-              "responseFormat": "json"
+              "responseFormat": "text"
             }
           },
           "timeout": 15000
@@ -175,7 +260,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build transcript text from YouTube json3 caption format\n// Also handles description fallback when no captions are available\nconst transcriptData = $input.first().json;\nconst prev = $('Extract Transcript URL').first().json;\n\nif (prev.error) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      error: prev.error,\n      rawContent: ''\n    }\n  };\n}\n\nif (!prev.transcriptUrl && prev.descriptionText) {\n  return {\n    json: {\n      url: prev.url,\n      importId: prev.importId,\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      videoTitle: prev.videoTitle,\n      transcriptText: prev.descriptionText,\n      thumbnailUrl: prev.thumbnailUrl,\n      sourceType: 'description'\n    }\n  };\n}\n\nif (transcriptData && transcriptData.events) {\n  const segments = [];\n  for (const event of transcriptData.events) {\n    if (!event.segs) continue;\n    const text = event.segs\n      .map(s => s.utf8 || '')\n      .join('')\n      .replace(/\\n/g, ' ')\n      .trim();\n    if (text) segments.push(text);\n  }\n  const transcriptText = segments.join(' ').substring(0, 6000);\n  return {\n    json: {\n      url: prev.url,\n      importId: prev.importId,\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      videoTitle: prev.videoTitle,\n      transcriptText,\n      thumbnailUrl: prev.thumbnailUrl,\n      sourceType: 'transcript'\n    }\n  };\n}\n\nreturn {\n  json: {\n    callbackUrl: prev.callbackUrl,\n    callbackSecret: prev.callbackSecret,\n    importId: prev.importId,\n    error: 'No transcript events found',\n    rawContent: ''\n  }\n};"
+        "jsCode": "// Parse transcript from XML captions or description fallback\nconst raw = $input.first().json;\nconst prev = $('Extract Transcript URL').first().json;\n\nif (prev.error) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      error: prev.error,\n      rawContent: ''\n    }\n  };\n}\n\nif (!prev.transcriptUrl && prev.descriptionText) {\n  return {\n    json: {\n      url: prev.url,\n      importId: prev.importId,\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      videoTitle: prev.videoTitle,\n      transcriptText: prev.descriptionText,\n      thumbnailUrl: prev.thumbnailUrl,\n      sourceType: 'description'\n    }\n  };\n}\n\n// Parse XML caption response\nconst xml = raw.data || raw.body || (typeof raw === 'string' ? raw : '');\nif (xml && xml.length > 50) {\n  const segments = [];\n  // Match <text start=\"...\" dur=\"...\">content</text> elements\n  const regex = /<text[^>]*>([^<]*)<\\/text>/g;\n  let match;\n  while ((match = regex.exec(xml)) !== null) {\n    let text = match[1]\n      .replace(/&amp;/g, '&')\n      .replace(/&lt;/g, '<')\n      .replace(/&gt;/g, '>')\n      .replace(/&quot;/g, '\"')\n      .replace(/&#39;/g, \"'\")\n      .replace(/\\n/g, ' ')\n      .trim();\n    if (text) segments.push(text);\n  }\n  if (segments.length > 0) {\n    const transcriptText = segments.join(' ').substring(0, 6000);\n    return {\n      json: {\n        url: prev.url,\n        importId: prev.importId,\n        callbackUrl: prev.callbackUrl,\n        callbackSecret: prev.callbackSecret,\n        videoTitle: prev.videoTitle,\n        transcriptText,\n        thumbnailUrl: prev.thumbnailUrl,\n        sourceType: 'transcript'\n      }\n    };\n  }\n}\n\nreturn {\n  json: {\n    callbackUrl: prev.callbackUrl,\n    callbackSecret: prev.callbackSecret,\n    importId: prev.importId,\n    error: 'No transcript content found',\n    rawContent: ''\n  }\n};"
       },
       "id": "format-transcript",
       "name": "Format Transcript",
@@ -237,6 +322,43 @@
     {
       "parameters": {
         "url": "=https://defuddle.md/{{ $json.url.replace(/^https?:\\/\\//, '') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "Sec-Fetch-Dest",
+              "value": "document"
+            },
+            {
+              "name": "Sec-Fetch-Mode",
+              "value": "navigate"
+            },
+            {
+              "name": "Sec-Fetch-Site",
+              "value": "none"
+            },
+            {
+              "name": "Sec-Fetch-User",
+              "value": "?1"
+            },
+            {
+              "name": "Upgrade-Insecure-Requests",
+              "value": "1"
+            }
+          ]
+        },
         "options": {
           "redirect": {
             "redirect": {
@@ -483,7 +605,13 @@
       "main": [[{ "node": "Extract Transcript URL", "type": "main", "index": 0 }]]
     },
     "Extract Transcript URL": {
-      "main": [[{ "node": "Fetch Transcript", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Has Transcript URL?", "type": "main", "index": 0 }]]
+    },
+    "Has Transcript URL?": {
+      "main": [
+        [{ "node": "Fetch Transcript", "type": "main", "index": 0 }],
+        [{ "node": "Format Transcript", "type": "main", "index": 0 }]
+      ]
     },
     "Fetch Transcript": {
       "main": [[{ "node": "Format Transcript", "type": "main", "index": 0 }]]
