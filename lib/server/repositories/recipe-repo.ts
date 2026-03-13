@@ -69,12 +69,14 @@ export const recipeImportRepo = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
 
+    // Return the most recent import for this URL regardless of status.
+    // The caller checks recipe existence to decide whether to treat it as a duplicate or allow re-import.
     const { data: rows, error } = await supabase
       .from("recipe_imports")
       .select("*")
       .eq("user_id", user.id)
       .eq("canonical_url", canonicalUrl)
-      .eq("status", "saved")
+      .order("created_at", { ascending: false })
       .limit(1)
 
     if (error) throw error

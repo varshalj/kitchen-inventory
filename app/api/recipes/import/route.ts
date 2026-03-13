@@ -53,19 +53,14 @@ export async function POST(request: NextRequest) {
     const canonicalUrl = canonicalizeUrl(rawUrl)
     const platform = detectPlatform(canonicalUrl)
 
-    // #region agent log
-    const { data: _dbRows } = await supabase.from("recipe_imports").select("id,status,canonical_url").eq("user_id", user.id).eq("canonical_url", canonicalUrl)
-    console.error('[DEBUG:db-raw]', JSON.stringify({canonicalUrl,rows:_dbRows}))
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:db-raw',message:'raw DB rows for canonical url',data:{canonicalUrl,rows:_dbRows},timestamp:Date.now(),hypothesisId:'H-A,H-B,H-STATUS'})}).catch(()=>{});
-    // #endregion
     // Deduplication: check if this URL was already imported
     const existing = await recipeImportRepo.findByCanonicalUrl(supabase, canonicalUrl)
     // #region agent log
-    console.error('[DEBUG:dedup]', JSON.stringify({rawUrl,canonicalUrl,existingId:existing?.id||null,existingStatus:existing?.status||null,existingCanonicalUrl:existing?.canonicalUrl||null}))
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:dedup',message:'dedup check',data:{rawUrl,canonicalUrl,existingId:existing?.id||null,existingStatus:existing?.status||null,existingCanonicalUrl:existing?.canonicalUrl||null},timestamp:Date.now(),hypothesisId:'H-A,H-B'})}).catch(()=>{});
+    console.error('[DEBUG:dedup-v2]', JSON.stringify({rawUrl,canonicalUrl,existingId:existing?.id||null,existingStatus:existing?.status||null}))
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:dedup-v2',message:'dedup check post-fix',data:{rawUrl,canonicalUrl,existingId:existing?.id||null,existingStatus:existing?.status||null},timestamp:Date.now(),hypothesisId:'H-STATUS-FIX'})}).catch(()=>{});
     // #endregion
     if (existing) {
-      // Verify the recipe still exists in the recipes table
+      // Always verify whether the recipe actually exists, regardless of import status
       const { data: recipeRows, error: recipeRowsError } = await supabase
         .from("recipes")
         .select("id, import_id")
@@ -73,11 +68,12 @@ export async function POST(request: NextRequest) {
         .eq("user_id", user.id)
         .limit(1)
       // #region agent log
-      console.error('[DEBUG:recipe-check]', JSON.stringify({existingImportId:existing.id,recipeFound:recipeRows?.length||0,recipeImportId:recipeRows?.[0]?.import_id||null,queryError:recipeRowsError?.message||null}))
-      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:recipe-check',message:'recipe existence check',data:{existingImportId:existing.id,recipeFound:recipeRows?.length||0,recipeImportId:recipeRows?.[0]?.import_id||null,queryError:recipeRowsError?.message||null},timestamp:Date.now(),hypothesisId:'H-C,H-D'})}).catch(()=>{});
+      console.error('[DEBUG:recipe-check-v2]', JSON.stringify({existingImportId:existing.id,existingStatus:existing.status,recipeFound:recipeRows?.length||0,queryError:recipeRowsError?.message||null}))
+      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:recipe-check-v2',message:'recipe existence check post-fix',data:{existingImportId:existing.id,existingStatus:existing.status,recipeFound:recipeRows?.length||0,queryError:recipeRowsError?.message||null},timestamp:Date.now(),hypothesisId:'H-STATUS-FIX'})}).catch(()=>{});
       // #endregion
 
       if (recipeRows && recipeRows.length > 0) {
+        // Recipe exists → true duplicate, no need to re-import
         return NextResponse.json({
           importId: existing.id,
           status: existing.status,
@@ -86,7 +82,13 @@ export async function POST(request: NextRequest) {
         })
       }
 
-      // Recipe was deleted directly from DB; reset import status so URL can be re-imported
+      // Recipe no longer exists. If an import is still in progress, return it so frontend can poll.
+      const inProgressStatuses = ["pending", "extracting", "parsing", "ready"]
+      if (inProgressStatuses.includes(existing.status)) {
+        return NextResponse.json({ importId: existing.id, status: existing.status })
+      }
+
+      // Otherwise (saved but recipe was deleted, or failed/deleted) — reset and allow re-import
       await recipeImportRepo.updateStatus(supabase, existing.id, "deleted")
     }
 
@@ -99,8 +101,8 @@ export async function POST(request: NextRequest) {
     })
 
     // #region agent log
-    console.error('[DEBUG:webhook-reached]', JSON.stringify({importId,canonicalUrl}))
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:webhook-reached',message:'dedup passed, new import created',data:{importId,canonicalUrl},timestamp:Date.now(),hypothesisId:'H-A,H-B,H-C,H-D'})}).catch(()=>{});
+    console.error('[DEBUG:webhook-v2]', JSON.stringify({importId,canonicalUrl}))
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:webhook-v2',message:'new import, webhook firing',data:{importId,canonicalUrl},timestamp:Date.now(),hypothesisId:'H-STATUS-FIX'})}).catch(()=>{});
     // #endregion
     // Fire webhook to n8n
     const webhookUrl = process.env.N8N_WEBHOOK_URL
