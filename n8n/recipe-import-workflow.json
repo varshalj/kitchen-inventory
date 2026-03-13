@@ -60,36 +60,8 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "User-Agent",
-              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            },
-            {
               "name": "Accept",
-              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-            },
-            {
-              "name": "Accept-Language",
-              "value": "en-US,en;q=0.9"
-            },
-            {
-              "name": "Sec-Fetch-Dest",
-              "value": "document"
-            },
-            {
-              "name": "Sec-Fetch-Mode",
-              "value": "navigate"
-            },
-            {
-              "name": "Sec-Fetch-Site",
-              "value": "none"
-            },
-            {
-              "name": "Sec-Fetch-User",
-              "value": "?1"
-            },
-            {
-              "name": "Upgrade-Insecure-Requests",
-              "value": "1"
+              "value": "*/*"
             }
           ]
         },
@@ -106,7 +78,7 @@
               "responseFormat": "text"
             }
           },
-          "timeout": 20000
+          "timeout": 30000
         }
       },
       "id": "fetch-yt-defuddle",
@@ -156,32 +128,34 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        "url": "=https://www.youtube.com/watch?v={{ $('Validate URL').first().json.videoId }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
-              "name": "Content-Type",
-              "value": "application/json"
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             },
             {
-              "name": "User-Agent",
-              "value": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)"
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
             }
           ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ context: { client: { clientName: 'ANDROID', clientVersion: '20.10.38' } }, videoId: $('Validate URL').first().json.videoId }) }}",
         "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 3
+            }
+          },
           "response": {
             "response": {
               "fullResponse": false,
-              "responseFormat": "json"
+              "responseFormat": "text"
             }
           },
-          "timeout": 15000
+          "timeout": 20000
         }
       },
       "id": "fetch-yt-page",
@@ -193,7 +167,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract caption URL from InnerTube API response (same method as defuddle)\n// Falls back to video description if no captions are available\nconst playerData = $input.first().json;\nconst prev = $('Validate URL').first().json;\n\nconst videoTitle = playerData?.videoDetails?.title || 'YouTube Recipe';\nconst description = playerData?.videoDetails?.shortDescription || '';\n\nif (!playerData || !playerData.videoDetails) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle: '',\n      transcriptUrl: null,\n      descriptionText: description.length > 50 ? description.substring(0, 6000) : null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: description.length > 50 ? null : 'InnerTube API returned no video details'\n    }\n  };\n}\n\nconst captionTracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;\n\nif (!captionTracks || captionTracks.length === 0) {\n  if (description.length > 50) {\n    return {\n      json: {\n        url: prev.url,\n        importId: prev.importId,\n        callbackUrl: prev.callbackUrl,\n        callbackSecret: prev.callbackSecret,\n        videoTitle,\n        transcriptUrl: null,\n        descriptionText: description.substring(0, 6000),\n        thumbnailUrl: prev.thumbnailUrl,\n        error: null\n      }\n    };\n  }\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'No captions or description found for this video'\n    }\n  };\n}\n\nconst englishTrack = captionTracks.find(t => t.languageCode === 'en' || t.languageCode === 'en-US');\nconst track = englishTrack || captionTracks[0];\nconst baseUrl = track?.baseUrl;\n\nif (!baseUrl) {\n  if (description.length > 50) {\n    return {\n      json: {\n        url: prev.url,\n        importId: prev.importId,\n        callbackUrl: prev.callbackUrl,\n        callbackSecret: prev.callbackSecret,\n        videoTitle,\n        transcriptUrl: null,\n        descriptionText: description.substring(0, 6000),\n        thumbnailUrl: prev.thumbnailUrl,\n        error: null\n      }\n    };\n  }\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl,\n      callbackSecret: prev.callbackSecret,\n      importId: prev.importId,\n      url: prev.url,\n      videoTitle,\n      transcriptUrl: null,\n      descriptionText: null,\n      thumbnailUrl: prev.thumbnailUrl,\n      error: 'Caption track has no baseUrl'\n    }\n  };\n}\n\nreturn {\n  json: {\n    url: prev.url,\n    importId: prev.importId,\n    callbackUrl: prev.callbackUrl,\n    callbackSecret: prev.callbackSecret,\n    videoTitle,\n    transcriptUrl: baseUrl,\n    descriptionText: null,\n    thumbnailUrl: prev.thumbnailUrl,\n    error: null\n  }\n};"
+        "jsCode": "// Parse ytInitialPlayerResponse from YouTube page HTML (same approach as defuddle fallback)\nconst html = $input.first().json.data || $input.first().json.body || '';\nconst prev = $('Validate URL').first().json;\n\nif (!html || html.length < 1000) {\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl, callbackSecret: prev.callbackSecret,\n      importId: prev.importId, url: prev.url, videoTitle: '',\n      transcriptUrl: null, descriptionText: null, thumbnailUrl: prev.thumbnailUrl,\n      error: 'Failed to fetch YouTube page (length: ' + (html || '').length + ')'\n    }\n  };\n}\n\n// Extract ytInitialPlayerResponse JSON from HTML script tags\nlet playerData = null;\nconst marker = 'ytInitialPlayerResponse';\nconst idx = html.indexOf(marker);\nif (idx !== -1) {\n  const startBrace = html.indexOf('{', idx);\n  if (startBrace !== -1) {\n    let depth = 0;\n    let end = startBrace;\n    for (let i = startBrace; i < html.length && i < startBrace + 500000; i++) {\n      if (html[i] === '{') depth++;\n      else if (html[i] === '}') { depth--; if (depth === 0) { end = i; break; } }\n    }\n    if (depth === 0) {\n      try { playerData = JSON.parse(html.substring(startBrace, end + 1)); } catch (e) {}\n    }\n  }\n}\n\nif (!playerData || !playerData.videoDetails) {\n  // Try to get at least the title from the HTML\n  const titleMatch = html.match(/<title>([^<]+)<\\/title>/);\n  const pageTitle = titleMatch ? titleMatch[1].replace(' - YouTube', '').trim() : '';\n  // Try to extract description from meta tag\n  const descMatch = html.match(/property=\"og:description\"\\s+content=\"([^\"]*)\"/)\n    || html.match(/name=\"description\"\\s+content=\"([^\"]*)\"/)\n    || html.match(/\"shortDescription\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"/);\n  const desc = descMatch ? descMatch[1].replace(/\\\\n/g, '\\n').replace(/\\\\\"/g, '\"') : '';\n\n  if (desc.length > 50) {\n    return {\n      json: {\n        url: prev.url, importId: prev.importId,\n        callbackUrl: prev.callbackUrl, callbackSecret: prev.callbackSecret,\n        videoTitle: pageTitle || 'YouTube Recipe',\n        transcriptUrl: null,\n        descriptionText: desc.substring(0, 6000),\n        thumbnailUrl: prev.thumbnailUrl, error: null\n      }\n    };\n  }\n  return {\n    json: {\n      callbackUrl: prev.callbackUrl, callbackSecret: prev.callbackSecret,\n      importId: prev.importId, url: prev.url, videoTitle: pageTitle || '',\n      transcriptUrl: null, descriptionText: null, thumbnailUrl: prev.thumbnailUrl,\n      error: 'Could not parse ytInitialPlayerResponse from YouTube page'\n    }\n  };\n}\n\nconst videoTitle = playerData.videoDetails.title || 'YouTube Recipe';\nconst description = playerData.videoDetails.shortDescription || '';\n\nconst tracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks;\nif (tracks && tracks.length > 0) {\n  const enTrack = tracks.find(t => t.languageCode === 'en' || t.languageCode === 'en-US');\n  const track = enTrack || tracks[0];\n  if (track?.baseUrl) {\n    return {\n      json: {\n        url: prev.url, importId: prev.importId,\n        callbackUrl: prev.callbackUrl, callbackSecret: prev.callbackSecret,\n        videoTitle, transcriptUrl: track.baseUrl,\n        descriptionText: null, thumbnailUrl: prev.thumbnailUrl, error: null\n      }\n    };\n  }\n}\n\nif (description.length > 50) {\n  return {\n    json: {\n      url: prev.url, importId: prev.importId,\n      callbackUrl: prev.callbackUrl, callbackSecret: prev.callbackSecret,\n      videoTitle, transcriptUrl: null,\n      descriptionText: description.substring(0, 6000),\n      thumbnailUrl: prev.thumbnailUrl, error: null\n    }\n  };\n}\n\nreturn {\n  json: {\n    callbackUrl: prev.callbackUrl, callbackSecret: prev.callbackSecret,\n    importId: prev.importId, url: prev.url, videoTitle,\n    transcriptUrl: null, descriptionText: null,\n    thumbnailUrl: prev.thumbnailUrl,\n    error: 'No captions or description found in page data'\n  }\n};"
       },
       "id": "extract-transcript-url",
       "name": "Extract Transcript URL",
@@ -326,36 +300,8 @@
         "headerParameters": {
           "parameters": [
             {
-              "name": "User-Agent",
-              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            },
-            {
               "name": "Accept",
-              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-            },
-            {
-              "name": "Accept-Language",
-              "value": "en-US,en;q=0.9"
-            },
-            {
-              "name": "Sec-Fetch-Dest",
-              "value": "document"
-            },
-            {
-              "name": "Sec-Fetch-Mode",
-              "value": "navigate"
-            },
-            {
-              "name": "Sec-Fetch-Site",
-              "value": "none"
-            },
-            {
-              "name": "Sec-Fetch-User",
-              "value": "?1"
-            },
-            {
-              "name": "Upgrade-Insecure-Requests",
-              "value": "1"
+              "value": "*/*"
             }
           ]
         },
@@ -372,7 +318,7 @@
               "responseFormat": "text"
             }
           },
-          "timeout": 15000
+          "timeout": 30000
         }
       },
       "id": "fetch-blog-defuddle",
