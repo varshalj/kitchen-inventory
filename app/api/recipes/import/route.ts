@@ -53,6 +53,11 @@ export async function POST(request: NextRequest) {
     const canonicalUrl = canonicalizeUrl(rawUrl)
     const platform = detectPlatform(canonicalUrl)
 
+    // #region agent log
+    const { data: _dbRows } = await supabase.from("recipe_imports").select("id,status,canonical_url").eq("user_id", user.id).eq("canonical_url", canonicalUrl)
+    console.error('[DEBUG:db-raw]', JSON.stringify({canonicalUrl,rows:_dbRows}))
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'import/route.ts:db-raw',message:'raw DB rows for canonical url',data:{canonicalUrl,rows:_dbRows},timestamp:Date.now(),hypothesisId:'H-A,H-B,H-STATUS'})}).catch(()=>{});
+    // #endregion
     // Deduplication: check if this URL was already imported
     const existing = await recipeImportRepo.findByCanonicalUrl(supabase, canonicalUrl)
     // #region agent log
