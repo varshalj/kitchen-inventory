@@ -234,8 +234,8 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome 
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85vh] rounded-t-2xl">
-        <SheetHeader>
+      <SheetContent side="bottom" className="max-h-[85vh] rounded-t-2xl flex flex-col">
+        <SheetHeader className="shrink-0">
           <SheetTitle className="flex items-center gap-2">
             {(phase === "url-input" || phase === "text-input") && (
               <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => setPhase("choose")}>
@@ -252,7 +252,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome 
           )}
         </SheetHeader>
 
-        <div className="px-1 py-4 space-y-3">
+        <div className="flex-1 overflow-y-auto px-1 py-4 space-y-3">
           {/* Choose phase */}
           {phase === "choose" && (
             <>
@@ -321,24 +321,23 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome 
 
           {/* Text input phase */}
           {phase === "text-input" && (
-            <>
+            <div className="flex flex-col gap-3 h-full">
               <Textarea
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
                 placeholder="Paste the full recipe here — ingredients, steps, everything..."
-                rows={8}
-                className="resize-none text-sm"
+                className="resize-none text-sm flex-1 min-h-[200px]"
                 autoFocus
               />
               <Button
-                className="w-full"
+                className="w-full shrink-0"
                 onClick={handleTextParse}
                 disabled={pasteText.trim().length < 20}
               >
                 <ChefHat className="h-4 w-4 mr-1" />
                 Transform to Recipe
               </Button>
-            </>
+            </div>
           )}
 
           {/* Importing phase with animated progress */}

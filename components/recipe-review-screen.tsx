@@ -139,6 +139,10 @@ export function RecipeReviewScreen({
     setSteps((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const removeIngredient = (index: number) => {
+    setIngredients((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handleSave = async () => {
     if (!title.trim()) {
       toast({ title: "Title required", variant: "destructive" })
@@ -425,16 +429,26 @@ export function RecipeReviewScreen({
                             <p className="text-xs text-muted-foreground pl-1">{ing.preparation}</p>
                           )}
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] shrink-0 ${config.color}`}
-                        >
-                          <Icon className="h-3 w-3 mr-1" />
-                          {config.label}
-                          {ing.pantryStatus === "expiring" && ing.daysUntilExpiry != null && (
-                            <span className="ml-0.5">({ing.daysUntilExpiry}d)</span>
-                          )}
-                        </Badge>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${config.color}`}
+                          >
+                            <Icon className="h-3 w-3 mr-1" />
+                            {config.label}
+                            {ing.pantryStatus === "expiring" && ing.daysUntilExpiry != null && (
+                              <span className="ml-0.5">({ing.daysUntilExpiry}d)</span>
+                            )}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeIngredient(i)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                       <QuantityWithUnits
                         value={ing.quantity ?? 0}
@@ -447,6 +461,19 @@ export function RecipeReviewScreen({
               )
             })}
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full"
+            onClick={() =>
+              setIngredients((prev) => [
+                ...prev,
+                { name: "", canonicalName: "", pantryStatus: "missing" },
+              ])
+            }
+          >
+            + Add ingredient
+          </Button>
         </div>
 
         {/* Steps */}
