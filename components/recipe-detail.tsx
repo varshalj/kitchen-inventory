@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -13,12 +14,24 @@ import {
   ExternalLink,
   Loader2,
   ChefHat,
+  Pencil,
+  Copy,
+  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { ToastAction } from "@/components/ui/toast"
 import { MainLayout } from "@/components/main-layout"
 import { useToast } from "@/hooks/use-toast"
-import { getRecipeById, addToShoppingList } from "@/lib/client/api"
+import { getRecipeById, addToShoppingList, updateRecipe, deleteRecipe } from "@/lib/client/api"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import type { Recipe, RecipeIngredient, PantryMatch, PantryMatchStatus } from "@/lib/types"
@@ -93,13 +106,75 @@ function IngredientRow({ ingredient }: { ingredient: IngredientWithMatch }) {
   )
 }
 
+function getYouTubeThumbnail(sourceUrl?: string): string | null {
+  if (!sourceUrl) return null
+  const match = sourceUrl.match(/[?&]v=([^&#]+)/) || sourceUrl.match(/youtu\.be\/([^?&#]+)/)
+  return match ? `https://img.youtube.com/vi/${match[1]}/maxresdefault.jpg` : null
+}
+
+function formatRecipeAsText(recipe: Recipe, ingredients: IngredientWithMatch[]): string {
+  const prepTime = recipe.prepTimeMinutes ?? 0
+  const cookTime = recipe.cookTimeMinutes ?? 0
+  const totalTime = prepTime + cookTime || recipe.totalTimeMinutes
+  const servingsStr = recipe.servings ? `Serves ${recipe.servings}` : ""
+  const timeStr = totalTime ? `${totalTime} min` : ""
+  const metaLine = [servingsStr, timeStr].filter(Boolean).join(" · ")
+
+  const lines: string[] = [recipe.title]
+  if (metaLine) lines.push(metaLine)
+  lines.push("")
+
+  if (ingredients.length > 0) {
+    lines.push("INGREDIENTS")
+    let lastGroup: string | null | undefined = undefined
+    for (const ing of ingredients) {
+      if (ing.ingredientGroup && ing.ingredientGroup !== lastGroup) {
+        lines.push(`  ${ing.ingredientGroup}`)
+        lastGroup = ing.ingredientGroup
+      }
+      const qty = ing.quantity != null ? `${ing.quantity}${ing.unit ? ` ${ing.unit}` : ""}` : ""
+      const name = ing.canonicalName || ing.name
+      const prep = ing.preparation ? ` — ${ing.preparation}` : ""
+      lines.push(`• ${qty ? qty + " " : ""}${name}${prep}`)
+    }
+    lines.push("")
+  }
+
+  if (recipe.instructions && recipe.instructions.length > 0) {
+    lines.push("STEPS")
+    recipe.instructions.forEach((step, i) => lines.push(`${i + 1}. ${step}`))
+    lines.push("")
+  }
+
+  if (recipe.sourceUrl) {
+    lines.push(`Source: ${recipe.sourceUrl}`)
+  }
+
+  return lines.join("\n")
+}
+
 export function RecipeDetail({ id }: RecipeDetailProps) {
+  const router = useRouter()
   const { toast } = useToast()
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const [recipe, setRecipe] = useState<Recipe | null>(null)
   const [ingredients, setIngredients] = useState<IngredientWithMatch[]>([])
   const [compatibilityScore, setCompatibilityScore] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isAddingToList, setIsAddingToList] = useState(false)
+
+  // Edit sheet state
+  const [showEdit, setShowEdit] = useState(false)
+  const [editTitle, setEditTitle] = useState("")
+  const [editServings, setEditServings] = useState<string>("")
+  const [editPrepTime, setEditPrepTime] = useState<string>("")
+  const [editCookTime, setEditCookTime] = useState<string>("")
+  const [editNotes, setEditNotes] = useState("")
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
+
+  // Delete state
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const loadRecipe = useCallback(async () => {
     try {
@@ -131,6 +206,24 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
   useEffect(() => {
     loadRecipe()
   }, [loadRecipe])
+
+  // Sync edit fields when recipe loads
+  useEffect(() => {
+    if (recipe) {
+      setEditTitle(recipe.title)
+      setEditServings(recipe.servings != null ? String(recipe.servings) : "")
+      setEditPrepTime(recipe.prepTimeMinutes != null ? String(recipe.prepTimeMinutes) : "")
+      setEditCookTime(recipe.cookTimeMinutes != null ? String(recipe.cookTimeMinutes) : "")
+      setEditNotes(recipe.notes ?? "")
+    }
+  }, [recipe])
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+    }
+  }, [])
 
   const missingIngredients = ingredients.filter((i) => i.pantryStatus === "missing")
 
@@ -168,6 +261,88 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
     setIsAddingToList(false)
   }
 
+  const handleSaveEdit = async () => {
+    if (!editTitle.trim()) {
+      toast({ title: "Title is required", variant: "destructive" })
+      return
+    }
+    setIsSavingEdit(true)
+    try {
+      const updated = await updateRecipe(id, {
+        title: editTitle.trim(),
+        servings: editServings ? parseInt(editServings) : null,
+        prepTimeMinutes: editPrepTime ? parseInt(editPrepTime) : null,
+        cookTimeMinutes: editCookTime ? parseInt(editCookTime) : null,
+        notes: editNotes.trim() || null,
+      })
+      setRecipe((prev) => prev ? { ...prev, ...updated } : updated)
+      setShowEdit(false)
+      triggerHaptic(HAPTIC_SUCCESS)
+      toast({ title: "Recipe updated" })
+    } catch (err) {
+      triggerHaptic(HAPTIC_ERROR)
+      toast({
+        title: "Failed to update",
+        description: err instanceof Error ? err.message : "Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSavingEdit(false)
+    }
+  }
+
+  const handleDelete = () => {
+    if (!recipe) return
+    setIsDeleting(true)
+
+    let undone = false
+
+    toast({
+      title: "Recipe deleted",
+      description: "Tap Undo to restore it",
+      action: (
+        <ToastAction
+          altText="Undo"
+          onClick={() => {
+            undone = true
+            if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
+            setIsDeleting(false)
+            toast({ title: "Delete cancelled" })
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
+    })
+
+    undoTimerRef.current = setTimeout(async () => {
+      if (undone) return
+      try {
+        await deleteRecipe(id)
+        router.push("/recipes")
+      } catch (err) {
+        setIsDeleting(false)
+        toast({
+          title: "Failed to delete",
+          description: err instanceof Error ? err.message : "Please try again.",
+          variant: "destructive",
+        })
+      }
+    }, 5000)
+  }
+
+  const handleCopy = async () => {
+    if (!recipe) return
+    try {
+      const text = formatRecipeAsText(recipe, ingredients)
+      await navigator.clipboard.writeText(text)
+      triggerHaptic(HAPTIC_SUCCESS)
+      toast({ title: "Recipe copied to clipboard" })
+    } catch {
+      toast({ title: "Copy failed", description: "Could not access clipboard.", variant: "destructive" })
+    }
+  }
+
   if (isLoading) {
     return (
       <MainLayout>
@@ -192,28 +367,75 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
     )
   }
 
-  const totalTime = (recipe.prepTimeMinutes ?? 0) + (recipe.cookTimeMinutes ?? 0)
+  const prepTime = recipe.prepTimeMinutes ?? 0
+  const cookTime = recipe.cookTimeMinutes ?? 0
+  const displayTime = prepTime + cookTime > 0 ? prepTime + cookTime : (recipe.totalTimeMinutes ?? 0)
+  const heroImage = recipe.imageUrl || (recipe.sourcePlatform === "youtube" ? getYouTubeThumbnail(recipe.sourceUrl) : null)
 
   return (
     <MainLayout>
-      {/* Back button */}
-      <div className="mb-4">
+      {/* Back + action buttons row */}
+      <div className="flex items-center justify-between mb-4">
         <Link href="/recipes">
           <Button variant="ghost" size="sm" className="gap-1 -ml-2">
             <ArrowLeft className="h-4 w-4" />
             Recipes
           </Button>
         </Link>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            onClick={() => setShowEdit(true)}
+            title="Edit recipe"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            onClick={handleCopy}
+            title="Copy to clipboard"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 text-destructive hover:text-destructive"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            title="Delete recipe"
+          >
+            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
+
+      {/* Hero image */}
+      {heroImage && (
+        <div className="mb-4 rounded-xl overflow-hidden">
+          <img
+            src={heroImage}
+            alt={recipe.title}
+            className="w-full max-h-56 object-cover"
+            onError={(e) => {
+              (e.currentTarget.parentElement as HTMLElement).style.display = "none"
+            }}
+          />
+        </div>
+      )}
 
       {/* Title + meta */}
       <div className="mb-4">
         <h1 className="text-2xl font-bold leading-snug mb-2">{recipe.title}</h1>
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          {totalTime > 0 && (
+          {displayTime > 0 && (
             <span className="flex items-center gap-1">
               <Clock className="h-4 w-4" />
-              {totalTime} min
+              {displayTime} min
             </span>
           )}
           {recipe.servings && (
@@ -305,6 +527,14 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
         </div>
       )}
 
+      {/* Notes */}
+      {recipe.notes && (
+        <div className="mb-6 rounded-xl border bg-muted/40 p-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
+          <p className="text-sm leading-relaxed">{recipe.notes}</p>
+        </div>
+      )}
+
       {/* Add missing to list — sticky bottom CTA */}
       {missingIngredients.length > 0 && (
         <div className="sticky bottom-20 pb-4">
@@ -322,6 +552,82 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
           </Button>
         </div>
       )}
+
+      {/* Edit bottom sheet */}
+      <Sheet open={showEdit} onOpenChange={setShowEdit}>
+        <SheetContent side="bottom" className="rounded-t-2xl">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Edit Recipe</SheetTitle>
+          </SheetHeader>
+          <div className="space-y-4 pb-6">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-title">Title</Label>
+              <Input
+                id="edit-title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-servings" className="text-xs">Servings</Label>
+                <Input
+                  id="edit-servings"
+                  type="number"
+                  min={0}
+                  value={editServings}
+                  onChange={(e) => setEditServings(e.target.value)}
+                  className="text-center"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-prep" className="text-xs">Prep (min)</Label>
+                <Input
+                  id="edit-prep"
+                  type="number"
+                  min={0}
+                  value={editPrepTime}
+                  onChange={(e) => setEditPrepTime(e.target.value)}
+                  className="text-center"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-cook" className="text-xs">Cook (min)</Label>
+                <Input
+                  id="edit-cook"
+                  type="number"
+                  min={0}
+                  value={editCookTime}
+                  onChange={(e) => setEditCookTime(e.target.value)}
+                  className="text-center"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-notes">Notes</Label>
+              <Textarea
+                id="edit-notes"
+                rows={3}
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Personal notes about this recipe…"
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setShowEdit(false)}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit || !editTitle.trim()}
+              >
+                {isSavingEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </MainLayout>
   )
 }

@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
         servings: body.servings,
         prepTimeMinutes: body.prepTimeMinutes,
         cookTimeMinutes: body.cookTimeMinutes,
+        totalTimeMinutes: body.totalTimeMinutes,
         instructions: body.instructions,
         imageUrl: body.imageUrl,
         notes: body.notes,
@@ -58,6 +59,8 @@ export async function POST(request: NextRequest) {
         unit: ing.unit,
         optional: ing.optional ?? false,
         sortOrder: ing.sortOrder ?? i,
+        preparation: ing.preparation,
+        ingredientGroup: ing.ingredientGroup,
       })),
     )
 

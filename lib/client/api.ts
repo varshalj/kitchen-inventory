@@ -115,3 +115,28 @@ export async function recalculateRecipeScores(): Promise<{ updated: number; last
     await fetchWithAuth("/api/recipes/recalculate", { method: "POST" }),
   )
 }
+
+export async function updateRecipe(
+  id: string,
+  data: {
+    title?: string
+    servings?: number | null
+    prepTimeMinutes?: number | null
+    cookTimeMinutes?: number | null
+    totalTimeMinutes?: number | null
+    notes?: string | null
+    imageUrl?: string | null
+  },
+): Promise<any> {
+  return parseResponse(
+    await fetchWithAuth(`/api/recipes/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+  )
+}
+
+export async function deleteRecipe(id: string): Promise<void> {
+  await fetchWithAuth(`/api/recipes/${id}`, { method: "DELETE" })
+}

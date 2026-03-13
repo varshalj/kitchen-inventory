@@ -118,6 +118,7 @@ export function RecipeReviewScreen({
         servings: servings || undefined,
         prepTimeMinutes: prepTime || undefined,
         cookTimeMinutes: cookTime || undefined,
+        totalTimeMinutes: initialRecipe.totalTimeMinutes || undefined,
         instructions: steps.filter(Boolean),
         imageUrl: initialRecipe.imageUrl,
         notes: notes || undefined,
@@ -196,6 +197,20 @@ export function RecipeReviewScreen({
           </Button>
           <h1 className="text-lg font-semibold flex-1">Review Recipe</h1>
         </div>
+
+        {/* Recipe image preview */}
+        {initialRecipe.imageUrl && (
+          <div className="mb-4 rounded-xl overflow-hidden">
+            <img
+              src={initialRecipe.imageUrl}
+              alt={initialRecipe.title}
+              className="w-full max-h-48 object-cover"
+              onError={(e) => {
+                (e.currentTarget.parentElement as HTMLElement).style.display = "none"
+              }}
+            />
+          </div>
+        )}
 
         {/* Compatibility Score */}
         <Card className="mb-4">

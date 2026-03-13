@@ -62,6 +62,7 @@ export interface ParsedRecipe {
   servings?: number
   prepTimeMinutes?: number
   cookTimeMinutes?: number
+  totalTimeMinutes?: number
   ingredients: ParsedIngredient[]
   steps: string[]
   imageUrl?: string
@@ -96,6 +97,7 @@ export interface Recipe {
   servings?: number
   prepTimeMinutes?: number
   cookTimeMinutes?: number
+  totalTimeMinutes?: number
   instructions?: string[]
   imageUrl?: string
   notes?: string

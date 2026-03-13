@@ -139,6 +139,7 @@ function recipeToDomain(row: any): Recipe {
     servings: row.servings ?? undefined,
     prepTimeMinutes: row.prep_time_minutes ?? undefined,
     cookTimeMinutes: row.cook_time_minutes ?? undefined,
+    totalTimeMinutes: row.total_time_minutes ?? undefined,
     instructions: row.instructions ?? undefined,
     imageUrl: row.image_url ?? undefined,
     notes: row.notes ?? undefined,
@@ -159,6 +160,8 @@ function ingredientToDomain(row: any): RecipeIngredient {
     unit: row.unit ?? undefined,
     optional: row.optional ?? false,
     sortOrder: row.sort_order ?? 0,
+    preparation: row.preparation ?? undefined,
+    ingredientGroup: row.ingredient_group ?? undefined,
   }
 }
 
@@ -173,6 +176,7 @@ export const recipeRepo = {
       servings?: number
       prepTimeMinutes?: number
       cookTimeMinutes?: number
+      totalTimeMinutes?: number
       instructions?: string[]
       imageUrl?: string
       notes?: string
@@ -196,6 +200,7 @@ export const recipeRepo = {
         servings: recipe.servings || null,
         prep_time_minutes: recipe.prepTimeMinutes || null,
         cook_time_minutes: recipe.cookTimeMinutes || null,
+        total_time_minutes: recipe.totalTimeMinutes || null,
         instructions: recipe.instructions || null,
         image_url: recipe.imageUrl || null,
         notes: recipe.notes || null,
@@ -214,6 +219,8 @@ export const recipeRepo = {
       unit: ing.unit || null,
       optional: ing.optional ?? false,
       sort_order: ing.sortOrder ?? i,
+      preparation: ing.preparation || null,
+      ingredient_group: ing.ingredientGroup || null,
     }))
 
     let savedIngredients: RecipeIngredient[] = []
@@ -291,5 +298,62 @@ export const recipeRepo = {
       recipe: recipeToDomain(recipeRows[0]),
       ingredients: (ingRows ?? []).map(ingredientToDomain),
     }
+  },
+
+  async update(
+    supabase: SupabaseClient,
+    id: string,
+    fields: {
+      title?: string
+      servings?: number | null
+      prepTimeMinutes?: number | null
+      cookTimeMinutes?: number | null
+      totalTimeMinutes?: number | null
+      notes?: string | null
+      imageUrl?: string | null
+    },
+  ): Promise<Recipe> {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
+    const payload: any = { updated_at: new Date().toISOString() }
+    if (fields.title !== undefined) payload.title = fields.title
+    if (fields.servings !== undefined) payload.servings = fields.servings
+    if (fields.prepTimeMinutes !== undefined) payload.prep_time_minutes = fields.prepTimeMinutes
+    if (fields.cookTimeMinutes !== undefined) payload.cook_time_minutes = fields.cookTimeMinutes
+    if (fields.totalTimeMinutes !== undefined) payload.total_time_minutes = fields.totalTimeMinutes
+    if (fields.notes !== undefined) payload.notes = fields.notes
+    if (fields.imageUrl !== undefined) payload.image_url = fields.imageUrl
+
+    const { data: rows, error } = await supabase
+      .from("recipes")
+      .update(payload)
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .select()
+
+    if (error) throw error
+    if (!rows?.[0]) throw new Error("Recipe not found or unauthorized")
+    return recipeToDomain(rows[0])
+  },
+
+  async delete(supabase: SupabaseClient, id: string): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error("Unauthorized")
+
+    const { error: ingError } = await supabase
+      .from("recipe_ingredients")
+      .delete()
+      .eq("recipe_id", id)
+
+    if (ingError) throw ingError
+
+    const { error: recipeError } = await supabase
+      .from("recipes")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id)
+
+    if (recipeError) throw recipeError
   },
 }

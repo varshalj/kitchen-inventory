@@ -8,11 +8,12 @@ import {
   RefreshCw,
   Clock,
   AlertTriangle,
-  Loader2,
   ArrowUpDown,
+  Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/main-layout"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
@@ -61,28 +62,50 @@ function PlatformChip({ platform }: { platform?: string }) {
   )
 }
 
-function TimeDisplay({ prep, cook }: { prep?: number; cook?: number }) {
-  const total = (prep ?? 0) + (cook ?? 0)
-  if (!total) return null
+function TimeDisplay({ prep, cook, total }: { prep?: number; cook?: number; total?: number }) {
+  const computed = (prep ?? 0) + (cook ?? 0)
+  const minutes = computed > 0 ? computed : (total ?? 0)
+  if (!minutes) return null
   return (
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
       <Clock className="h-3 w-3" />
-      {total} min
+      {minutes} min
     </span>
   )
 }
 
+function getYouTubeThumbnail(sourceUrl?: string): string | null {
+  if (!sourceUrl) return null
+  const match = sourceUrl.match(/[?&]v=([^&#]+)/) || sourceUrl.match(/youtu\.be\/([^?&#]+)/)
+  return match ? `https://img.youtube.com/vi/${match[1]}/maxresdefault.jpg` : null
+}
+
 function RecipeCard({ recipe }: { recipe: Recipe }) {
+  const thumbnail = recipe.imageUrl || (recipe.sourcePlatform === "youtube" ? getYouTubeThumbnail(recipe.sourceUrl) : null)
   return (
     <Link href={`/recipes/${recipe.id}`} className="block">
-      <div className="rounded-xl border bg-card p-4 shadow-sm hover:shadow-md transition-shadow active:scale-[0.99]">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-semibold text-sm leading-snug line-clamp-2 flex-1">{recipe.title}</h3>
-          <ScoreBadge score={recipe.pantryCompatibilityScore} />
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <TimeDisplay prep={recipe.prepTimeMinutes} cook={recipe.cookTimeMinutes} />
-          <PlatformChip platform={recipe.sourcePlatform} />
+      <div className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow active:scale-[0.99] overflow-hidden">
+        {thumbnail && (
+          <div className="aspect-video w-full overflow-hidden bg-muted">
+            <img
+              src={thumbnail}
+              alt={recipe.title}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget.parentElement as HTMLElement).style.display = "none"
+              }}
+            />
+          </div>
+        )}
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <h3 className="font-semibold text-sm leading-snug line-clamp-2 flex-1">{recipe.title}</h3>
+            <ScoreBadge score={recipe.pantryCompatibilityScore} />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <TimeDisplay prep={recipe.prepTimeMinutes} cook={recipe.cookTimeMinutes} total={recipe.totalTimeMinutes} />
+            <PlatformChip platform={recipe.sourcePlatform} />
+          </div>
         </div>
       </div>
     </Link>
@@ -109,6 +132,7 @@ export function RecipesList() {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [sort, setSort] = useState<SortOption>("score")
+  const [search, setSearch] = useState("")
   const [showImport, setShowImport] = useState(false)
   const [recipeReviewData, setRecipeReviewData] = useState<{
     importId: string
@@ -176,7 +200,9 @@ export function RecipesList() {
     setShowImport(true)
   }
 
-  const sortedRecipes = sortRecipes(recipes, sort)
+  const sortedRecipes = sortRecipes(recipes, sort).filter((r) =>
+    r.title.toLowerCase().includes(search.toLowerCase()),
+  )
 
   const anyStale = recipes.some((r) => isScoreStale(r.pantryLastChecked))
 
@@ -241,6 +267,19 @@ export function RecipesList() {
         </div>
       )}
 
+      {/* Search input */}
+      {!isLoading && recipes.length > 0 && (
+        <div className="mb-3 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search recipes…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+      )}
+
       {/* Sort control (only if recipes exist) */}
       {!isLoading && recipes.length > 1 && (
         <div className="mb-4 flex items-center gap-2">
@@ -292,6 +331,13 @@ export function RecipesList() {
             <Plus className="h-4 w-4" />
             Import your first recipe
           </Button>
+        </div>
+      )}
+
+      {/* No search results */}
+      {!isLoading && recipes.length > 0 && sortedRecipes.length === 0 && search && (
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          No results for &ldquo;{search}&rdquo;
         </div>
       )}
 

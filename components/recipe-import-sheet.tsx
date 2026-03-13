@@ -163,7 +163,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady }: RecipeI
             Import Recipe
           </SheetTitle>
           <SheetDescription>
-            Paste a recipe blog URL to import ingredients and steps
+            Paste a URL from a recipe blog or YouTube video
           </SheetDescription>
         </SheetHeader>
 
