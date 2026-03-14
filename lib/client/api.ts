@@ -154,6 +154,27 @@ export async function getPendingImports(): Promise<any> {
   return parseResponse(await fetchWithAuth("/api/recipes/import/pending", { cache: "no-store" }))
 }
 
+export async function saveRecipeBookmark(data: {
+  title: string
+  sourceUrl?: string
+  notes?: string
+}): Promise<any> {
+  return parseResponse(
+    await fetchWithAuth("/api/recipes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: data.title,
+        sourceUrl: data.sourceUrl,
+        notes: data.notes,
+        isBookmark: true,
+        ingredients: [],
+        instructions: [],
+      }),
+    }),
+  )
+}
+
 export async function parseRecipeText(text: string): Promise<any> {
   return parseResponse(
     await fetchWithAuth("/api/recipes/parse-text", {

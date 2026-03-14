@@ -11,6 +11,8 @@ import {
   ArrowUpDown,
   Search,
   Sparkles,
+  X,
+  Bookmark,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -111,8 +113,17 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
             <ScoreBadge score={recipe.pantryCompatibilityScore} />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <TimeDisplay prep={recipe.prepTimeMinutes} cook={recipe.cookTimeMinutes} total={recipe.totalTimeMinutes} />
-            <PlatformChip platform={recipe.sourcePlatform} />
+            {recipe.isBookmark ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                <Bookmark className="h-3 w-3" />
+                Bookmark
+              </span>
+            ) : (
+              <>
+                <TimeDisplay prep={recipe.prepTimeMinutes} cook={recipe.cookTimeMinutes} total={recipe.totalTimeMinutes} />
+                <PlatformChip platform={recipe.sourcePlatform} />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -158,6 +169,11 @@ export function RecipesList() {
     url: string
     platform: string
   } | null>(null)
+  const [failedBanners, setFailedBanners] = useState<Array<{
+    importId: string
+    url: string
+    errorMessage?: string
+  }>>([])
 
   const loadRecipes = useCallback(async () => {
     try {
@@ -185,6 +201,9 @@ export function RecipesList() {
             url: item.url || "",
             platform: item.platform || "blog",
           })
+        }
+        if (data.failed && data.failed.length > 0) {
+          setFailedBanners(data.failed)
         }
       })
       .catch(() => {})
@@ -231,9 +250,19 @@ export function RecipesList() {
     setShowImport(true)
   }
 
-  const sortedRecipes = sortRecipes(recipes, sort).filter((r) =>
-    r.title.toLowerCase().includes(search.toLowerCase()),
-  )
+  const sortedRecipes = sortRecipes(recipes, sort).filter((r) => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      r.title.toLowerCase().includes(q) ||
+      (r.notes?.toLowerCase().includes(q) ?? false) ||
+      (r.ingredients?.some(
+        (ing) =>
+          (ing.name?.toLowerCase().includes(q) ?? false) ||
+          (ing.canonicalName?.toLowerCase().includes(q) ?? false),
+      ) ?? false)
+    )
+  })
 
   const anyStale = recipes.some((r) => isScoreStale(r.pantryLastChecked))
 
@@ -325,6 +354,36 @@ export function RecipesList() {
         </div>
       )}
 
+      {/* Failed import banners */}
+      {failedBanners.map((fb) => (
+        <div key={fb.importId} className="mb-3 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-destructive">Recipe import failed</p>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">{fb.url}</p>
+            {fb.errorMessage && (
+              <p className="text-xs text-muted-foreground mt-0.5">{fb.errorMessage}</p>
+            )}
+            <button
+              className="text-xs text-primary underline underline-offset-2 mt-1"
+              onClick={() => {
+                setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))
+                setShowImport(true)
+              }}
+            >
+              Retry import
+            </button>
+          </div>
+          <button
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))}
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+
       {/* Search input */}
       {!isLoading && recipes.length > 0 && (
         <div className="mb-3 relative">
@@ -414,6 +473,7 @@ export function RecipesList() {
         onOpenChange={setShowImport}
         onRecipeReady={handleRecipeReady}
         onGoHome={() => setShowImport(false)}
+        onBookmarkSaved={() => { setShowImport(false); loadRecipes() }}
       />
     </MainLayout>
   )

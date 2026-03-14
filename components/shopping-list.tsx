@@ -618,11 +618,6 @@ export function ShoppingList() {
                             <span className="text-muted-foreground font-normal">{item.brand} </span>
                           )}
                           {item.name}
-                          {(item.quantity > 1 || (item.unit && item.unit !== "pcs")) && (
-                            <span className="text-sm font-normal ml-1">
-                              {formatQuantityUnit(item.quantity, item.unit)}
-                            </span>
-                          )}
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0 ml-2">
@@ -665,6 +660,12 @@ export function ShoppingList() {
                           </Button>
                         </div>
                       </div>
+
+                      {(item.quantity > 1 || (item.unit && item.unit !== "pcs")) && (
+                        <div className="text-sm text-muted-foreground mt-0.5">
+                          {formatQuantityUnit(item.quantity, item.unit)}
+                        </div>
+                      )}
 
                       {item.notes && (
                         <div className="text-sm text-muted-foreground mt-1 truncate">

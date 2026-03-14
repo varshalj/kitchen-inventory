@@ -23,7 +23,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { useToast } from "@/hooks/use-toast"
-import { startRecipeImport, pollRecipeImport, parseRecipeText } from "@/lib/client/api"
+import { startRecipeImport, pollRecipeImport, parseRecipeText, saveRecipeBookmark } from "@/lib/client/api"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import type { ParsedRecipe, PantryMatch } from "@/lib/types"
 
@@ -39,6 +39,7 @@ interface RecipeImportSheetProps {
     sourcePlatform: string
   }) => void
   onGoHome?: () => void
+  onBookmarkSaved?: () => void
 }
 
 type ImportPhase = "choose" | "url-input" | "text-input" | "importing" | "text-parsing" | "error"
@@ -52,7 +53,7 @@ const PROGRESS_STEPS = [
 ]
 const STEP_DELAYS = [0, 5000, 15000, 25000, 35000]
 
-export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome }: RecipeImportSheetProps) {
+export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome, onBookmarkSaved }: RecipeImportSheetProps) {
   const { toast } = useToast()
   const [url, setUrl] = useState("")
   const [pasteText, setPasteText] = useState("")
@@ -60,6 +61,10 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome 
   const [importStatus, setImportStatus] = useState("")
   const [errorMessage, setErrorMessage] = useState("")
   const [activeStep, setActiveStep] = useState(0)
+  const [showBookmarkForm, setShowBookmarkForm] = useState(false)
+  const [bookmarkTitle, setBookmarkTitle] = useState("")
+  const [bookmarkNotes, setBookmarkNotes] = useState("")
+  const [isSavingBookmark, setIsSavingBookmark] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const progressTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
@@ -81,6 +86,9 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome 
       setImportStatus("")
       setErrorMessage("")
       setActiveStep(0)
+      setShowBookmarkForm(false)
+      setBookmarkTitle("")
+      setBookmarkNotes("")
     }
     return cleanup
   }, [open, cleanup])
@@ -403,9 +411,79 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome 
                 <AlertCircle className="h-6 w-6 text-destructive" />
               </div>
               <p className="text-sm text-center text-destructive">{errorMessage}</p>
-              <Button variant="outline" onClick={() => setPhase("choose")}>
+              <Button variant="outline" className="w-full" onClick={() => setPhase("choose")}>
                 Try Again
               </Button>
+
+              {!showBookmarkForm ? (
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => {
+                    setBookmarkTitle(url ? new URL(url).hostname.replace("www.", "") : "")
+                    setShowBookmarkForm(true)
+                  }}
+                >
+                  Save as bookmark instead
+                </button>
+              ) : (
+                <div className="w-full space-y-3 border rounded-xl p-4 bg-muted/30">
+                  <p className="text-sm font-medium">Save as Bookmark</p>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Title</label>
+                    <Input
+                      value={bookmarkTitle}
+                      onChange={(e) => setBookmarkTitle(e.target.value)}
+                      placeholder="Recipe title or site name"
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">Notes (optional)</label>
+                    <Textarea
+                      value={bookmarkNotes}
+                      onChange={(e) => setBookmarkNotes(e.target.value)}
+                      placeholder="e.g. Good for weeknights, needs review later…"
+                      className="resize-none text-sm"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setShowBookmarkForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1"
+                      disabled={!bookmarkTitle.trim() || isSavingBookmark}
+                      onClick={async () => {
+                        setIsSavingBookmark(true)
+                        try {
+                          await saveRecipeBookmark({
+                            title: bookmarkTitle.trim(),
+                            sourceUrl: url || undefined,
+                            notes: bookmarkNotes.trim() || undefined,
+                          })
+                          toast({ title: "Bookmark saved", description: bookmarkTitle.trim() })
+                          onBookmarkSaved?.()
+                          onOpenChange(false)
+                        } catch {
+                          toast({ title: "Failed to save bookmark", variant: "destructive" })
+                        } finally {
+                          setIsSavingBookmark(false)
+                        }
+                      }}
+                    >
+                      {isSavingBookmark ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Bookmark"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

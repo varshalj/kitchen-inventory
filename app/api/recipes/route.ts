@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
         instructions: body.instructions,
         imageUrl: body.imageUrl,
         notes: body.notes,
+        isBookmark: body.isBookmark ?? false,
       },
       ingredients.map((ing: any, i: number) => ({
         name: ing.name,

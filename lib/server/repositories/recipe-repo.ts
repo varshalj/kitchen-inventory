@@ -147,6 +147,7 @@ function recipeToDomain(row: any): Recipe {
     notes: row.notes ?? undefined,
     pantryCompatibilityScore: row.pantry_compatibility_score ?? undefined,
     pantryLastChecked: row.pantry_last_checked ?? undefined,
+    isBookmark: row.is_bookmark ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -182,6 +183,7 @@ export const recipeRepo = {
       instructions?: string[]
       imageUrl?: string
       notes?: string
+      isBookmark?: boolean
     },
     ingredients: Omit<RecipeIngredient, "id" | "recipeId">[],
   ): Promise<{ recipe: Recipe; ingredients: RecipeIngredient[] }> {
@@ -206,6 +208,7 @@ export const recipeRepo = {
         instructions: recipe.instructions || null,
         image_url: recipe.imageUrl || null,
         notes: recipe.notes || null,
+        is_bookmark: recipe.isBookmark ?? false,
       })
       .select()
 

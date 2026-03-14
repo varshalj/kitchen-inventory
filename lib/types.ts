@@ -103,6 +103,7 @@ export interface Recipe {
   notes?: string
   pantryCompatibilityScore?: number
   pantryLastChecked?: string
+  isBookmark?: boolean
   createdAt: string
   updatedAt: string
 }

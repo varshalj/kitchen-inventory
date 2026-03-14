@@ -16,14 +16,15 @@ export async function GET(_request: NextRequest) {
       .from("recipe_imports")
       .select("*")
       .eq("user_id", user.id)
-      .in("status", ["ready", "pending", "extracting", "parsing"])
+      .in("status", ["ready", "pending", "extracting", "parsing", "failed"])
       .order("updated_at", { ascending: false })
-      .limit(5)
+      .limit(10)
 
     if (error) throw error
 
     const readyImports = (rows || []).filter((r: any) => r.status === "ready" && r.parsed_recipe)
-    const pendingImports = (rows || []).filter((r: any) => r.status !== "ready")
+    const pendingImports = (rows || []).filter((r: any) => !["ready", "failed"].includes(r.status))
+    const failedImports = (rows || []).filter((r: any) => r.status === "failed")
 
     // For ready imports, compute pantry matches
     const enriched = []
@@ -73,6 +74,11 @@ export async function GET(_request: NextRequest) {
         importId: r.id,
         url: r.url,
         status: r.status,
+      })),
+      failed: failedImports.map((r: any) => ({
+        importId: r.id,
+        url: r.url,
+        errorMessage: r.error_message,
       })),
     })
   } catch (error) {
