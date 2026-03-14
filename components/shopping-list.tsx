@@ -174,7 +174,7 @@ export function ShoppingList() {
 
     const addedItem = await addToShoppingList(itemPayload as unknown as ShoppingItem)
     setItems((prev) => {
-      const updated = [...prev, addedItem]
+      const updated = [addedItem, ...prev]
       setIncompleteCount(updated.filter((i) => !i.completed).length)
       return updated
     })
@@ -207,7 +207,7 @@ export function ShoppingList() {
       try {
         const addedItem = await addToShoppingList(payload as unknown as ShoppingItem)
         setItems((prev) => {
-          const updated = [...prev, addedItem]
+          const updated = [addedItem, ...prev]
           // Add the new name so subsequent items in the same batch don't duplicate it
           activeNames.push(vi.name)
           setIncompleteCount(updated.filter((i) => !i.completed).length)

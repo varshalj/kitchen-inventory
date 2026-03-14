@@ -68,7 +68,11 @@ export function BuyBottomSheet({
           </SheetTitle>
           <SheetDescription>
             Searching for &quot;{query}&quot;
-            {item.quantity > 1 && ` (qty: ${item.quantity})`}
+            {item.quantity > 1 && (
+              item.unit && item.unit !== "pcs"
+                ? ` (${item.quantity}${item.unit})`
+                : ` (qty: ${item.quantity})`
+            )}
           </SheetDescription>
         </SheetHeader>
 

@@ -50,6 +50,13 @@ export const GROCERY_PLATFORMS: GroceryPlatform[] = [
     country: "IN",
   },
   {
+    id: "flipkart-minutes",
+    name: "Flipkart Minutes",
+    searchUrl: (q) => `https://www.flipkart.com/search?q=${encodeURIComponent(q)}&marketplace=HYPERLOCAL`,
+    website: "flipkart.com",
+    country: "IN",
+  },
+  {
     id: "dmart-ready",
     name: "DMart Ready",
     searchUrl: (q) => `https://www.dmart.in/searchResult?searchTerm=${encodeURIComponent(q)}`,
