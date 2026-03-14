@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import { Mic, MicOff, Loader2, Plus } from "lucide-react"
+import { Mic, MicOff, Loader2, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -15,6 +15,7 @@ import {
 import { QuantityWithUnits } from "@/components/quantity-with-units"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { fetchWithAuth } from "@/lib/api-client"
+import { suggestInventoryItems } from "@/lib/client/api"
 import { cn, findFuzzyMatch } from "@/lib/utils"
 
 const MAX_DURATION_MS = 30000
@@ -46,6 +47,11 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
   const [parseError, setParseError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [addingNewItem, setAddingNewItem] = useState(false)
+  const [newItemName, setNewItemName] = useState("")
+  const [newItemSuggestions, setNewItemSuggestions] = useState<string[]>([])
+  const newItemInputRef = useRef<HTMLInputElement>(null)
+  const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const {
     supported,
@@ -171,6 +177,35 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     setParsedItems((prev) =>
       prev.map((item, i) => (i === index ? { ...item, [field]: value, included: true } : item))
     )
+  }
+
+  const fetchNewItemSuggestions = (query: string) => {
+    if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current)
+    if (query.length < 2) {
+      setNewItemSuggestions([])
+      return
+    }
+    suggestTimerRef.current = setTimeout(async () => {
+      try {
+        const results = await suggestInventoryItems(query)
+        setNewItemSuggestions(results)
+      } catch {
+        setNewItemSuggestions([])
+      }
+    }, 300)
+  }
+
+  const commitNewItem = (name: string) => {
+    const trimmed = name.trim()
+    if (trimmed) {
+      setParsedItems((prev) => [
+        ...prev,
+        { name: trimmed, quantity: 1, unit: "pcs", included: true },
+      ])
+    }
+    setAddingNewItem(false)
+    setNewItemName("")
+    setNewItemSuggestions([])
   }
 
   const includedCount = parsedItems.filter((i) => i.included).length
@@ -394,6 +429,66 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                     </div>
                   )
                 })}
+
+                {/* Add item row */}
+                {addingNewItem ? (
+                  <div className="relative rounded-lg border p-3 bg-background space-y-1">
+                    <Input
+                      ref={newItemInputRef}
+                      value={newItemName}
+                      placeholder="Item name…"
+                      className="h-8 text-sm"
+                      onChange={(e) => {
+                        setNewItemName(e.target.value)
+                        fetchNewItemSuggestions(e.target.value)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitNewItem(newItemName)
+                        if (e.key === "Escape") { setAddingNewItem(false); setNewItemName(""); setNewItemSuggestions([]) }
+                      }}
+                      onBlur={() => {
+                        // Small delay so suggestion click can fire first
+                        setTimeout(() => {
+                          if (!newItemName.trim()) {
+                            setAddingNewItem(false)
+                            setNewItemSuggestions([])
+                          }
+                        }, 150)
+                      }}
+                      autoFocus
+                    />
+                    {newItemSuggestions.length > 0 && (
+                      <ul className="absolute left-3 right-3 top-full mt-1 z-50 rounded-md border bg-popover shadow-md max-h-40 overflow-y-auto">
+                        {newItemSuggestions.map((s) => (
+                          <li
+                            key={s}
+                            className="px-3 py-1.5 text-sm cursor-pointer hover:bg-accent"
+                            onMouseDown={() => commitNewItem(s)}
+                          >
+                            {s}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="flex justify-end gap-2 pt-1">
+                      <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setAddingNewItem(false); setNewItemName(""); setNewItemSuggestions([]) }}>
+                        <X className="h-3 w-3 mr-1" />Cancel
+                      </Button>
+                      <Button size="sm" className="h-7 px-2 text-xs" onClick={() => commitNewItem(newItemName)} disabled={!newItemName.trim()}>
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => { setAddingNewItem(true); setNewItemName("") }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add item
+                  </button>
+                )}
 
                 {parseError && (
                   <p className="text-sm text-destructive text-center">{parseError}</p>

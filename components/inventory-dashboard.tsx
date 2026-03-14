@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -59,6 +60,7 @@ export function InventoryDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
   const [userInitials, setUserInitials] = useState("")
   const [showRecipeImport, setShowRecipeImport] = useState(false)
   const [recipeReviewData, setRecipeReviewData] = useState<{
@@ -616,6 +618,7 @@ useEffect(() => {
   const handleBulkConsume = async () => {
     const targets = filteredItems.filter((i) => selectedIds.has(i.id))
     if (!targets.length) return
+    setIsBulkProcessing(true)
     try {
       await Promise.all(
         targets.map((item) =>
@@ -633,12 +636,15 @@ useEffect(() => {
     } catch {
       triggerHaptic(HAPTIC_ERROR)
       toastWithNudge({ title: "Bulk Consume Failed", description: "Some items could not be updated.", variant: "destructive" })
+    } finally {
+      setIsBulkProcessing(false)
     }
   }
 
   const handleBulkWaste = async () => {
     const targets = filteredItems.filter((i) => selectedIds.has(i.id))
     if (!targets.length) return
+    setIsBulkProcessing(true)
     try {
       await Promise.all(
         targets.map((item) =>
@@ -656,12 +662,15 @@ useEffect(() => {
     } catch {
       triggerHaptic(HAPTIC_ERROR)
       toastWithNudge({ title: "Bulk Waste Failed", description: "Some items could not be updated.", variant: "destructive" })
+    } finally {
+      setIsBulkProcessing(false)
     }
   }
 
   const handleBulkDelete = async () => {
     const targets = filteredItems.filter((i) => selectedIds.has(i.id))
     if (!targets.length) return
+    setIsBulkProcessing(true)
     try {
       await Promise.all(
         targets.map((item) =>
@@ -675,6 +684,8 @@ useEffect(() => {
     } catch {
       triggerHaptic(HAPTIC_ERROR)
       toastWithNudge({ title: "Bulk Delete Failed", description: "Some items could not be deleted.", variant: "destructive" })
+    } finally {
+      setIsBulkProcessing(false)
     }
   }
 
@@ -872,36 +883,39 @@ useEffect(() => {
           <span className="text-sm flex-1 text-muted-foreground">
             {selectedIds.size} of {filteredItems.length} selected
           </span>
-          <Button
+          <LoadingButton
             size="sm"
             variant="ghost"
             className="h-8 text-xs"
             disabled={selectedIds.size === 0}
+            isLoading={isBulkProcessing}
             onClick={handleBulkConsume}
           >
             <Check className="h-3.5 w-3.5 mr-1" />
             Consume
-          </Button>
-          <Button
+          </LoadingButton>
+          <LoadingButton
             size="sm"
             variant="ghost"
             className="h-8 text-xs"
             disabled={selectedIds.size === 0}
+            isLoading={isBulkProcessing}
             onClick={handleBulkWaste}
           >
             <Trash className="h-3.5 w-3.5 mr-1" />
             Waste
-          </Button>
-          <Button
+          </LoadingButton>
+          <LoadingButton
             size="sm"
             variant="ghost"
             className="h-8 text-xs text-destructive hover:text-destructive"
             disabled={selectedIds.size === 0}
+            isLoading={isBulkProcessing}
             onClick={handleBulkDelete}
           >
             <Trash2 className="h-3.5 w-3.5 mr-1" />
             Delete
-          </Button>
+          </LoadingButton>
         </div>
       )}
 

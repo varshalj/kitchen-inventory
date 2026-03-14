@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -47,6 +48,7 @@ export function ShoppingList() {
   const [editItem, setEditItem] = useState<ShoppingItem | null>(null)
   const [buyItem, setBuyItem] = useState<ShoppingItem | null>(null)
   const [newItem, setNewItem] = useState({ name: "", quantity: 1, unit: "pcs", notes: "" })
+  const [isAddingItem, setIsAddingItem] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -148,43 +150,53 @@ export function ShoppingList() {
         return
       } else {
         // Completed duplicate → restore to active list
-        const uncompleted = { ...existing, completed: false }
-        await updateShoppingItem(uncompleted)
-        setItems((prev) => prev.map((i) => (i.id === existing.id ? uncompleted : i)))
-        setNewItem({ name: "", quantity: 1, unit: "pcs", notes: "" })
-        setSuggestions([])
-        triggerHaptic(HAPTIC_SUCCESS)
-        toast({
-          title: "Moved back to list",
-          description: `${existing.name} was already bought — restored as active.`,
-        })
+        setIsAddingItem(true)
+        try {
+          const uncompleted = { ...existing, completed: false }
+          await updateShoppingItem(uncompleted)
+          setItems((prev) => prev.map((i) => (i.id === existing.id ? uncompleted : i)))
+          setNewItem({ name: "", quantity: 1, unit: "pcs", notes: "" })
+          setSuggestions([])
+          triggerHaptic(HAPTIC_SUCCESS)
+          toast({
+            title: "Moved back to list",
+            description: `${existing.name} was already bought — restored as active.`,
+          })
+        } finally {
+          setIsAddingItem(false)
+        }
         return
       }
     }
 
-    const itemPayload = {
-      name,
-      quantity: newItem.quantity || 1,
-      unit: newItem.unit || "pcs",
-      notes: newItem.notes || undefined,
-      completed: false,
-      addedOn: new Date().toISOString(),
-      addedFrom: "manual",
-    }
+    setIsAddingItem(true)
+    try {
+      const itemPayload = {
+        name,
+        quantity: newItem.quantity || 1,
+        unit: newItem.unit || "pcs",
+        notes: newItem.notes || undefined,
+        completed: false,
+        addedOn: new Date().toISOString(),
+        addedFrom: "manual",
+      }
 
-    const addedItem = await addToShoppingList(itemPayload as unknown as ShoppingItem)
-    setItems((prev) => {
-      const updated = [addedItem, ...prev]
-      setIncompleteCount(updated.filter((i) => !i.completed).length)
-      return updated
-    })
-    setNewItem({ name: "", quantity: 1, unit: "pcs", notes: "" })
-    setSuggestions([])
-    triggerHaptic(HAPTIC_SUCCESS)
-    toast({
-      title: "Item Added",
-      description: `${name} added to your shopping list.`,
-    })
+      const addedItem = await addToShoppingList(itemPayload as unknown as ShoppingItem)
+      setItems((prev) => {
+        const updated = [addedItem, ...prev]
+        setIncompleteCount(updated.filter((i) => !i.completed).length)
+        return updated
+      })
+      setNewItem({ name: "", quantity: 1, unit: "pcs", notes: "" })
+      setSuggestions([])
+      triggerHaptic(HAPTIC_SUCCESS)
+      toast({
+        title: "Item Added",
+        description: `${name} added to your shopping list.`,
+      })
+    } finally {
+      setIsAddingItem(false)
+    }
   }
 
   const handleVoiceConfirm = async (voiceItems: VoiceParsedItem[]) => {
@@ -489,13 +501,14 @@ export function ShoppingList() {
             </div>
 
             <div className="flex gap-2">
-              <Button
+              <LoadingButton
                 className="flex-1 active:scale-95 transition-transform"
                 onClick={handleAddItem}
                 disabled={!newItem.name.trim()}
+                isLoading={isAddingItem}
               >
                 <Plus className="h-4 w-4 mr-2" /> Add to Shopping List
-              </Button>
+              </LoadingButton>
               <VoiceCapture
                 target="shopping"
                 onConfirm={handleVoiceConfirm}

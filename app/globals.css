@@ -63,3 +63,8 @@
   from { transform: scaleX(1); }
   to   { transform: scaleX(0); }
 }
+
+@keyframes loading-bar {
+  0%   { left: -40%; }
+  100% { left: 140%; }
+}

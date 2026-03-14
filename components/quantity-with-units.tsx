@@ -27,6 +27,10 @@ export const UNIT_GROUPS = [
     label: "Volume",
     units: ["ml", "L", "fl oz", "cup"],
   },
+  {
+    label: "Cooking",
+    units: ["tsp", "tbsp"],
+  },
 ]
 
 export const ALL_UNITS = UNIT_GROUPS.flatMap((g) => g.units)

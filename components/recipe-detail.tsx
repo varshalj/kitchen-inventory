@@ -275,9 +275,21 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
 
     let undone = false
 
+    const progressBar = (
+      <div className="mt-2 h-0.5 w-full bg-muted overflow-hidden rounded-full">
+        <div className="h-full bg-muted-foreground/50 origin-left animate-[toast-progress_5s_linear_forwards]" />
+      </div>
+    )
+
     toast({
       title: "Recipe deleted",
-      description: "Tap Undo to restore it",
+      description: (
+        <>
+          Tap Undo to restore it
+          {progressBar}
+        </>
+      ),
+      duration: 5000,
       action: (
         <ToastAction
           altText="Undo"

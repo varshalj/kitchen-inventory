@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { ShoppingCart, Info, Plus, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { addInventoryItem } from "@/lib/client/api"
@@ -27,6 +28,7 @@ interface ShoppingListSuggestion {
 
 export function SmartSuggestions({ items, standalone = false }: SmartSuggestionsProps) {
   const { toast } = useToast()
+  const [addingId, setAddingId] = useState<string | null>(null)
 
   const suggestions = useMemo(() => {
     // Get expiring items (within 3 days)
@@ -89,19 +91,24 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
   }, [items])
 
   const handleAddToInventory = async (suggestion: ShoppingListSuggestion) => {
-    const { item: createdItem } = await addInventoryItem({
-      name: suggestion.name,
-      category: suggestion.category,
-      expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      location: "Refrigerator",
-      quantity: 1,
-      addedOn: new Date().toISOString(),
-    } as unknown as InventoryItem)
+    setAddingId(suggestion.id)
+    try {
+      const { item: createdItem } = await addInventoryItem({
+        name: suggestion.name,
+        category: suggestion.category,
+        expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        location: "Refrigerator",
+        quantity: 1,
+        addedOn: new Date().toISOString(),
+      } as unknown as InventoryItem)
 
-    toast({
-      title: "Item Added",
-      description: `${createdItem.name} has been added to your inventory.`,
-    })
+      toast({
+        title: "Item Added",
+        description: `${createdItem.name} has been added to your inventory.`,
+      })
+    } finally {
+      setAddingId(null)
+    }
   }
 
   if (standalone) {
@@ -173,15 +180,16 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
                         <div className="font-medium">{suggestion.name}</div>
                         <div className="text-xs text-muted-foreground">{suggestion.reason}</div>
                       </div>
-                      <Button
+                      <LoadingButton
                         size="sm"
                         variant="ghost"
                         className="h-8"
+                        isLoading={addingId === suggestion.id}
                         onClick={() => handleAddToInventory(suggestion)}
                       >
                         <Plus className="h-4 w-4 mr-1" />
                         Add
-                      </Button>
+                      </LoadingButton>
                     </div>
                   ))}
                 </div>
@@ -284,10 +292,10 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
                     <div className="font-medium">{suggestion.name}</div>
                     <div className="text-xs text-muted-foreground">{suggestion.reason}</div>
                   </div>
-                  <Button size="sm" variant="ghost" className="h-8" onClick={() => handleAddToInventory(suggestion)}>
+                  <LoadingButton size="sm" variant="ghost" className="h-8" isLoading={addingId === suggestion.id} onClick={() => handleAddToInventory(suggestion)}>
                     <Plus className="h-4 w-4 mr-1" />
                     Add
-                  </Button>
+                  </LoadingButton>
                 </div>
               ))}
             </div>

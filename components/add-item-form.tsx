@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Camera, Upload, FileText, X, Check, Loader2, ShoppingCart, Plus, ScanLine, Sparkles, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -52,6 +53,7 @@ export function AddItemForm() {
   const [activeTab, setActiveTab] = useState("scan")
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [detectedType, setDetectedType] = useState<DetectedType>(null)
   const [analyzeStep, setAnalyzeStep] = useState(0)
   const [extractedItems, setExtractedItems] = useState<
@@ -203,9 +205,20 @@ export function AddItemForm() {
   const showShoppingMatchToast = (matched: Array<{ id: string; name: string }>) => {
     if (matched.length === 0) return
     const names = matched.map((m) => m.name).join(", ")
+    const progressBar = (
+      <div className="mt-2 h-0.5 w-full bg-muted overflow-hidden rounded-full">
+        <div className="h-full bg-muted-foreground/50 origin-left animate-[toast-progress_5s_linear_forwards]" />
+      </div>
+    )
     toast({
       title: `${matched.length} shopping list item${matched.length > 1 ? "s" : ""} marked as bought`,
-      description: names,
+      description: (
+        <>
+          {names}
+          {progressBar}
+        </>
+      ),
+      duration: 5000,
       action: (
         <ToastAction altText="Undo" onClick={() => undoShoppingComplete(matched.map((m) => m.id))}>
           Undo
@@ -216,6 +229,7 @@ export function AddItemForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsSaving(true)
 
     try {
       if (activeTab === "manual") {
@@ -256,6 +270,8 @@ export function AddItemForm() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save item"
       toastWithNudge({ title: "Save Failed", description: message, variant: "destructive" })
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -300,6 +316,46 @@ export function AddItemForm() {
   const [allInventoryNames, setAllInventoryNames] = useState<string[]>([])
   const [nameSuggestions, setNameSuggestions] = useState<string[]>([])
   const [showNameSuggestions, setShowNameSuggestions] = useState(false)
+
+  // Scan review — "+ Add item" row
+  const [scanAddingItem, setScanAddingItem] = useState(false)
+  const [scanNewItemName, setScanNewItemName] = useState("")
+  const [scanNewItemSuggestions, setScanNewItemSuggestions] = useState<string[]>([])
+  const scanSuggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const fetchScanItemSuggestions = (query: string) => {
+    if (scanSuggestTimerRef.current) clearTimeout(scanSuggestTimerRef.current)
+    if (!query.trim()) { setScanNewItemSuggestions([]); return }
+    const q = query.toLowerCase()
+    const results = allInventoryNames.filter((n) => n.toLowerCase().includes(q)).slice(0, 5)
+    setScanNewItemSuggestions(results)
+  }
+
+  const commitScanNewItem = (name: string) => {
+    const trimmed = name.trim()
+    if (trimmed) {
+      const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0]
+      setExtractedItems((prev) => [
+        ...prev,
+        {
+          name: trimmed,
+          included: true,
+          category: "Other",
+          quantity: 1,
+          unit: "pcs",
+          expiryDate: sevenDaysFromNow,
+          confidence: 0,
+          price: "",
+          brand: "",
+        },
+      ])
+    }
+    setScanAddingItem(false)
+    setScanNewItemName("")
+    setScanNewItemSuggestions([])
+  }
 
   const computeNameSuggestions = useCallback(
     (query: string) => {
@@ -659,6 +715,64 @@ export function AddItemForm() {
                               ))}
                             </div>
 
+                            {/* Add item row for scan review */}
+                            {scanAddingItem ? (
+                              <div className="relative rounded-lg border p-3 bg-background space-y-2">
+                                <Input
+                                  value={scanNewItemName}
+                                  placeholder="Item name…"
+                                  className="h-8 text-sm"
+                                  autoFocus
+                                  onChange={(e) => {
+                                    setScanNewItemName(e.target.value)
+                                    fetchScanItemSuggestions(e.target.value)
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") commitScanNewItem(scanNewItemName)
+                                    if (e.key === "Escape") { setScanAddingItem(false); setScanNewItemName(""); setScanNewItemSuggestions([]) }
+                                  }}
+                                  onBlur={() => {
+                                    setTimeout(() => {
+                                      if (!scanNewItemName.trim()) {
+                                        setScanAddingItem(false)
+                                        setScanNewItemSuggestions([])
+                                      }
+                                    }, 150)
+                                  }}
+                                />
+                                {scanNewItemSuggestions.length > 0 && (
+                                  <ul className="absolute left-3 right-3 top-full mt-1 z-50 rounded-md border bg-popover shadow-md max-h-40 overflow-y-auto">
+                                    {scanNewItemSuggestions.map((s) => (
+                                      <li
+                                        key={s}
+                                        className="px-3 py-1.5 text-sm cursor-pointer hover:bg-accent"
+                                        onMouseDown={() => commitScanNewItem(s)}
+                                      >
+                                        {s}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <div className="flex justify-end gap-2">
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setScanAddingItem(false); setScanNewItemName(""); setScanNewItemSuggestions([]) }}>
+                                    Cancel
+                                  </Button>
+                                  <Button size="sm" className="h-7 px-2 text-xs" onClick={() => commitScanNewItem(scanNewItemName)} disabled={!scanNewItemName.trim()}>
+                                    Add
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                                onClick={() => { setScanAddingItem(true); setScanNewItemName("") }}
+                              >
+                                <Plus className="h-4 w-4" />
+                                Add item
+                              </button>
+                            )}
+
                             <div className="space-y-4">
                               <div className="space-y-2">
                                 <Label htmlFor="scan-location">Storage Location</Label>
@@ -941,9 +1055,10 @@ export function AddItemForm() {
           </div>
 
           <div className="mt-6 sticky bottom-0 bg-background pt-4 pb-4 border-t">
-            <Button
+            <LoadingButton
               type="submit"
               className="w-full"
+              isLoading={isSaving}
               disabled={
                 (activeTab === "scan" &&
                   (isAnalyzing || !imagePreview || includedCount === 0)) ||
@@ -955,7 +1070,7 @@ export function AddItemForm() {
               {activeTab === "scan"
                 ? `Save${includedCount > 0 ? ` (${includedCount} item${includedCount > 1 ? "s" : ""})` : ""}`
                 : "Save Item"}
-            </Button>
+            </LoadingButton>
           </div>
         </form>
       </Tabs>
