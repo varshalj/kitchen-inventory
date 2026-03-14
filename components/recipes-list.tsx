@@ -256,11 +256,7 @@ export function RecipesList() {
     return (
       r.title.toLowerCase().includes(q) ||
       (r.notes?.toLowerCase().includes(q) ?? false) ||
-      (r.ingredients?.some(
-        (ing) =>
-          (ing.name?.toLowerCase().includes(q) ?? false) ||
-          (ing.canonicalName?.toLowerCase().includes(q) ?? false),
-      ) ?? false)
+      (r.ingredientNames?.some((name) => name.toLowerCase().includes(q)) ?? false)
     )
   })
 

@@ -104,6 +104,8 @@ export interface Recipe {
   pantryCompatibilityScore?: number
   pantryLastChecked?: string
   isBookmark?: boolean
+  /** Flat list of ingredient names for client-side search; populated by recipeRepo.list() */
+  ingredientNames?: string[]
   createdAt: string
   updatedAt: string
 }

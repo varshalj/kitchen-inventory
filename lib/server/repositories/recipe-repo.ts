@@ -252,12 +252,17 @@ export const recipeRepo = {
 
     const { data, error } = await supabase
       .from("recipes")
-      .select("*")
+      .select("*, recipe_ingredients(name, canonical_name)")
       .eq("user_id", user.id)
       .order("pantry_compatibility_score", { ascending: false, nullsFirst: false })
 
     if (error) throw error
-    return (data ?? []).map(recipeToDomain)
+    return (data ?? []).map((row: any) => ({
+      ...recipeToDomain(row),
+      ingredientNames: (row.recipe_ingredients ?? []).flatMap((ing: any) =>
+        [ing.name, ing.canonical_name].filter(Boolean)
+      ),
+    }))
   },
 
   async updateScore(

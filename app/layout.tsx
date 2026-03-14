@@ -4,8 +4,7 @@ import "./globals.css"
 
 export const metadata = {
   title: "Kitchen Inventory",
-  description: "Track your kitchen items and expiry dates",
-    generator: 'v0.app'
+  description: "Track your kitchen items, expiry dates, and recipes.",
 }
 
 export default function RootLayout({
