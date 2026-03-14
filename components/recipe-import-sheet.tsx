@@ -63,6 +63,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
   const [activeStep, setActiveStep] = useState(0)
   const [showBookmarkForm, setShowBookmarkForm] = useState(false)
   const [bookmarkTitle, setBookmarkTitle] = useState("")
+  const [bookmarkUrl, setBookmarkUrl] = useState("")
   const [bookmarkNotes, setBookmarkNotes] = useState("")
   const [isSavingBookmark, setIsSavingBookmark] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -88,6 +89,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
       setActiveStep(0)
       setShowBookmarkForm(false)
       setBookmarkTitle("")
+      setBookmarkUrl("")
       setBookmarkNotes("")
     }
     return cleanup
@@ -421,6 +423,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
                   className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
                   onClick={() => {
                     setBookmarkTitle(url ? new URL(url).hostname.replace("www.", "") : "")
+                    setBookmarkUrl(url)
                     setShowBookmarkForm(true)
                   }}
                 >
@@ -436,6 +439,17 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
                       onChange={(e) => setBookmarkTitle(e.target.value)}
                       placeholder="Recipe title or site name"
                       className="h-9"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">URL</label>
+                    <Input
+                      value={bookmarkUrl}
+                      onChange={(e) => setBookmarkUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="h-9 text-sm"
+                      type="url"
+                      inputMode="url"
                     />
                   </div>
                   <div className="space-y-1">
@@ -466,7 +480,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
                         try {
                           await saveRecipeBookmark({
                             title: bookmarkTitle.trim(),
-                            sourceUrl: url || undefined,
+                            sourceUrl: bookmarkUrl.trim() || undefined,
                             notes: bookmarkNotes.trim() || undefined,
                           })
                           toast({ title: "Bookmark saved", description: bookmarkTitle.trim() })

@@ -154,6 +154,14 @@ export async function getPendingImports(): Promise<any> {
   return parseResponse(await fetchWithAuth("/api/recipes/import/pending", { cache: "no-store" }))
 }
 
+export async function dismissFailedImport(importId: string): Promise<void> {
+  await fetchWithAuth(`/api/recipes/import/${importId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "deleted" }),
+  })
+}
+
 export async function saveRecipeBookmark(data: {
   title: string
   sourceUrl?: string

@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/main-layout"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
-import { getRecipes, recalculateRecipeScores, getPendingImports } from "@/lib/client/api"
+import { getRecipes, recalculateRecipeScores, getPendingImports, dismissFailedImport } from "@/lib/client/api"
 import { useToast } from "@/hooks/use-toast"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
@@ -204,6 +204,9 @@ export function RecipesList() {
         }
         if (data.failed && data.failed.length > 0) {
           setFailedBanners(data.failed)
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'recipes-list.tsx:useEffect',message:'failed imports loaded from DB on mount',data:{count:data.failed.length,ids:data.failed.map((f:any)=>f.importId)},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
+          // #endregion
         }
       })
       .catch(() => {})
@@ -364,6 +367,7 @@ export function RecipesList() {
               className="text-xs text-primary underline underline-offset-2 mt-1"
               onClick={() => {
                 setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))
+                dismissFailedImport(fb.importId).catch(() => {})
                 setShowImport(true)
               }}
             >
@@ -372,7 +376,13 @@ export function RecipesList() {
           </div>
           <button
             className="shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={() => setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))}
+            onClick={() => {
+              // #region agent log
+              fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'recipes-list.tsx:dismiss-X',message:'dismiss X clicked — marking as deleted in DB',data:{importId:fb.importId},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
+              // #endregion
+              setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))
+              dismissFailedImport(fb.importId).catch(() => {})
+            }}
             aria-label="Dismiss"
           >
             <X className="h-4 w-4" />
