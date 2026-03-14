@@ -1,15 +1,284 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Clock, ChefHat, Mail, ShoppingCart, Shield, Sparkles } from "lucide-react"
+import {
+  ArrowRight,
+  Clock,
+  ChefHat,
+  ShoppingCart,
+  Shield,
+  Sparkles,
+  Camera,
+  Mail,
+  Mic,
+  BookmarkIcon,
+  Check,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
+// ─── Inline UI mockups ────────────────────────────────────────────────────────
+
+function InventoryMockup() {
+  return (
+    <div className="w-full max-w-xs mx-auto">
+      {/* Phone frame */}
+      <div className="rounded-3xl border-4 border-gray-800 shadow-2xl overflow-hidden bg-gray-50">
+        {/* Status bar */}
+        <div className="bg-gray-800 px-4 py-2 flex justify-between items-center">
+          <span className="text-white text-[10px]">9:41</span>
+          <div className="flex gap-1">
+            <div className="w-3 h-1.5 bg-white/60 rounded-sm" />
+            <div className="w-3 h-1.5 bg-white/60 rounded-sm" />
+            <div className="w-3 h-1.5 bg-white/60 rounded-sm" />
+          </div>
+        </div>
+        {/* App content */}
+        <div className="bg-white px-3 pt-3 pb-4 space-y-2">
+          <div className="flex justify-between items-center mb-3">
+            <span className="font-bold text-sm">Kitchen Inventory</span>
+            <span className="text-[10px] text-gray-400">3 items</span>
+          </div>
+          {/* Item 1 – expiring */}
+          <div className="rounded-xl border p-2.5 bg-red-50 border-red-100">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-semibold">Greek Yogurt</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Refrigerator · 500g</p>
+              </div>
+              <span className="text-[9px] font-medium bg-red-100 text-red-600 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
+                2 days
+              </span>
+            </div>
+          </div>
+          {/* Item 2 – ok */}
+          <div className="rounded-xl border p-2.5">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-semibold">Basmati Rice</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Pantry · 2kg</p>
+              </div>
+              <span className="text-[9px] font-medium bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
+                6 mo
+              </span>
+            </div>
+          </div>
+          {/* Item 3 – expiring soon */}
+          <div className="rounded-xl border p-2.5 bg-amber-50 border-amber-100">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs font-semibold">Spinach</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Refrigerator · 1 bunch</p>
+              </div>
+              <span className="text-[9px] font-medium bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
+                5 days
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ExpiryMockup() {
+  return (
+    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 text-xs w-full">
+      <p className="font-semibold text-[11px] text-gray-500 uppercase tracking-wide">Expiring soon</p>
+      {[
+        { name: "Paneer", loc: "Refrigerator", days: "1 day", color: "bg-red-100 text-red-600" },
+        { name: "Coriander", loc: "Refrigerator", days: "3 days", color: "bg-amber-100 text-amber-700" },
+        { name: "Milk", loc: "Refrigerator", days: "4 days", color: "bg-amber-100 text-amber-700" },
+      ].map((item) => (
+        <div key={item.name} className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-xs">{item.name}</p>
+            <p className="text-[10px] text-gray-400">{item.loc}</p>
+          </div>
+          <span className={`text-[9px] font-medium rounded-full px-1.5 py-0.5 ${item.color}`}>{item.days}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RecipeMockup() {
+  return (
+    <div className="rounded-xl border bg-white shadow-sm overflow-hidden w-full text-xs">
+      <div className="bg-gradient-to-r from-orange-400 to-red-400 p-3 text-white">
+        <p className="font-bold text-sm">Palak Paneer</p>
+        <p className="text-[10px] opacity-80 mt-0.5">30 min · 4 servings</p>
+      </div>
+      <div className="p-3 space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-medium">
+            82% pantry match
+          </span>
+          <span className="text-[10px] bg-purple-100 text-purple-700 rounded-full px-2 py-0.5 font-medium">
+            YouTube
+          </span>
+        </div>
+        <p className="text-[10px] text-gray-500">Ingredients: Spinach ✓, Paneer ✓, Cream ✓, Spices…</p>
+      </div>
+    </div>
+  )
+}
+
+function ShoppingMockup() {
+  return (
+    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+      <div className="flex justify-between items-center">
+        <p className="font-semibold text-[11px] text-gray-500 uppercase tracking-wide">Shopping List</p>
+        <div className="flex items-center gap-1 text-[10px] text-primary font-medium">
+          <Mic className="h-3 w-3" /> Voice
+        </div>
+      </div>
+      {[
+        { name: "Tomatoes", done: false },
+        { name: "Onions · 1kg", done: false },
+        { name: "Butter", done: true },
+      ].map((item) => (
+        <div key={item.name} className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className={`h-3.5 w-3.5 rounded border flex items-center justify-center ${item.done ? "bg-primary border-primary" : "border-gray-300"}`}>
+              {item.done && <Check className="h-2.5 w-2.5 text-white" />}
+            </div>
+            <span className={item.done ? "line-through text-gray-400" : ""}>{item.name}</span>
+          </div>
+          {!item.done && (
+            <span className="text-[9px] bg-primary text-white rounded-full px-1.5 py-0.5 font-medium">BUY</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ScanMockup() {
+  return (
+    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Camera className="h-3.5 w-3.5 text-primary" />
+        <p className="font-semibold text-[11px] text-gray-700">AI detected 4 items</p>
+      </div>
+      {[
+        { name: "Amul Butter 500g", cat: "Dairy", include: true },
+        { name: "Tata Salt 1kg", cat: "Pantry", include: true },
+        { name: "Aashirvaad Atta 5kg", cat: "Grains", include: true },
+        { name: "Tropicana Orange 1L", cat: "Beverages", include: false },
+      ].map((item) => (
+        <div key={item.name} className="flex items-center gap-2">
+          <div className={`h-3 w-3 rounded border shrink-0 flex items-center justify-center ${item.include ? "bg-primary border-primary" : "border-gray-300"}`}>
+            {item.include && <Check className="h-2 w-2 text-white" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="truncate font-medium">{item.name}</p>
+          </div>
+          <span className="text-[9px] text-gray-400 shrink-0">{item.cat}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function EmailMockup() {
+  return (
+    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Mail className="h-3.5 w-3.5 text-primary" />
+        <p className="font-semibold text-[11px] text-gray-700">Order synced automatically</p>
+      </div>
+      <div className="rounded-lg bg-gray-50 p-2 text-[10px] space-y-1">
+        <p className="font-medium text-gray-700">Blinkit · Order #BL84923</p>
+        <p className="text-gray-400">3 items added to inventory</p>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {["Swiggy", "Blinkit", "Zepto", "BigBasket", "Amazon Fresh"].map((s) => (
+          <span key={s} className="text-[8px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">{s}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BookmarkMockup() {
+  return (
+    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+      <div className="flex items-center gap-1.5 mb-1">
+        <BookmarkIcon className="h-3.5 w-3.5 text-amber-500" />
+        <p className="font-semibold text-[11px] text-gray-700">Saved bookmark</p>
+      </div>
+      <div className="rounded-lg border p-2 space-y-1">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-medium">Chettinad Chicken Curry</p>
+          <span className="text-[9px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 shrink-0 font-medium">
+            Bookmark
+          </span>
+        </div>
+        <p className="text-[10px] text-gray-400 truncate">youtube.com · Saved for later</p>
+      </div>
+      <p className="text-[10px] text-gray-400 italic">Full import support coming soon</p>
+    </div>
+  )
+}
+
+// ─── Main landing page ─────────────────────────────────────────────────────────
+
 export function LandingPage() {
   const router = useRouter()
+
+  const features = [
+    {
+      icon: <Clock className="h-10 w-10 text-primary mb-4" />,
+      title: "Track expiry dates effortlessly",
+      description:
+        "Get alerts before items go bad. Know exactly what's in your fridge, pantry, and freezer — sorted by what needs to be used first.",
+      mockup: <ExpiryMockup />,
+      badge: null,
+    },
+    {
+      icon: <ChefHat className="h-10 w-10 text-primary mb-4" />,
+      title: "Import recipes from anywhere",
+      description:
+        "Paste a link from YouTube, Instagram, Twitter, or any food blog. Or paste raw recipe text. Recipes are matched against your pantry so you know exactly what you already have.",
+      mockup: <RecipeMockup />,
+      badge: null,
+    },
+    {
+      icon: <ShoppingCart className="h-10 w-10 text-primary mb-4" />,
+      title: "Smart shopping list",
+      description:
+        "Add items by voice, manually, or straight from a recipe. Tap Buy to order from Swiggy, Blinkit, Zepto, BigBasket, Flipkart Minutes and more — without leaving the app.",
+      mockup: <ShoppingMockup />,
+      badge: null,
+    },
+    {
+      icon: <Camera className="h-10 w-10 text-primary mb-4" />,
+      title: "Scan groceries with your camera",
+      description:
+        "Point your camera at a receipt or a bag of groceries. AI extracts the items and adds them to your inventory instantly — review and confirm before saving.",
+      mockup: <ScanMockup />,
+      badge: null,
+    },
+    {
+      icon: <Mail className="h-10 w-10 text-amber-500 mb-4" />,
+      title: "Auto-fill from delivery orders",
+      description:
+        "Connect your email once. Order confirmations from Swiggy, Blinkit, Zepto, BigBasket, Amazon Fresh, and JioMart automatically update your inventory.",
+      mockup: <EmailMockup />,
+      badge: "Coming soon",
+    },
+    {
+      icon: <BookmarkIcon className="h-10 w-10 text-amber-500 mb-4" />,
+      title: "Recipe bookmarks",
+      description:
+        "Found a recipe you can't import yet? Save it as a bookmark with your own notes and retry when support is added.",
+      mockup: <BookmarkMockup />,
+      badge: "Coming soon",
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-white">
@@ -48,215 +317,75 @@ export function LandingPage() {
         {/* Hero Section */}
         <section className="relative overflow-hidden bg-gradient-to-b from-white to-gray-50 pt-6 pb-12 md:pt-10 md:pb-16">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
-            <div className="grid gap-6 md:grid-cols-2 md:gap-10">
+            <div className="grid gap-10 md:grid-cols-2 md:gap-16 items-center">
               <div className="flex flex-col justify-center space-y-4">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-                    Never waste food again. Track, plan, and save.
+                    Never waste food again. Track, cook, and shop smarter.
                   </h1>
-                  <p className="text-gray-500 md:text-xl">
-                    Keep track of your kitchen inventory, get AI-powered meal suggestions, and sync with your favorite
-                    delivery apps.
+                  <p className="text-gray-500 md:text-xl leading-relaxed">
+                    Track your kitchen inventory, import recipes matched to what you have, and shop from your phone with one tap.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 min-[400px]:flex-row">
-                  <Button
-                    size="lg"
-                    className="gap-1"
-                    onClick={() => router.push("/auth")}
-                  >
+                  <Button size="lg" className="gap-1" onClick={() => router.push("/auth")}>
                     Get Started <ArrowRight className="h-4 w-4" />
                   </Button>
                   <Button size="lg" variant="outline" asChild>
-                    <Link href="#features">Learn More</Link>
+                    <Link href="#features">See Features</Link>
                   </Button>
                 </div>
               </div>
-              <div className="flex items-center justify-center">
-                <div className="relative aspect-video w-full max-w-md overflow-hidden rounded-xl border shadow-xl">
-                  <Image
-                    src="/placeholder.jpg"
-                    alt="Kitchen inventory dashboard preview"
-                    fill
-                    className="object-cover"
-                    priority
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <p className="text-sm font-medium text-white">
-                      See how users save time with AI-powered meal planning
-                    </p>
-                  </div>
-                </div>
+              <div className="flex items-center justify-center py-4">
+                <InventoryMockup />
               </div>
             </div>
           </div>
         </section>
 
-        {/* Benefits Section */}
-        <section id="features" className="bg-white py-12 md:py-16">
+        {/* Features Section */}
+        <section id="features" className="bg-white py-12 md:py-20">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
-            <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
+            <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center mb-10">
               <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">
-                Smart features to simplify your kitchen management
+                Everything your kitchen needs, in one app
               </h2>
               <p className="max-w-[85%] text-gray-500 md:text-xl/relaxed">
-                Our app helps you reduce food waste, save money, and cook delicious meals with what you have.
+                From tracking what's in your fridge to importing recipes from YouTube — all the tools you need to reduce waste and cook more.
               </p>
             </div>
-            <div className="mx-auto grid gap-6 py-8 md:grid-cols-3 md:gap-8">
-              <Card className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 h-16 w-16 translate-x-4 -translate-y-4 bg-primary/10 rounded-full"></div>
-                <CardContent className="p-6">
-                  <Clock className="h-10 w-10 text-primary mb-4" />
-                  <h3 className="text-xl font-bold">Track expiry dates effortlessly</h3>
-                  <p className="text-gray-500 mt-2">
-                    Never let food go bad again. Get timely notifications before items expire and reduce waste.
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 h-16 w-16 translate-x-4 -translate-y-4 bg-primary/10 rounded-full"></div>
-                <CardContent className="p-6">
-                  <ChefHat className="h-10 w-10 text-primary mb-4" />
-                  <h3 className="text-xl font-bold">Generate meal plans from your inventory</h3>
-                  <p className="text-gray-500 mt-2">
-                    AI-powered meal suggestions based on what's in your kitchen and what's about to expire.
-                  </p>
-                </CardContent>
-              </Card>
-              <Card className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 h-16 w-16 translate-x-4 -translate-y-4 bg-primary/10 rounded-full"></div>
-                <CardContent className="p-6">
-                  <ShoppingCart className="h-10 w-10 text-primary mb-4" />
-                  <h3 className="text-xl font-bold">Sync with delivery apps automatically</h3>
-                  <p className="text-gray-500 mt-2">
-                    Connect with popular grocery delivery services to automatically update your inventory.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </section>
-
-        {/* Testimonials Section */}
-        <section className="bg-gray-50 py-12 md:py-16">
-          <div className="container mx-auto px-4 md:px-6 max-w-7xl">
-            <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
-              <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">Loved by home cooks everywhere</h2>
-              <p className="max-w-[85%] text-gray-500 md:text-xl/relaxed">
-                See what our users are saying about how our app has transformed their kitchen management.
-              </p>
-            </div>
-            <div className="mx-auto grid gap-6 py-8 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="rounded-full bg-primary/10 p-2">
-                      <span className="text-lg font-bold text-primary">AR</span>
-                    </div>
+            <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+              {features.map((feature) => (
+                <Card key={feature.title} className="relative overflow-hidden flex flex-col">
+                  <div className="absolute top-0 right-0 h-16 w-16 translate-x-4 -translate-y-4 bg-primary/10 rounded-full" />
+                  <CardContent className="p-6 flex flex-col gap-4 flex-1">
                     <div>
-                      <h4 className="font-semibold">Anita R.</h4>
-                      <p className="text-sm text-gray-500">Busy parent of 3</p>
+                      {feature.icon}
+                      <div className="flex items-start gap-2">
+                        <h3 className="text-xl font-bold">{feature.title}</h3>
+                        {feature.badge && (
+                          <span className="shrink-0 mt-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
+                            {feature.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-gray-500 mt-2 text-sm leading-relaxed">{feature.description}</p>
                     </div>
-                  </div>
-                  <p className="text-gray-500">
-                    "I used to throw away so much food every week. This app has cut my food waste by 80% and saved me at
-                    least ₹2000 monthly. The meal suggestions are a lifesaver on busy weeknights!"
-                  </p>
-                  <div className="flex text-amber-400 mt-4">
-                    {[...Array(5)].map((_, i) => (
-                      <svg
-                        key={i}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        stroke="none"
-                      >
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="rounded-full bg-primary/10 p-2">
-                      <span className="text-lg font-bold text-primary">RK</span>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">Rahul K.</h4>
-                      <p className="text-sm text-gray-500">Bachelor, tech professional</p>
-                    </div>
-                  </div>
-                  <p className="text-gray-500">
-                    "The email integration with delivery apps is genius! My Swiggy and BigBasket orders automatically
-                    update my inventory. I've never been more organized with my groceries."
-                  </p>
-                  <div className="flex text-amber-400 mt-4">
-                    {[...Array(5)].map((_, i) => (
-                      <svg
-                        key={i}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        stroke="none"
-                      >
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="md:col-span-2 lg:col-span-1">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="rounded-full bg-primary/10 p-2">
-                      <span className="text-lg font-bold text-primary">SP</span>
-                    </div>
-                    <div>
-                      <h4 className="font-semibold">Sneha P.</h4>
-                      <p className="text-sm text-gray-500">Health-conscious foodie</p>
-                    </div>
-                  </div>
-                  <p className="text-gray-500">
-                    "The AI meal planner is incredible! It suggests recipes based on what I have and what's expiring
-                    soon. I've discovered so many creative ways to use ingredients I would have thrown away."
-                  </p>
-                  <div className="flex text-amber-400 mt-4">
-                    {[...Array(5)].map((_, i) => (
-                      <svg
-                        key={i}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill={i < 4 ? "currentColor" : "none"}
-                        stroke={i < 4 ? "none" : "currentColor"}
-                        strokeWidth="2"
-                      >
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                    <div className="mt-auto pt-2">{feature.mockup}</div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
         </section>
 
         {/* FAQ Section */}
-        <section className="bg-gray-50 py-12 md:py-16">
+        <section className="bg-white py-12 md:py-16">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
             <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
               <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">Frequently Asked Questions</h2>
               <p className="max-w-[85%] text-gray-500 md:text-xl/relaxed">
-                Find answers to common questions about our app.
+                Find answers to common questions about how the app works.
               </p>
             </div>
             <div className="mx-auto max-w-3xl py-8">
@@ -264,37 +393,36 @@ export function LandingPage() {
                 <AccordionItem value="item-1">
                   <AccordionTrigger>How does the email integration work?</AccordionTrigger>
                   <AccordionContent>
-                    Our app securely connects to your email account and scans for order confirmations from supported
-                    grocery delivery services like Swiggy, Blinkit, Zepto, BigBasket, Amazon Fresh, and JioMart. When
-                    you receive an order confirmation, we automatically extract the items and add them to your
-                    inventory. You can toggle this feature on/off for each email account in your profile settings.
+                    The app securely connects to your email account and scans for order confirmations from supported
+                    grocery delivery services — Swiggy, Blinkit, Zepto, BigBasket, Amazon Fresh, and JioMart. When
+                    you receive an order confirmation, items are automatically extracted and added to your inventory.
+                    You can toggle this feature on or off for each connected account in your profile settings.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-2">
                   <AccordionTrigger>Is my data secure and private?</AccordionTrigger>
                   <AccordionContent>
-                    Yes, we take your privacy seriously. We only scan for order confirmation emails from supported
-                    grocery services and never read your personal emails. Your inventory data is stored securely and is
-                    never shared with third parties without your explicit consent. You can delete your account and all
-                    associated data at any time from your profile settings.
+                    Yes. We only scan for order confirmation emails from supported grocery services and never access
+                    your personal emails. Your inventory data is stored securely and is never shared with third parties.
+                    You can delete your account and all associated data at any time from your profile settings.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-3">
-                  <AccordionTrigger>How does the AI meal planning work?</AccordionTrigger>
+                  <AccordionTrigger>How does recipe import work?</AccordionTrigger>
                   <AccordionContent>
-                    Our AI meal planner analyzes your current inventory, prioritizing items that are expiring soon. It
-                    generates personalized meal suggestions based on your preferences, dietary restrictions, and cooking
-                    skill level. The meal plans include recipes that maximize the use of your available ingredients,
-                    helping you reduce food waste and save money.
+                    Paste any URL — from YouTube, Instagram, Twitter, or a food blog — and the app extracts the recipe
+                    automatically. You can also paste raw recipe text and the AI will structure it for you. Every saved
+                    recipe gets a pantry compatibility score showing what percentage of ingredients you already have.
+                    You can then add missing ingredients directly to your shopping list.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-4">
                   <AccordionTrigger>Do I need to manually add all my items?</AccordionTrigger>
                   <AccordionContent>
-                    No! While you can manually add items, our app offers several convenient options: 1) Email
-                    integration automatically adds items from your grocery deliveries, 2) Receipt scanning lets you
-                    quickly add multiple items by taking a photo of your receipt, and 3) Quick Add feature for common
-                    items with preset expiry dates. These features make inventory management effortless.
+                    No! The app offers several convenient ways to add items: email integration automatically adds items
+                    from grocery deliveries; AI camera scan lets you photograph a receipt or bag of groceries to add
+                    multiple items at once; voice add lets you speak items into your shopping list hands-free; and Quick
+                    Add covers common pantry staples with preset expiry estimates. Manual entry is always available too.
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
@@ -313,10 +441,10 @@ export function LandingPage() {
                 </div>
               </div>
               <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-                Ready to transform your kitchen management?
+                Ready to take control of your kitchen?
               </h2>
               <p className="max-w-[85%] text-primary-foreground/80 md:text-xl/relaxed">
-                Join thousands of users who are saving time, money, and reducing food waste.
+                Join home cooks who've cut their food waste and cook more with what they already have.
               </p>
               <Button
                 size="lg"
@@ -355,28 +483,27 @@ export function LandingPage() {
               <span className="text-sm font-medium">Kitchen Inventory</span>
             </div>
             <div className="flex gap-4 text-sm text-gray-500">
-              <Link href="#" className="hover:underline">
-                Terms
-              </Link>
-              <Link href="#" className="hover:underline">
-                Privacy
-              </Link>
-              <Link href="#" className="hover:underline">
-                Contact
-              </Link>
+              <Link href="#" className="hover:underline">Terms</Link>
+              <Link href="#" className="hover:underline">Privacy</Link>
+              <Link href="#" className="hover:underline">Contact</Link>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <Shield className="h-4 w-4 text-gray-500" />
-                <span className="text-xs text-gray-500">Secure & Private</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Mail className="h-4 w-4 text-gray-500" />
-                <span className="text-xs text-gray-500">support@kitcheninventory.app</span>
-              </div>
+            <div className="flex items-center gap-1">
+              <Shield className="h-4 w-4 text-gray-500" />
+              <span className="text-xs text-gray-500">Secure &amp; Private</span>
             </div>
           </div>
-          <div className="mt-6 text-center text-xs text-gray-500">© {new Date().getFullYear()} Kitchen Inventory. All rights reserved.</div>
+          <div className="mt-4 text-center text-xs text-gray-500">
+            © {new Date().getFullYear()} Kitchen Inventory. All rights reserved.
+          </div>
+          <div className="mt-2 text-center text-xs text-gray-400">
+            Vibe coded with AI tools and crafted with love by{" "}
+            <a
+              href="mailto:varshaljain@gmail.com"
+              className="underline underline-offset-2 hover:text-gray-600 transition-colors"
+            >
+              Varshal Jain
+            </a>
+          </div>
         </div>
       </footer>
     </div>
