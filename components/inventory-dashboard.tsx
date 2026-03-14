@@ -181,6 +181,12 @@ useEffect(() => {
       result.sort((a, b) => a.category.localeCompare(b.category))
     } else if (sort === "location") {
       result.sort((a, b) => a.location.localeCompare(b.location))
+    } else if (sort === "addedOn") {
+      result.sort((a, b) => {
+        const aDate = a.addedOn ? new Date(a.addedOn).getTime() : 0
+        const bDate = b.addedOn ? new Date(b.addedOn).getTime() : 0
+        return bDate - aDate
+      })
     }
 
     setFilteredItems(result)
@@ -765,6 +771,7 @@ useEffect(() => {
               <DropdownMenuLabel>Sort By</DropdownMenuLabel>
               <DropdownMenuRadioGroup value={sortBy} onValueChange={setSortBy}>
                 <DropdownMenuRadioItem value="expiryDate">Expiry Date</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="addedOn">Recently Added</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="category">Category</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="location">Location</DropdownMenuRadioItem>
@@ -968,7 +975,7 @@ useEffect(() => {
                   } ${selectionMode && selectedIds.has(item.id) ? "ring-2 ring-primary" : ""}`}
                   onClick={() => selectionMode ? toggleItemSelection(item.id) : setDetailItem(item)}
                 >
-                  <CardContent className="pt-4">
+                  <CardContent className="p-3 pb-2">
                     <div className="flex justify-between items-start">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
                         {selectionMode && (
@@ -980,24 +987,25 @@ useEffect(() => {
                             onClick={(e) => e.stopPropagation()}
                           />
                         )}
-                        <div className="min-w-0">
-                          <div className="flex items-center">
-                            <h3 className="font-medium">{item.name}</h3>
-                            {(item.quantity ?? 0) >= 1 ? (
-                              <span className="ml-2 text-sm text-muted-foreground">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-medium line-clamp-2 leading-snug">{item.name}</h3>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            {item.location}
+                            {(item.quantity ?? 0) >= 1 && (
+                              <>
+                                {" · "}
                                 {item.unit && item.unit !== "pcs"
                                   ? `${item.quantity}${item.unit}`
                                   : (item.quantity ?? 0) > 1 ? `×${item.quantity}` : null}
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{item.location}</p>
+                              </>
+                            )}
+                          </p>
                           {(item.rating ?? 0) > 0 ? (
                             <StarRating value={item.rating!} size="sm" readOnly />
                           ) : null}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-start gap-2 shrink-0 ml-2">
                         <Badge variant="outline">{item.category}</Badge>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1042,14 +1050,14 @@ useEffect(() => {
                       </div>
                     </div>
                     {isExpired && (
-                      <div className="mt-2 text-red-500 text-sm flex items-center">
-                        <AlertCircle className="h-3.5 w-3.5 mr-1" />
+                      <div className="mt-1.5 text-red-500 text-xs flex items-center">
+                        <AlertCircle className="h-3.5 w-3.5 mr-1 shrink-0" />
                         Expired on {new Date(item.expiryDate).toLocaleDateString()}
                       </div>
                     )}
                     {isMissingExpiry && (
-                      <div className="mt-2 text-yellow-500 text-sm flex items-center">
-                        <Clock className="h-3.5 w-3.5 mr-1" />
+                      <div className="mt-1.5 text-yellow-500 text-xs flex items-center">
+                        <Clock className="h-3.5 w-3.5 mr-1 shrink-0" />
                         <span>Set expiry date</span>
                         <Button
                           variant="ghost"
@@ -1062,7 +1070,7 @@ useEffect(() => {
                       </div>
                     )}
                   </CardContent>
-                  <CardFooter className="border-t pt-3 text-xs text-muted-foreground">
+                  <CardFooter className="border-t pt-2 pb-2 px-3 text-xs text-muted-foreground">
                     {!isExpired && !isMissingExpiry && (
                       <span>Expires: {new Date(item.expiryDate).toLocaleDateString()}</span>
                     )}
