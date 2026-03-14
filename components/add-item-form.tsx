@@ -15,7 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { MainLayout } from "@/components/main-layout"
-import { addInventoryItem } from "@/lib/client/api"
+import { addInventoryItem, updateShoppingItem } from "@/lib/client/api"
+import { ToastAction } from "@/components/ui/toast"
 import type { InventoryItem } from "@/lib/types"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { QuantityWithUnits } from "@/components/quantity-with-units"
@@ -191,21 +192,45 @@ export function AddItemForm() {
     reader.readAsDataURL(file)
   }
 
+  const undoShoppingComplete = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map((id) => updateShoppingItem({ id, completed: false } as any)))
+    } catch {
+      // ignore undo errors
+    }
+  }
+
+  const showShoppingMatchToast = (matched: Array<{ id: string; name: string }>) => {
+    if (matched.length === 0) return
+    const names = matched.map((m) => m.name).join(", ")
+    toast({
+      title: `${matched.length} shopping list item${matched.length > 1 ? "s" : ""} marked as bought`,
+      description: names,
+      action: (
+        <ToastAction altText="Undo" onClick={() => undoShoppingComplete(matched.map((m) => m.id))}>
+          Undo
+        </ToastAction>
+      ),
+    })
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     try {
       if (activeTab === "manual") {
-        await addInventoryItem({
+        const { completedShoppingItems } = await addInventoryItem({
           ...formData,
           unit: formData.unit || "pcs",
           addedOn: new Date().toISOString(),
         } as unknown as InventoryItem)
         toast({ title: "Item Saved", description: `${formData.name} has been added to your inventory.` })
+        showShoppingMatchToast(completedShoppingItems)
       } else if (extractedItems.length > 0) {
         const approved = extractedItems.filter((entry) => entry.included)
+        const allCompleted: Array<{ id: string; name: string }> = []
         for (const item of approved) {
-          await addInventoryItem({
+          const { completedShoppingItems } = await addInventoryItem({
             name: item.name,
             category: item.category,
             expiryDate: new Date(item.expiryDate).toISOString(),
@@ -218,11 +243,13 @@ export function AddItemForm() {
             brand: formData.brand,
             orderedFrom: formData.orderedFrom || undefined,
           } as unknown as InventoryItem)
+          allCompleted.push(...completedShoppingItems)
         }
         toast({
           title: "Items Saved",
           description: `${approved.length} item${approved.length !== 1 ? "s" : ""} added to your inventory.`,
         })
+        showShoppingMatchToast(allCompleted)
       }
 
       router.push("/dashboard")
@@ -363,7 +390,7 @@ export function AddItemForm() {
 
   const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
     try {
-      await addInventoryItem({
+      const { completedShoppingItems } = await addInventoryItem({
         name: item.name,
         category: item.category,
         expiryDate: new Date(item.expiryDate).toISOString(),
@@ -373,6 +400,7 @@ export function AddItemForm() {
         addedOn: new Date().toISOString(),
       } as unknown as InventoryItem)
       toast({ title: "Item Added", description: `${item.name} has been added to your inventory.` })
+      showShoppingMatchToast(completedShoppingItems)
       router.push("/dashboard")
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to add item"

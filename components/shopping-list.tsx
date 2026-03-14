@@ -262,7 +262,10 @@ export function ShoppingList() {
 
         let createdInventoryItem: InventoryItem | null = null
         try {
-          createdInventoryItem = await addInventoryItem(inventoryPayload)
+          const { item: inv } = await addInventoryItem(inventoryPayload)
+          createdInventoryItem = inv
+          // completedShoppingItems will always be [] here — the shopping item was already
+          // marked complete before this call, so no circular auto-complete occurs
         } catch {
           // Non-fatal: inventory creation failed, still mark shopping item complete
         }

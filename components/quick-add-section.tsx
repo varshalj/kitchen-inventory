@@ -60,7 +60,7 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
   ]
 
   const handleQuickAdd = async (item: Omit<InventoryItem, "id">) => {
-    const createdItem = await addInventoryItem(item as unknown as InventoryItem)
+    const { item: createdItem } = await addInventoryItem(item as unknown as InventoryItem)
     onAddItem(createdItem)
   }
 

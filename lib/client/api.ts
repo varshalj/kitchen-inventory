@@ -17,14 +17,21 @@ export async function getArchivedItems(): Promise<InventoryItem[]> {
   return parseResponse(await fetchWithAuth("/api/inventory?archived=true", { cache: "no-store" }))
 }
 
-export async function addInventoryItem(item: InventoryItem): Promise<InventoryItem> {
-  return parseResponse(
+export async function addInventoryItem(
+  item: InventoryItem,
+): Promise<{ item: InventoryItem; completedShoppingItems: Array<{ id: string; name: string }> }> {
+  const data = await parseResponse<Record<string, unknown>>(
     await fetchWithAuth("/api/inventory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(item),
     }),
   )
+  const { _completedShoppingItems, ...itemFields } = data
+  return {
+    item: itemFields as unknown as InventoryItem,
+    completedShoppingItems: (_completedShoppingItems as Array<{ id: string; name: string }>) ?? [],
+  }
 }
 
 export async function updateInventoryItem(item: InventoryItem): Promise<InventoryItem> {
