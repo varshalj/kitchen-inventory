@@ -62,7 +62,7 @@ export function InventoryDashboard() {
   const [userInitials, setUserInitials] = useState("")
   const [showRecipeImport, setShowRecipeImport] = useState(false)
   const [recipeReviewData, setRecipeReviewData] = useState<{
-    importId: string
+    importId: string | undefined
     recipe: ParsedRecipe
     pantryMatches: PantryMatch[]
     compatibilityScore: number

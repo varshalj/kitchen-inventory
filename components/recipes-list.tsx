@@ -143,7 +143,7 @@ export function RecipesList() {
   const [search, setSearch] = useState("")
   const [showImport, setShowImport] = useState(false)
   const [recipeReviewData, setRecipeReviewData] = useState<{
-    importId: string
+    importId: string | undefined
     recipe: ParsedRecipe
     pantryMatches: PantryMatch[]
     compatibilityScore: number
@@ -210,7 +210,7 @@ export function RecipesList() {
   }
 
   const handleRecipeReady = (data: {
-    importId: string
+    importId: string | undefined
     recipe: ParsedRecipe
     pantryMatches: PantryMatch[]
     compatibilityScore: number

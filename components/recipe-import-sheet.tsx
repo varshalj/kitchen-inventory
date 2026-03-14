@@ -31,7 +31,7 @@ interface RecipeImportSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onRecipeReady: (data: {
-    importId: string
+    importId: string | undefined
     recipe: ParsedRecipe
     pantryMatches: PantryMatch[]
     compatibilityScore: number
