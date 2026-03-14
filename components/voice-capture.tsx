@@ -458,7 +458,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                       autoFocus
                     />
                     {newItemSuggestions.length > 0 && (
-                      <ul className="absolute left-3 right-3 top-full mt-1 z-50 rounded-md border bg-popover shadow-md max-h-40 overflow-y-auto">
+                      <ul className="absolute left-3 right-3 bottom-full mb-1 z-50 rounded-md border bg-popover shadow-md max-h-40 overflow-y-auto">
                         {newItemSuggestions.map((s) => (
                           <li
                             key={s}
