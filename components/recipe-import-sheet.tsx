@@ -210,9 +210,8 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome 
 
       triggerHaptic(HAPTIC_SUCCESS)
 
-      const importId = `text-${Date.now()}`
       onRecipeReady({
-        importId,
+        importId: undefined,
         recipe: result.recipe,
         pantryMatches: result.pantryMatches || [],
         compatibilityScore: result.compatibilityScore ?? 0,
