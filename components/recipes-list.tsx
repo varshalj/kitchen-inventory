@@ -162,6 +162,7 @@ export function RecipesList() {
     sourceUrl: string
     sourcePlatform: string
     rawText?: string
+    openedFromSheet?: boolean
   } | null>(null)
   const [pendingImports, setPendingImports] = useState<Array<{ importId: string; url: string }>>([])
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -308,7 +309,7 @@ export function RecipesList() {
     rawText?: string
   }) => {
     setShowImport(false)
-    setRecipeReviewData(data)
+    setRecipeReviewData({ ...data, openedFromSheet: true })
   }
 
   const handleReviewSaved = () => {
@@ -317,8 +318,9 @@ export function RecipesList() {
   }
 
   const handleReviewBack = () => {
+    const fromSheet = recipeReviewData?.openedFromSheet ?? false
     setRecipeReviewData(null)
-    setShowImport(true)
+    if (fromSheet) setShowImport(true)
   }
 
   const sortedRecipes = sortRecipes(recipes, sort).filter((r) => {
@@ -573,7 +575,19 @@ export function RecipesList() {
         open={showImport}
         onOpenChange={setShowImport}
         onRecipeReady={handleRecipeReady}
-        onGoHome={() => { setShowImport(false); refreshPendingImports() }}
+        onGoHome={(pendingImport) => {
+          setShowImport(false)
+          if (pendingImport) {
+            // Immediately inject the known pending import so polling starts without
+            // relying on a DB round-trip that might not have landed yet.
+            setPendingImports((prev) => {
+              if (prev.some((p) => p.importId === pendingImport.importId)) return prev
+              return [...prev, pendingImport]
+            })
+          } else {
+            refreshPendingImports()
+          }
+        }}
         onBookmarkSaved={() => { setShowImport(false); loadRecipes() }}
       />
     </MainLayout>

@@ -39,7 +39,7 @@ interface RecipeImportSheetProps {
     sourcePlatform: string
     rawText?: string
   }) => void
-  onGoHome?: () => void
+  onGoHome?: (pendingImport?: { importId: string; url: string }) => void
   onBookmarkSaved?: () => void
 }
 
@@ -69,6 +69,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
   const [isSavingBookmark, setIsSavingBookmark] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const progressTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const importIdRef = useRef<string | null>(null)
 
   const cleanup = useCallback(() => {
     if (pollRef.current) {
@@ -153,6 +154,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
       }
 
       const importId = result.importId
+      importIdRef.current = importId
       let attempts = 0
       const maxAttempts = 60
 
@@ -240,7 +242,11 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
 
   const handleGoHome = () => {
     onOpenChange(false)
-    onGoHome?.()
+    const pendingImport =
+      importIdRef.current && url.trim()
+        ? { importId: importIdRef.current, url: url.trim() }
+        : undefined
+    onGoHome?.(pendingImport)
   }
 
   return (
