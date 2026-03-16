@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     if (!user)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { itemId, action, addToShoppingList } = await request.json()
+    const { itemId, action, addToShoppingList, originalQuantity, originalUnit } = await request.json()
 
     if (!itemId || !["consume", "waste"].includes(action)) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
@@ -52,8 +52,9 @@ export async function POST(request: NextRequest) {
       const createdShoppingItem = await shoppingRepo.create(supabase, {
         id: crypto.randomUUID(),
         name: updated.name,
-        quantity: updated.quantity ?? 1,
-        unit: updated.unit || undefined,
+        // Use originalQuantity from the client — updated.quantity is already 0 after archiving
+        quantity: originalQuantity != null && originalQuantity > 0 ? originalQuantity : 1,
+        unit: (originalUnit || updated.unit) || undefined,
         category: updated.category,
         completed: false,
         addedOn: new Date().toISOString(),

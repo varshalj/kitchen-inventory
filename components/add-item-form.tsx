@@ -391,17 +391,26 @@ export function AddItemForm() {
   useEffect(() => {
     const loadSuggestions = async () => {
       try {
-        const [archivedRes, activeRes] = await Promise.all([
+        const [archivedRes, activeRes, shoppingRes] = await Promise.all([
           fetchWithAuth("/api/inventory?archived=true"),
           fetchWithAuth("/api/inventory?archived=false"),
+          fetchWithAuth("/api/shopping"),
         ])
 
-        // Build name list for autocomplete from both active + archived
+        // Build name list for autocomplete from both active + archived inventory
         const names: string[] = []
         if (activeRes.ok) {
           const activeItems = await activeRes.json()
           if (Array.isArray(activeItems)) {
             activeItems.forEach((i: any) => { if (i.name) names.push(i.name) })
+          }
+        }
+
+        // Also include active shopping list items so typeahead covers items not yet in inventory
+        if (shoppingRes.ok) {
+          const shoppingItems = await shoppingRes.json()
+          if (Array.isArray(shoppingItems)) {
+            shoppingItems.forEach((i: any) => { if (i.name) names.push(i.name) })
           }
         }
 

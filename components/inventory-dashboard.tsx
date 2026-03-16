@@ -329,7 +329,7 @@ useEffect(() => {
       const response = await fetchWithAuth("/api/inventory/operations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId: item.id, action: "consume", addToShoppingList: true }),
+        body: JSON.stringify({ itemId: item.id, action: "consume", addToShoppingList: true, originalQuantity: item.quantity, originalUnit: item.unit }),
       })
 
       const payload = await response.json()

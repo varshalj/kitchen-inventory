@@ -1,8 +1,9 @@
 "use client"
 
-import { ExternalLink, ShoppingBag, Star } from "lucide-react"
+import { ExternalLink, ShoppingBag, Star, Zap, ShoppingCart, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Sheet,
   SheetContent,
@@ -28,6 +29,12 @@ function matchesPlatform(platform: GroceryPlatform, orderSource: string): boolea
   return name.includes(src) || src.includes(name) || id.includes(src)
 }
 
+const TAB_CONFIG = [
+  { key: "quick" as const, label: "Quick", icon: Zap },
+  { key: "grocery" as const, label: "Grocery", icon: ShoppingCart },
+  { key: "shop" as const, label: "Shop", icon: Store },
+]
+
 export function BuyBottomSheet({
   item,
   open,
@@ -44,19 +51,58 @@ export function BuyBottomSheet({
     ? enabledPlatforms.find((p) => matchesPlatform(p, item.orderedFrom!))
     : null
 
-  const prioritizedSources = new Set(
-    userOrderSources.map((s) => s.toLowerCase()),
-  )
-  const sorted = [...enabledPlatforms].sort((a, b) => {
-    const aMatch = prioritizedSources.has(a.name.toLowerCase()) ? 0 : 1
-    const bMatch = prioritizedSources.has(b.name.toLowerCase()) ? 0 : 1
-    return aMatch - bMatch
-  })
+  const prioritizedSources = new Set(userOrderSources.map((s) => s.toLowerCase()))
+
+  const sortPlatforms = (list: GroceryPlatform[]) =>
+    [...list].sort((a, b) => {
+      const aMatch = prioritizedSources.has(a.name.toLowerCase()) ? 0 : 1
+      const bMatch = prioritizedSources.has(b.name.toLowerCase()) ? 0 : 1
+      return aMatch - bMatch
+    })
 
   const handleOpenPlatform = (platform: GroceryPlatform) => {
-    const url = platform.searchUrl(query)
-    window.open(url, "_blank", "noopener,noreferrer")
+    window.open(platform.searchUrl(query), "_blank", "noopener,noreferrer")
   }
+
+  const renderPlatformGrid = (category: GroceryPlatform["category"]) => {
+    const platforms = sortPlatforms(enabledPlatforms.filter((p) => p.category === category))
+    if (platforms.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground text-center py-6">
+          No platforms configured for this tab. Go to Profile Settings to enable platforms.
+        </p>
+      )
+    }
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {platforms.map((platform) => {
+          const isPrevious = previousPlatform?.id === platform.id
+          return (
+            <Button
+              key={platform.id}
+              variant={isPrevious ? "default" : "outline"}
+              className="h-auto py-3 px-4 flex flex-col items-center gap-1.5 relative"
+              onClick={() => handleOpenPlatform(platform)}
+            >
+              <span className="font-medium text-sm">{platform.name}</span>
+              <span className="text-xs opacity-70 flex items-center gap-1">
+                <ExternalLink className="h-3 w-3" />
+                {platform.website}
+              </span>
+              {isPrevious && (
+                <Badge variant="secondary" className="absolute -top-2 -right-2 text-[10px] px-1.5">
+                  Last used
+                </Badge>
+              )}
+            </Button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Default to the tab containing the previously-used platform, or "quick"
+  const defaultTab = previousPlatform?.category ?? "quick"
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -76,44 +122,29 @@ export function BuyBottomSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="px-4 pb-6 space-y-3">
+        <div className="px-4 pb-6">
           {previousPlatform && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground pb-2 border-b">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground pb-3 mb-3 border-b">
               <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
               <span>Previously ordered from <strong>{item.orderedFrom}</strong></span>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            {sorted.map((platform) => {
-              const isPrevious = previousPlatform?.id === platform.id
-              return (
-                <Button
-                  key={platform.id}
-                  variant={isPrevious ? "default" : "outline"}
-                  className="h-auto py-3 px-4 flex flex-col items-center gap-1.5 relative"
-                  onClick={() => handleOpenPlatform(platform)}
-                >
-                  <span className="font-medium text-sm">{platform.name}</span>
-                  <span className="text-xs opacity-70 flex items-center gap-1">
-                    <ExternalLink className="h-3 w-3" />
-                    {platform.website}
-                  </span>
-                  {isPrevious && (
-                    <Badge variant="secondary" className="absolute -top-2 -right-2 text-[10px] px-1.5">
-                      Last used
-                    </Badge>
-                  )}
-                </Button>
-              )
-            })}
-          </div>
-
-          {sorted.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No delivery platforms configured. Go to Profile Settings to add platforms available in your area.
-            </p>
-          )}
+          <Tabs defaultValue={defaultTab}>
+            <TabsList className="w-full mb-4">
+              {TAB_CONFIG.map(({ key, label, icon: Icon }) => (
+                <TabsTrigger key={key} value={key} className="flex-1 flex items-center gap-1.5">
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            {TAB_CONFIG.map(({ key }) => (
+              <TabsContent key={key} value={key}>
+                {renderPlatformGrid(key)}
+              </TabsContent>
+            ))}
+          </Tabs>
         </div>
       </SheetContent>
     </Sheet>

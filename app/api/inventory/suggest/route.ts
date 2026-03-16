@@ -14,19 +14,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([])
     }
 
-    const { data, error } = await supabase
-      .from("inventory_items")
-      .select("name")
-      .eq("user_id", user.id)
-      .ilike("name", `%${q}%`)
-      .order("name")
-      .limit(10)
+    const [inventoryResult, shoppingResult] = await Promise.all([
+      supabase
+        .from("inventory_items")
+        .select("name")
+        .eq("user_id", user.id)
+        .ilike("name", `%${q}%`)
+        .order("name")
+        .limit(10),
+      supabase
+        .from("shopping_items")
+        .select("name")
+        .eq("user_id", user.id)
+        .ilike("name", `%${q}%`)
+        .order("name")
+        .limit(10),
+    ])
 
-    if (error) throw error
+    if (inventoryResult.error) throw inventoryResult.error
 
-    // Deduplicate names (inventory may have multiple entries for same item)
-    const unique = [...new Set((data || []).map((r: any) => r.name as string))]
-    return NextResponse.json(unique)
+    const allNames = [
+      ...(inventoryResult.data || []).map((r: any) => r.name as string),
+      ...(shoppingResult.data || []).map((r: any) => r.name as string),
+    ]
+    // Deduplicate (case-insensitive, preserve first occurrence)
+    const seen = new Set<string>()
+    const unique = allNames.filter((n) => {
+      const key = n.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    return NextResponse.json(unique.slice(0, 10))
   } catch (error) {
     console.error("INVENTORY SUGGEST ERROR:", error)
     return NextResponse.json({ error: (error as Error).message }, { status: 500 })
