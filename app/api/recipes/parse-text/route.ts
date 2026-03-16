@@ -14,7 +14,7 @@ Return a JSON object with:
 - "cookTimeMinutes" (number or null)
 - "totalTimeMinutes" (number or null): only if a total time is given but prep/cook are not broken out
 - "ingredients" (array): each with:
-  - "name" (string): full ingredient line as written (e.g. "200g medjool dates, roughly chopped")
+  - "name" (string): clean ingredient name only, no quantities, units, or prep notes (e.g. "Medjool Dates")
   - "canonicalName" (string): clean normalized ingredient name only, no quantities or prep notes (e.g. "Medjool Dates")
   - "quantity" (number or null)
   - "unit" (string or null): one of pcs, g, kg, oz, lb, ml, L, cup, tbsp, tsp, fl oz

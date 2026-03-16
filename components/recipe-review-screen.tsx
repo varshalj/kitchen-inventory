@@ -11,6 +11,8 @@ import {
   Save,
   ArrowLeft,
   Flame,
+  ChevronDown,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +25,7 @@ import { useToast } from "@/hooks/use-toast"
 import { saveRecipe, updateFullRecipe, addToShoppingList, suggestInventoryItems } from "@/lib/client/api"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import type { ParsedRecipe, ParsedIngredient, PantryMatch, PantryMatchStatus } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 interface RecipeReviewScreenProps {
   mode?: "import" | "edit"
@@ -34,6 +37,7 @@ interface RecipeReviewScreenProps {
   sourceUrl?: string
   sourcePlatform?: string
   notes?: string
+  rawText?: string
   onBack: () => void
   onSaved: () => void
 }
@@ -61,6 +65,7 @@ export function RecipeReviewScreen({
   sourceUrl,
   sourcePlatform,
   notes: initialNotes,
+  rawText,
   onBack,
   onSaved,
 }: RecipeReviewScreenProps) {
@@ -78,6 +83,8 @@ export function RecipeReviewScreen({
     }),
   )
   const [notes, setNotes] = useState(initialNotes || "")
+  const [editableSourceUrl, setEditableSourceUrl] = useState(sourceUrl ?? "")
+  const [showRawText, setShowRawText] = useState(false)
   const [saving, setSaving] = useState(false)
   const [addingToList, setAddingToList] = useState(false)
   const [focusedIngredient, setFocusedIngredient] = useState<number | null>(null)
@@ -165,6 +172,7 @@ export function RecipeReviewScreen({
       if (mode === "edit" && recipeId) {
         await updateFullRecipe(recipeId, {
           title,
+          sourceUrl: editableSourceUrl || undefined,
           servings: servings || undefined,
           prepTimeMinutes: prepTime || undefined,
           cookTimeMinutes: cookTime || undefined,
@@ -180,7 +188,7 @@ export function RecipeReviewScreen({
         await saveRecipe({
           title,
           importId,
-          sourceUrl,
+          sourceUrl: editableSourceUrl || undefined,
           sourcePlatform,
           servings: servings || undefined,
           prepTimeMinutes: prepTime || undefined,
@@ -515,7 +523,7 @@ export function RecipeReviewScreen({
         </div>
 
         {/* Notes */}
-        <div className="mb-6">
+        <div className="mb-4">
           <Label htmlFor="recipe-notes" className="text-sm font-medium mb-2 block">
             Notes (optional)
           </Label>
@@ -528,10 +536,56 @@ export function RecipeReviewScreen({
           />
         </div>
 
-        {/* Source */}
-        <p className="text-xs text-muted-foreground mb-4 truncate">
-          Source: {sourceUrl}
-        </p>
+        {/* Original pasted text (paste-as-text flow only) */}
+        {rawText && (
+          <div className="mb-4">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setShowRawText((v) => !v)}
+            >
+              <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", showRawText && "rotate-180")} />
+              Original pasted text
+            </button>
+            {showRawText && (
+              <div className="mt-2 rounded-lg border bg-muted/30 p-3 max-h-48 overflow-y-auto">
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap break-words">{rawText}</pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Source URL */}
+        <div className="mb-6">
+          <Label htmlFor="recipe-source" className="text-sm font-medium mb-2 block">
+            Source (optional)
+          </Label>
+          <Input
+            id="recipe-source"
+            value={editableSourceUrl}
+            onChange={(e) => setEditableSourceUrl(e.target.value)}
+            placeholder="https://… or e.g. From Grandma's cookbook"
+            className="text-sm"
+          />
+          {editableSourceUrl && (() => {
+            try {
+              new URL(editableSourceUrl)
+              return (
+                <a
+                  href={editableSourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1.5 flex items-center gap-1 text-xs text-primary underline underline-offset-2 truncate"
+                >
+                  <ExternalLink className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{editableSourceUrl}</span>
+                </a>
+              )
+            } catch {
+              return null
+            }
+          })()}
+        </div>
 
         {/* Actions */}
         <div className="flex gap-2">

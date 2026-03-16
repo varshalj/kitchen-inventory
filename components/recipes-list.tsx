@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import {
   ChefHat,
@@ -13,6 +13,7 @@ import {
   Sparkles,
   X,
   Bookmark,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +21,7 @@ import { Input } from "@/components/ui/input"
 import { MainLayout } from "@/components/main-layout"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
-import { getRecipes, recalculateRecipeScores, getPendingImports, dismissFailedImport } from "@/lib/client/api"
+import { getRecipes, recalculateRecipeScores, getPendingImports, dismissFailedImport, saveRecipeBookmark } from "@/lib/client/api"
 import { useToast } from "@/hooks/use-toast"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
@@ -160,7 +161,10 @@ export function RecipesList() {
     compatibilityScore: number
     sourceUrl: string
     sourcePlatform: string
+    rawText?: string
   } | null>(null)
+  const [pendingImports, setPendingImports] = useState<Array<{ importId: string; url: string }>>([])
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [pendingBanner, setPendingBanner] = useState<{
     importId: string
     recipe: ParsedRecipe
@@ -204,13 +208,58 @@ export function RecipesList() {
         }
         if (data.failed && data.failed.length > 0) {
           setFailedBanners(data.failed)
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'recipes-list.tsx:useEffect',message:'failed imports loaded from DB on mount',data:{count:data.failed.length,ids:data.failed.map((f:any)=>f.importId)},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
-          // #endregion
+        }
+        if (data.pending && data.pending.length > 0) {
+          setPendingImports(data.pending.map((p: any) => ({ importId: p.importId, url: p.url || "" })))
         }
       })
       .catch(() => {})
   }, [loadRecipes])
+
+  // Live polling while imports are in progress
+  useEffect(() => {
+    if (pendingImports.length > 0 && !pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const data = await getPendingImports()
+          const nowPendingIds = new Set<string>((data.pending || []).map((p: any) => p.importId))
+
+          setPendingImports((prev) => prev.filter((p) => nowPendingIds.has(p.importId)))
+
+          if (data.ready && data.ready.length > 0) {
+            const item = data.ready[0]
+            setPendingBanner((prev) => prev ?? {
+              importId: item.importId,
+              recipe: item.recipe,
+              pantryMatches: item.pantryMatches || [],
+              compatibilityScore: item.compatibilityScore ?? 0,
+              url: item.url || "",
+              platform: item.platform || "blog",
+            })
+          }
+
+          if (data.failed && data.failed.length > 0) {
+            setFailedBanners((prev) => {
+              const existingIds = new Set(prev.map((b) => b.importId))
+              return [...prev, ...(data.failed || []).filter((f: any) => !existingIds.has(f.importId))]
+            })
+          }
+        } catch {
+          // Network blip — keep polling
+        }
+      }, 4000)
+    } else if (pendingImports.length === 0 && pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [pendingImports.length])
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -238,6 +287,7 @@ export function RecipesList() {
     compatibilityScore: number
     sourceUrl: string
     sourcePlatform: string
+    rawText?: string
   }) => {
     setShowImport(false)
     setRecipeReviewData(data)
@@ -275,6 +325,7 @@ export function RecipesList() {
     return (
       <RecipeReviewScreen
         {...recipeReviewData}
+        rawText={recipeReviewData.rawText}
         onBack={handleReviewBack}
         onSaved={handleReviewSaved}
       />
@@ -353,6 +404,17 @@ export function RecipesList() {
         </div>
       )}
 
+      {/* In-progress import banners */}
+      {pendingImports.map((pi) => (
+        <div key={pi.importId} className="mb-3 flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+          <Loader2 className="h-4 w-4 shrink-0 text-primary animate-spin" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Importing recipe…</p>
+            <p className="text-xs text-muted-foreground truncate">{pi.url}</p>
+          </div>
+        </div>
+      ))}
+
       {/* Failed import banners */}
       {failedBanners.map((fb) => (
         <div key={fb.importId} className="mb-3 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
@@ -363,23 +425,38 @@ export function RecipesList() {
             {fb.errorMessage && (
               <p className="text-xs text-muted-foreground mt-0.5">{fb.errorMessage}</p>
             )}
-            <button
-              className="text-xs text-primary underline underline-offset-2 mt-1"
-              onClick={() => {
-                setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))
-                dismissFailedImport(fb.importId).catch(() => {})
-                setShowImport(true)
-              }}
-            >
-              Retry import
-            </button>
+            <div className="flex items-center gap-3 mt-1">
+              <button
+                className="text-xs text-primary underline underline-offset-2"
+                onClick={() => {
+                  setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))
+                  dismissFailedImport(fb.importId).catch(() => {})
+                  setShowImport(true)
+                }}
+              >
+                Retry import
+              </button>
+              <button
+                className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                onClick={async () => {
+                  try {
+                    await saveRecipeBookmark({ title: fb.url, sourceUrl: fb.url })
+                    setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))
+                    dismissFailedImport(fb.importId).catch(() => {})
+                    loadRecipes()
+                    toast({ title: "Bookmark saved" })
+                  } catch {
+                    toast({ title: "Failed to save bookmark", variant: "destructive" })
+                  }
+                }}
+              >
+                Save as bookmark
+              </button>
+            </div>
           </div>
           <button
             className="shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => {
-              // #region agent log
-              fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'recipes-list.tsx:dismiss-X',message:'dismiss X clicked — marking as deleted in DB',data:{importId:fb.importId},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{})
-              // #endregion
               setFailedBanners((prev) => prev.filter((b) => b.importId !== fb.importId))
               dismissFailedImport(fb.importId).catch(() => {})
             }}

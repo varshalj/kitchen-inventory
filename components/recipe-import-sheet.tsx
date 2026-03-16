@@ -37,6 +37,7 @@ interface RecipeImportSheetProps {
     compatibilityScore: number
     sourceUrl: string
     sourcePlatform: string
+    rawText?: string
   }) => void
   onGoHome?: () => void
   onBookmarkSaved?: () => void
@@ -227,6 +228,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
         compatibilityScore: result.compatibilityScore ?? 0,
         sourceUrl: "",
         sourcePlatform: "text",
+        rawText: trimmed,
       })
       onOpenChange(false)
     } catch (err) {
