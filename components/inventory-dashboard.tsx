@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -46,6 +47,7 @@ import { supabase as supabaseClient } from "@/lib/supabase-client"
 import type { InventoryItem, ParsedRecipe, PantryMatch } from "@/lib/types"
 
 export function InventoryDashboard() {
+  const router = useRouter()
   const [items, setItems] = useState<InventoryItem[]>([])
   const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -1163,6 +1165,10 @@ useEffect(() => {
         onRecipeReady={(data) => {
           setShowRecipeImport(false)
           setRecipeReviewData(data)
+        }}
+        onGoHome={() => {
+          setShowRecipeImport(false)
+          router.push("/recipes")
         }}
       />
 

@@ -165,19 +165,52 @@ export function RecipesList() {
   } | null>(null)
   const [pendingImports, setPendingImports] = useState<Array<{ importId: string; url: string }>>([])
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const [pendingBanner, setPendingBanner] = useState<{
+  const [pendingBanners, setPendingBanners] = useState<Array<{
     importId: string
     recipe: ParsedRecipe
     pantryMatches: PantryMatch[]
     compatibilityScore: number
     url: string
     platform: string
-  } | null>(null)
+  }>>([])
   const [failedBanners, setFailedBanners] = useState<Array<{
     importId: string
     url: string
     errorMessage?: string
   }>>([])
+
+  const refreshPendingImports = useCallback(async () => {
+    try {
+      const data = await getPendingImports()
+      if (data.ready && data.ready.length > 0) {
+        setPendingBanners((prev) => {
+          const existingIds = new Set(prev.map((b) => b.importId))
+          const newBanners = (data.ready as any[])
+            .filter((item: any) => !existingIds.has(item.importId))
+            .map((item: any) => ({
+              importId: item.importId,
+              recipe: item.recipe,
+              pantryMatches: item.pantryMatches || [],
+              compatibilityScore: item.compatibilityScore ?? 0,
+              url: item.url || "",
+              platform: item.platform || "blog",
+            }))
+          return [...prev, ...newBanners]
+        })
+      }
+      if (data.failed && data.failed.length > 0) {
+        setFailedBanners((prev) => {
+          const existingIds = new Set(prev.map((b) => b.importId))
+          return [...prev, ...(data.failed as any[]).filter((f: any) => !existingIds.has(f.importId))]
+        })
+      }
+      if (data.pending && data.pending.length > 0) {
+        setPendingImports(data.pending.map((p: any) => ({ importId: p.importId, url: p.url || "" })))
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
 
   const loadRecipes = useCallback(async () => {
     try {
@@ -193,28 +226,8 @@ export function RecipesList() {
 
   useEffect(() => {
     loadRecipes()
-    getPendingImports()
-      .then((data) => {
-        if (data.ready && data.ready.length > 0) {
-          const item = data.ready[0]
-          setPendingBanner({
-            importId: item.importId,
-            recipe: item.recipe,
-            pantryMatches: item.pantryMatches || [],
-            compatibilityScore: item.compatibilityScore ?? 0,
-            url: item.url || "",
-            platform: item.platform || "blog",
-          })
-        }
-        if (data.failed && data.failed.length > 0) {
-          setFailedBanners(data.failed)
-        }
-        if (data.pending && data.pending.length > 0) {
-          setPendingImports(data.pending.map((p: any) => ({ importId: p.importId, url: p.url || "" })))
-        }
-      })
-      .catch(() => {})
-  }, [loadRecipes])
+    refreshPendingImports()
+  }, [loadRecipes, refreshPendingImports])
 
   // Live polling while imports are in progress
   useEffect(() => {
@@ -227,14 +240,19 @@ export function RecipesList() {
           setPendingImports((prev) => prev.filter((p) => nowPendingIds.has(p.importId)))
 
           if (data.ready && data.ready.length > 0) {
-            const item = data.ready[0]
-            setPendingBanner((prev) => prev ?? {
-              importId: item.importId,
-              recipe: item.recipe,
-              pantryMatches: item.pantryMatches || [],
-              compatibilityScore: item.compatibilityScore ?? 0,
-              url: item.url || "",
-              platform: item.platform || "blog",
+            setPendingBanners((prev) => {
+              const existingIds = new Set(prev.map((b) => b.importId))
+              const newBanners = (data.ready as any[])
+                .filter((item: any) => !existingIds.has(item.importId))
+                .map((item: any) => ({
+                  importId: item.importId,
+                  recipe: item.recipe,
+                  pantryMatches: item.pantryMatches || [],
+                  compatibilityScore: item.compatibilityScore ?? 0,
+                  url: item.url || "",
+                  platform: item.platform || "blog",
+                }))
+              return newBanners.length > 0 ? [...prev, ...newBanners] : prev
             })
           }
 
@@ -377,32 +395,32 @@ export function RecipesList() {
         </div>
       )}
 
-      {/* Resume banner for abandoned imports */}
-      {pendingBanner && !recipeReviewData && (
-        <div className="mb-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+      {/* Resume banners for completed imports */}
+      {pendingBanners.map((pb) => (
+        <div key={pb.importId} className="mb-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
           <Sparkles className="h-5 w-5 shrink-0 text-primary" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium">Your recipe is ready for review</p>
-            <p className="text-xs text-muted-foreground truncate">{pendingBanner.recipe.title}</p>
+            <p className="text-xs text-muted-foreground truncate">{pb.recipe.title}</p>
           </div>
           <Button
             size="sm"
             onClick={() => {
               setRecipeReviewData({
-                importId: pendingBanner.importId,
-                recipe: pendingBanner.recipe,
-                pantryMatches: pendingBanner.pantryMatches,
-                compatibilityScore: pendingBanner.compatibilityScore,
-                sourceUrl: pendingBanner.url,
-                sourcePlatform: pendingBanner.platform,
+                importId: pb.importId,
+                recipe: pb.recipe,
+                pantryMatches: pb.pantryMatches,
+                compatibilityScore: pb.compatibilityScore,
+                sourceUrl: pb.url,
+                sourcePlatform: pb.platform,
               })
-              setPendingBanner(null)
+              setPendingBanners((prev) => prev.filter((b) => b.importId !== pb.importId))
             }}
           >
             Review
           </Button>
         </div>
-      )}
+      ))}
 
       {/* In-progress import banners */}
       {pendingImports.map((pi) => (
@@ -555,7 +573,7 @@ export function RecipesList() {
         open={showImport}
         onOpenChange={setShowImport}
         onRecipeReady={handleRecipeReady}
-        onGoHome={() => setShowImport(false)}
+        onGoHome={() => { setShowImport(false); refreshPendingImports() }}
         onBookmarkSaved={() => { setShowImport(false); loadRecipes() }}
       />
     </MainLayout>

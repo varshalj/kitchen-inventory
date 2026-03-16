@@ -22,6 +22,33 @@ export async function GET(_request: NextRequest) {
 
     if (error) throw error
 
+    // Auto-expire imports that have been stuck in a non-terminal status for >15 minutes.
+    // This covers workflows that were killed or never received a callback.
+    const TIMEOUT_MS = 15 * 60 * 1000
+    const now = Date.now()
+    const stuckIds = (rows || [])
+      .filter((r: any) =>
+        !["ready", "failed", "saved", "deleted"].includes(r.status) &&
+        now - new Date(r.updated_at).getTime() > TIMEOUT_MS,
+      )
+      .map((r: any) => r.id)
+
+    if (stuckIds.length > 0) {
+      await supabase
+        .from("recipe_imports")
+        .update({ status: "failed", error_message: "Import timed out. The workflow may not have completed." })
+        .in("id", stuckIds)
+        .eq("user_id", user.id)
+
+      // Reflect the update in the local rows array so the response is accurate
+      for (const row of rows || []) {
+        if (stuckIds.includes(row.id)) {
+          row.status = "failed"
+          row.error_message = "Import timed out. The workflow may not have completed."
+        }
+      }
+    }
+
     const readyImports = (rows || []).filter((r: any) => r.status === "ready" && r.parsed_recipe)
     const pendingImports = (rows || []).filter((r: any) => !["ready", "failed"].includes(r.status))
     const failedImports = (rows || []).filter((r: any) => r.status === "failed")
