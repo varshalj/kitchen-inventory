@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -479,10 +480,11 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
                     >
                       Cancel
                     </Button>
-                    <Button
+                    <LoadingButton
                       size="sm"
                       className="flex-1"
                       disabled={!bookmarkTitle.trim() || isSavingBookmark}
+                      isLoading={isSavingBookmark}
                       onClick={async () => {
                         setIsSavingBookmark(true)
                         try {
@@ -501,8 +503,8 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
                         }
                       }}
                     >
-                      {isSavingBookmark ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Bookmark"}
-                    </Button>
+                      Save Bookmark
+                    </LoadingButton>
                   </div>
                 </div>
               )}

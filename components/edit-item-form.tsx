@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,11 +18,12 @@ import { cn } from "@/lib/utils"
 
 interface EditItemFormProps {
   item: InventoryItem
-  onSave: (item: InventoryItem) => void
+  onSave: (item: InventoryItem) => void | Promise<void>
   onCancel: () => void
 }
 
 export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
+  const [isSaving, setIsSaving] = useState(false)
   const { settings } = useUserSettings()
   const [formData, setFormData] = useState({
     ...item,
@@ -51,9 +53,14 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
 
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onSave(formData)
+    setIsSaving(true)
+    try {
+      await onSave(formData)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -235,7 +242,7 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
                 value={formData.reviewNote || ""}
                 onChange={(e) => setFormData((prev) => ({ ...prev, reviewNote: e.target.value }))}
                 rows={2}
-                className="resize-none text-sm"
+                className="resize-none text-base md:text-sm"
               />
             </>
           )}
@@ -259,7 +266,7 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="submit">Save Changes</Button>
+          <LoadingButton type="submit" isLoading={isSaving} disabled={isSaving}>Save Changes</LoadingButton>
         </div>
       </form>
     </div>

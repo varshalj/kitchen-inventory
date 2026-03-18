@@ -49,6 +49,8 @@ export function ShoppingList() {
   const [buyItem, setBuyItem] = useState<ShoppingItem | null>(null)
   const [newItem, setNewItem] = useState({ name: "", quantity: 1, unit: "pcs", notes: "" })
   const [isAddingItem, setIsAddingItem] = useState(false)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -252,6 +254,7 @@ export function ShoppingList() {
       setIncompleteCount(updated.filter((i) => !i.completed).length)
       return updated
     })
+    setTogglingId(id)
     triggerHaptic()
 
     try {
@@ -321,6 +324,8 @@ export function ShoppingList() {
       // Revert optimistic update on failure
       setItems((prev) => prev.map((i) => (i.id === id ? { ...i, completed: !newCompleted } : i)))
       toast({ title: "Failed to update item", variant: "destructive" })
+    } finally {
+      setTogglingId(null)
     }
   }
 
@@ -378,14 +383,20 @@ export function ShoppingList() {
 
   const handleUpdateItem = async () => {
     if (!editItem) return
-
-    await updateShoppingItem(editItem)
-    setItems((prev) => prev.map((i) => (i.id === editItem.id ? editItem : i)))
-    setEditItem(null)
-    toast({
-      title: "Item Updated",
-      description: `${editItem.name} has been updated.`,
-    })
+    setIsSavingEdit(true)
+    try {
+      await updateShoppingItem(editItem)
+      setItems((prev) => prev.map((i) => (i.id === editItem.id ? editItem : i)))
+      setEditItem(null)
+      toast({
+        title: "Item Updated",
+        description: `${editItem.name} has been updated.`,
+      })
+    } catch {
+      toast({ title: "Failed to update item", variant: "destructive" })
+    } finally {
+      setIsSavingEdit(false)
+    }
   }
 
   // Feature 4 — Search & Sort computation
@@ -591,7 +602,7 @@ export function ShoppingList() {
               <Card key={item.id} className={item.completed ? "bg-muted/50" : ""}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-3">
-                    <Button
+                    <LoadingButton
                       variant="outline"
                       size="icon"
                       className={cn(
@@ -599,12 +610,13 @@ export function ShoppingList() {
                         item.completed ? "bg-primary text-primary-foreground" : "",
                       )}
                       onClick={() => handleToggleComplete(item.id)}
+                      isLoading={togglingId === item.id}
                     >
                       {item.completed && <Check className="h-3 w-3" />}
                       <span className="sr-only">
                         {item.completed ? "Mark as not completed" : "Mark as completed"}
                       </span>
-                    </Button>
+                    </LoadingButton>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
@@ -752,7 +764,7 @@ export function ShoppingList() {
                 <Button variant="outline" onClick={() => setEditItem(null)}>
                   Cancel
                 </Button>
-                <Button onClick={handleUpdateItem}>Save Changes</Button>
+                <LoadingButton onClick={handleUpdateItem} isLoading={isSavingEdit} disabled={isSavingEdit}>Save Changes</LoadingButton>
               </div>
             </div>
           </div>

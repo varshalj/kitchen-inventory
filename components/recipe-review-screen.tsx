@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -372,16 +373,17 @@ export function RecipeReviewScreen({
               Ingredients ({ingredients.length})
             </Label>
             {missingIngredients.length > 0 && (
-              <Button
+              <LoadingButton
                 variant="outline"
                 size="sm"
                 className="h-7 text-xs gap-1"
                 onClick={handleAddMissingToShoppingList}
                 disabled={addingToList}
+                isLoading={addingToList}
               >
                 <ShoppingCart className="h-3 w-3" />
                 Add {missingIngredients.length} missing to list
-              </Button>
+              </LoadingButton>
             )}
           </div>
           <div className="space-y-2">
@@ -412,7 +414,7 @@ export function RecipeReviewScreen({
                               if (ing.name.length >= 2) fetchSuggestions(ing.name)
                             }}
                             onBlur={() => setTimeout(() => setFocusedIngredient(null), 200)}
-                            className="text-sm h-8"
+                            className="text-base md:text-sm h-8"
                           />
                           {focusedIngredient === i && suggestions.length > 0 && (
                             <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-md border bg-popover shadow-md max-h-32 overflow-y-auto">
@@ -498,7 +500,7 @@ export function RecipeReviewScreen({
                 <Textarea
                   value={step}
                   onChange={(e) => updateStep(i, e.target.value)}
-                  className="text-sm min-h-[60px]"
+                  className="text-base md:text-sm min-h-[60px]"
                   rows={2}
                 />
                 <Button
@@ -565,7 +567,7 @@ export function RecipeReviewScreen({
             value={editableSourceUrl}
             onChange={(e) => setEditableSourceUrl(e.target.value)}
             placeholder="https://… or e.g. From Grandma's cookbook"
-            className="text-sm"
+            className="text-base md:text-sm"
           />
           {editableSourceUrl && (() => {
             try {
@@ -596,14 +598,15 @@ export function RecipeReviewScreen({
           >
             Cancel
           </Button>
-          <Button
+          <LoadingButton
             className="flex-1 gap-1"
             onClick={handleSave}
             disabled={saving || !title.trim()}
+            isLoading={saving}
           >
             <Save className="h-4 w-4" />
             {saving ? "Saving…" : mode === "edit" ? "Update Recipe" : "Save Recipe"}
-          </Button>
+          </LoadingButton>
         </div>
       </div>
     </div>

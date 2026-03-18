@@ -9,6 +9,7 @@ import { installConsoleCapture } from "@/lib/console-capture"
 import { ScreenshotBugNudge } from "@/components/screenshot-bug-nudge"
 import { OnboardingTour } from "@/components/onboarding-tour"
 import { ShoppingCountProvider } from "@/contexts/shopping-count-context"
+import { RecipeImportProvider } from "@/contexts/recipe-import-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -19,10 +20,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <UserSettingsProvider>
         <ShoppingCountProvider>
-          {children}
-          <Toaster />
-          <ScreenshotBugNudge />
-          <OnboardingTour />
+          <RecipeImportProvider>
+            {children}
+            <Toaster />
+            <ScreenshotBugNudge />
+            <OnboardingTour />
+          </RecipeImportProvider>
         </ShoppingCountProvider>
       </UserSettingsProvider>
     </ThemeProvider>

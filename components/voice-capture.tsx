@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { Mic, MicOff, Loader2, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import {
   Sheet,
@@ -499,18 +500,15 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
 
           {phase === "review" && (
             <SheetFooter>
-              <Button
+              <LoadingButton
                 className="w-full"
                 onClick={handleConfirm}
                 disabled={includedCount === 0 || saving}
+                isLoading={saving}
               >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4 mr-2" />
-                )}
+                <Plus className="h-4 w-4 mr-2" />
                 Add {includedCount} item{includedCount !== 1 ? "s" : ""} to list
-              </Button>
+              </LoadingButton>
             </SheetFooter>
           )}
         </SheetContent>

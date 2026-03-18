@@ -18,6 +18,13 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { MainLayout } from "@/components/main-layout"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
@@ -26,6 +33,7 @@ import { useToast } from "@/hooks/use-toast"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
 import type { Recipe, ParsedRecipe, PantryMatch } from "@/lib/types"
+import { useRecipeImportCount } from "@/contexts/recipe-import-context"
 
 type SortOption = "score" | "newest" | "az"
 
@@ -148,6 +156,7 @@ function sortRecipes(recipes: Recipe[], sort: SortOption): Recipe[] {
 
 export function RecipesList() {
   const { toast } = useToast()
+  const { setPendingRecipeImportCount } = useRecipeImportCount()
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -229,6 +238,11 @@ export function RecipesList() {
     loadRecipes()
     refreshPendingImports()
   }, [loadRecipes, refreshPendingImports])
+
+  // Keep nav dot in sync with active imports + ready banners
+  useEffect(() => {
+    setPendingRecipeImportCount(pendingImports.length + pendingBanners.length)
+  }, [pendingImports.length, pendingBanners.length, setPendingRecipeImportCount])
 
   // Live polling while imports are in progress
   useEffect(() => {
@@ -368,6 +382,23 @@ export function RecipesList() {
           >
             <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
           </Button>
+          {recipes.length > 1 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  {sortLabels[sort]}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuRadioGroup value={sort} onValueChange={(v) => setSort(v as SortOption)}>
+                  {(["score", "newest", "az"] as SortOption[]).map((opt) => (
+                    <DropdownMenuRadioItem key={opt} value={opt}>{sortLabels[opt]}</DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           <Button
             size="sm"
             className="gap-1"
@@ -500,27 +531,6 @@ export function RecipesList() {
         </div>
       )}
 
-      {/* Sort control (only if recipes exist) */}
-      {!isLoading && recipes.length > 1 && (
-        <div className="mb-4 flex items-center gap-2">
-          <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground mr-1">Sort:</span>
-          {(["score", "newest", "az"] as SortOption[]).map((opt) => (
-            <button
-              key={opt}
-              onClick={() => setSort(opt)}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs transition-colors",
-                sort === opt
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-background text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {sortLabels[opt]}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Loading skeleton */}
       {isLoading && (

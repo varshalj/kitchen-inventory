@@ -5,10 +5,12 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useShoppingCount } from "@/contexts/shopping-count-context"
+import { useRecipeImportCount } from "@/contexts/recipe-import-context"
 
 export function BottomNavigation() {
   const pathname = usePathname()
   const { incompleteCount } = useShoppingCount()
+  const { pendingRecipeImportCount } = useRecipeImportCount()
 
   const isActive = (path: string) => {
     if (path === "/dashboard" && pathname === "/dashboard") return true
@@ -68,7 +70,12 @@ export function BottomNavigation() {
         </Link>
 
         <Link href="/recipes" className={navLinkClass("/recipes")}>
-          <ChefHat className="h-5 w-5 transition-transform duration-200" />
+          <div className="relative">
+            <ChefHat className="h-5 w-5 transition-transform duration-200" />
+            {pendingRecipeImportCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary animate-pulse" />
+            )}
+          </div>
           <span>Recipes</span>
           {isActive("/recipes") && (
             <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />

@@ -54,6 +54,7 @@ export function AddItemForm() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [addingSuggestedId, setAddingSuggestedId] = useState<string | null>(null)
   const [detectedType, setDetectedType] = useState<DetectedType>(null)
   const [analyzeStep, setAnalyzeStep] = useState(0)
   const [extractedItems, setExtractedItems] = useState<
@@ -454,6 +455,7 @@ export function AddItemForm() {
   }, [])
 
   const handleAddSuggestedItem = async (item: (typeof suggestedItems)[0]) => {
+    setAddingSuggestedId(item.name)
     try {
       const { completedShoppingItems } = await addInventoryItem({
         name: item.name,
@@ -470,6 +472,8 @@ export function AddItemForm() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to add item"
       toastWithNudge({ title: "Add Failed", description: message, variant: "destructive" })
+    } finally {
+      setAddingSuggestedId(null)
     }
   }
 
@@ -659,7 +663,7 @@ export function AddItemForm() {
                                       <Input
                                         value={item.name}
                                         onChange={(e) => updateExtractedItem(index, "name", e.target.value)}
-                                        className="h-8 text-sm font-medium flex-1"
+                                        className="h-8 text-base md:text-sm font-medium flex-1"
                                         disabled={!item.included}
                                       />
                                       <Badge variant="outline" className="text-[10px] shrink-0">
@@ -697,7 +701,7 @@ export function AddItemForm() {
                                         value={item.expiryDate}
                                         onChange={(e) => updateExtractedItem(index, "expiryDate", e.target.value)}
                                         onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
-                                        className="h-9 text-sm"
+                                        className="h-9 text-base md:text-sm"
                                         disabled={!item.included}
                                       />
                                     </div>
@@ -730,7 +734,7 @@ export function AddItemForm() {
                                 <Input
                                   value={scanNewItemName}
                                   placeholder="Item name…"
-                                  className="h-8 text-sm"
+                                  className="h-8 text-base md:text-sm"
                                   autoFocus
                                   onChange={(e) => {
                                     setScanNewItemName(e.target.value)
@@ -1050,10 +1054,16 @@ export function AddItemForm() {
                           </div>
                         </CardContent>
                         <div className="border-t p-3 flex justify-end">
-                          <Button type="button" size="sm" onClick={() => handleAddSuggestedItem(item)}>
+                          <LoadingButton
+                            type="button"
+                            size="sm"
+                            onClick={() => handleAddSuggestedItem(item)}
+                            isLoading={addingSuggestedId === item.name}
+                            disabled={addingSuggestedId === item.name}
+                          >
                             <Plus className="h-4 w-4 mr-1" />
                             Add to Inventory
-                          </Button>
+                          </LoadingButton>
                         </div>
                       </Card>
                     ))}

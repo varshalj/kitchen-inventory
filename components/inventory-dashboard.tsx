@@ -58,7 +58,8 @@ export function InventoryDashboard() {
   const [sortBy, setSortBy] = useState("expiryDate")
   const [showMealPlanModal, setShowMealPlanModal] = useState(false)
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null)
-  const [reviewItem, setReviewItem] = useState<{ item: InventoryItem; type: "consumed" | "wasted" } | null>(null)
+  const [reviewQueue, setReviewQueue] = useState<Array<{ item: InventoryItem; type: "consumed" | "wasted" }>>([])
+  const reviewItem = reviewQueue[0] ?? null
   const [isLoading, setIsLoading] = useState(true)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -345,7 +346,7 @@ useEffect(() => {
 
       // Delay the review prompt until after the undo window closes
       const reviewTimer = !item.rating
-        ? setTimeout(() => setReviewItem({ item, type: "consumed" }), 5500)
+        ? setTimeout(() => setReviewQueue((prev) => [...prev, { item, type: "consumed" }]), 5500)
         : undefined
 
       const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
@@ -438,7 +439,7 @@ useEffect(() => {
 
       // Delay the review prompt until after the undo window closes
       const reviewTimer = !item.rating
-        ? setTimeout(() => setReviewItem({ item, type: "wasted" }), 5500)
+        ? setTimeout(() => setReviewQueue((prev) => [...prev, { item, type: "wasted" }]), 5500)
         : undefined
 
       const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
@@ -530,7 +531,7 @@ useEffect(() => {
           ratedAt: new Date().toISOString(),
         }),
       })
-      setReviewItem(null)
+      setReviewQueue((prev) => prev.slice(1))
       toast({
         title: "Review Saved",
         duration: 3000,
@@ -540,7 +541,7 @@ useEffect(() => {
   }
 
   const handleReviewSkip = () => {
-    setReviewItem(null)
+    setReviewQueue((prev) => prev.slice(1))
   }
 
   const handleEditSave = async (updatedItem: InventoryItem) => {
@@ -1111,7 +1112,7 @@ useEffect(() => {
       </Dialog>
 
       {/* Review Prompt Dialog */}
-      <Dialog open={!!reviewItem} onOpenChange={(open) => !open && setReviewItem(null)}>
+      <Dialog open={!!reviewItem} onOpenChange={(open) => !open && setReviewQueue((prev) => prev.slice(1))}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Rate This Product</DialogTitle>

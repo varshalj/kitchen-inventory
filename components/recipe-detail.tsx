@@ -19,6 +19,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { LoadingButton } from "@/components/ui/loading-button"
 import {
   Sheet,
   SheetContent,
@@ -439,16 +440,17 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
           >
             <Copy className="h-4 w-4" />
           </Button>
-          <Button
+          <LoadingButton
             variant="ghost"
             size="icon"
             className="h-9 w-9 text-destructive hover:text-destructive"
             onClick={handleDelete}
             disabled={isDeleting}
+            isLoading={isDeleting}
             title="Delete recipe"
           >
-            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-          </Button>
+            <Trash2 className="h-4 w-4" />
+          </LoadingButton>
         </div>
       </div>
 
@@ -613,16 +615,14 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
             <Button variant="outline" className="flex-1" onClick={() => setShowGrocerySheet(false)}>
               Cancel
             </Button>
-            <Button
+            <LoadingButton
               className="flex-1"
               onClick={handleAddSelectedToList}
               disabled={isAddingToList || selectedGroceryItems.size === 0}
+              isLoading={isAddingToList}
             >
-              {isAddingToList ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : null}
               Add to List
-            </Button>
+            </LoadingButton>
           </div>
         </SheetContent>
       </Sheet>
