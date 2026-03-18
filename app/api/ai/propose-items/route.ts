@@ -7,7 +7,7 @@ import OpenAI from "openai"
 const requestSchema = z.object({
   userInput: z.string().min(1),
   imageBase64: z.string().optional(),
-  imagesBase64: z.array(z.string()).refine((arr) => arr.length <= 5, { message: "Max 5 images allowed" }).optional(),
+  imagesBase64: z.array(z.string()).optional(),
 })
 
 const proposalSchema = z.object({
@@ -232,6 +232,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { userInput, imageBase64, imagesBase64 } = parsedRequest.data
+
+  if (imagesBase64 && imagesBase64.length > 5) {
+    return NextResponse.json({ error: "Max 5 images allowed" }, { status: 400 })
+  }
+
   const userId = user.id
 
   try {
