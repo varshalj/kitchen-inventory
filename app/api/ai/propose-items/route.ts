@@ -7,7 +7,7 @@ import OpenAI from "openai"
 const requestSchema = z.object({
   userInput: z.string().min(1),
   imageBase64: z.string().optional(),
-  imagesBase64: z.array(z.string()).max(5).optional(),
+  imagesBase64: z.array(z.string()).refine((arr) => arr.length <= 5, { message: "Max 5 images allowed" }).optional(),
 })
 
 const proposalSchema = z.object({
