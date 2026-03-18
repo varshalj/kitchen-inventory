@@ -599,6 +599,24 @@ export function AddItemForm() {
           <div ref={formContainerRef} className="max-h-[calc(100vh-13rem)] overflow-y-auto pb-20">
             {/* Unified Scan Tab */}
             <TabsContent value="scan">
+              {/* Hidden inputs always mounted so refs stay non-null across all states */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
               <div className="space-y-6">
                 {!imagePreview && imagePreviews.length === 0 ? (
                   <div className="space-y-4">
@@ -607,8 +625,8 @@ export function AddItemForm() {
                         <Sparkles className="h-8 w-8 text-foreground" />
                       </div>
                       <h3 className="font-semibold text-lg mb-1">Smart Scan</h3>
-                      <p className="text-sm text-muted-foreground mb-6">
-                        Upload a photo of food items, a grocery receipt, or product packaging. Our AI will automatically detect and extract all items.
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Take a photo to instantly extract items, or upload up to 5 photos from your gallery — shelves, receipts, or packaging. AI detects everything automatically.
                       </p>
 
                       <div className="flex flex-col gap-3">
@@ -616,29 +634,14 @@ export function AddItemForm() {
                           <Camera className="mr-2 h-5 w-5" />
                           Take a Photo
                         </Button>
-                        {/* Camera input — single image, auto-extract */}
-                        <input
-                          ref={cameraInputRef}
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={handleImageUpload}
-                        />
 
-                        <Button type="button" variant="outline" size="lg" className="w-full" onClick={handleFileUpload}>
-                          <ImageIcon className="mr-2 h-5 w-5" />
-                          Upload from Gallery
-                        </Button>
-                        {/* Gallery input — multiple images, shows preview strip */}
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          onChange={handleFileSelect}
-                        />
+                        <div>
+                          <Button type="button" variant="outline" size="lg" className="w-full" onClick={handleFileUpload}>
+                            <ImageIcon className="mr-2 h-5 w-5" />
+                            Upload Photos from Gallery
+                          </Button>
+                          <p className="text-xs text-muted-foreground mt-1.5">Select up to 5 photos at once</p>
+                        </div>
                       </div>
                     </div>
 
@@ -701,13 +704,15 @@ export function AddItemForm() {
                           onClick={() => fileInputRef.current?.click()}
                         >
                           <Plus className="h-5 w-5" />
-                          <span className="text-[10px] mt-0.5">Add more</span>
+                          <span className="text-[10px] mt-0.5 text-center leading-tight">
+                            Add more<br />({5 - imagePreviews.length} left)
+                          </span>
                         </button>
                       )}
                     </div>
 
                     <p className="text-xs text-muted-foreground">
-                      Up to 5 images from the same kitchen or pantry. AI will extract unique items across all images.
+                      AI will detect and extract all unique items across your photos.
                     </p>
 
                     <Button type="button" className="w-full" onClick={handleAnalyze}>
