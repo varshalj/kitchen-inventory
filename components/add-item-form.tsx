@@ -30,6 +30,7 @@ type DetectedType = "receipt" | "food" | "package" | null
 type ProposalResponse = {
   proposals: Array<{
     name: string
+    brand?: string
     category: string
     expiryDate: string
     quantity: number
@@ -52,6 +53,8 @@ export function AddItemForm() {
   const formContainerRef = useRef<HTMLDivElement>(null)
   const [activeTab, setActiveTab] = useState("scan")
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [addingSuggestedId, setAddingSuggestedId] = useState<string | null>(null)
@@ -60,6 +63,7 @@ export function AddItemForm() {
   const [extractedItems, setExtractedItems] = useState<
     Array<{
       name: string
+      brand?: string
       category: string
       expiryDate: string
       quantity: number
@@ -117,40 +121,31 @@ export function AddItemForm() {
     "Estimating expiry dates...",
   ]
 
+  // Camera capture — single image, auto-extract immediately (unchanged behaviour)
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     const reader = new FileReader()
     reader.onload = () => {
-      setImagePreview(reader.result as string)
+      const imageData = reader.result as string
+      setImagePreview(imageData)
       setIsAnalyzing(true)
       setAnalyzeStep(0)
       setDetectedType(null)
       setScanError(null)
 
-      // Simulate multi-step AI analysis
       const stepDuration = 700
-
-      const imageData = reader.result as string
-
       const timer1 = setTimeout(() => setAnalyzeStep(1), stepDuration)
-      const timer2 = setTimeout(() => {
-        setAnalyzeStep(2)
-        setDetectedType("food")
-      }, stepDuration * 2)
+      const timer2 = setTimeout(() => { setAnalyzeStep(2); setDetectedType("food") }, stepDuration * 2)
       const timer3 = setTimeout(() => setAnalyzeStep(3), stepDuration * 3)
-      const timer4 = setTimeout(async () => {
-        // Keep isAnalyzing=true until the real API response lands so there
-        // is never a blank gap between the fake checklist and the item list.
+      setTimeout(async () => {
         try {
           const response = await fetchWithAuth("/api/ai/propose-items", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              userInput: "Extract all grocery and food items from this image. Identify item names, categories, quantities, and estimate expiry dates.",
+              userInput: "Extract all grocery and food items from this image. Identify item names, brands, categories, quantities, and estimate expiry dates.",
               imageBase64: imageData,
             }),
           })
@@ -161,7 +156,6 @@ export function AddItemForm() {
           }
 
           const payload = (await response.json()) as ProposalResponse
-
           setExtractedItems(
             payload.proposals.map((proposal) => ({
               ...proposal,
@@ -170,7 +164,6 @@ export function AddItemForm() {
               included: true,
             }))
           )
-
           setReviewSummary({
             confidence: payload.confidence,
             threshold: payload.confidenceThreshold,
@@ -182,17 +175,107 @@ export function AddItemForm() {
           setReviewSummary(null)
         } finally {
           setIsAnalyzing(false)
+          clearTimeout(timer1)
+          clearTimeout(timer2)
+          clearTimeout(timer3)
         }
       }, stepDuration * 4)
+    }
+    reader.readAsDataURL(file)
+  }
 
-      return () => {
+  // Gallery — select up to 5 images, show preview strip, user clicks Analyze
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newFiles = Array.from(e.target.files || [])
+    if (newFiles.length === 0) return
+    // Reset input so the same file can be re-selected later
+    if (fileInputRef.current) fileInputRef.current.value = ""
+
+    const remaining = 5 - selectedFiles.length
+    if (remaining <= 0) {
+      toast({ title: "Maximum 5 images", description: "Remove an image before adding more.", variant: "destructive" })
+      return
+    }
+    const filesToAdd = newFiles.slice(0, remaining)
+    if (newFiles.length > remaining) {
+      toast({ title: "Max 5 images", description: `Only ${remaining} more image${remaining !== 1 ? "s" : ""} added.` })
+    }
+
+    Promise.all(
+      filesToAdd.map(
+        (file) =>
+          new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.readAsDataURL(file)
+          })
+      )
+    ).then((previews) => {
+      setSelectedFiles((prev) => [...prev, ...filesToAdd])
+      setImagePreviews((prev) => [...prev, ...previews])
+    })
+  }
+
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Triggered when user clicks "Analyze X image(s)" on the preview strip
+  const handleAnalyze = () => {
+    if (imagePreviews.length === 0) return
+    setImagePreview(imagePreviews[0]) // switch to analysis UI
+    setIsAnalyzing(true)
+    setAnalyzeStep(0)
+    setDetectedType(null)
+    setScanError(null)
+
+    const stepDuration = 700
+    const timer1 = setTimeout(() => setAnalyzeStep(1), stepDuration)
+    const timer2 = setTimeout(() => { setAnalyzeStep(2); setDetectedType("food") }, stepDuration * 2)
+    const timer3 = setTimeout(() => setAnalyzeStep(3), stepDuration * 3)
+    setTimeout(async () => {
+      try {
+        const count = imagePreviews.length
+        const response = await fetchWithAuth("/api/ai/propose-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userInput: `Extract all grocery and food items from ${count > 1 ? `these ${count} kitchen/pantry images` : "this kitchen/pantry image"}. Identify item names, brands, categories, quantities, and estimate expiry dates.`,
+            imagesBase64: imagePreviews,
+          }),
+        })
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => null)
+          throw new Error(errBody?.error || "AI proposal request failed")
+        }
+
+        const payload = (await response.json()) as ProposalResponse
+        setExtractedItems(
+          payload.proposals.map((proposal) => ({
+            ...proposal,
+            unit: (proposal as any).unit || "pcs",
+            confidence: payload.confidence,
+            included: true,
+          }))
+        )
+        setReviewSummary({
+          confidence: payload.confidence,
+          threshold: payload.confidenceThreshold,
+          reasoning: payload.reasoning,
+        })
+      } catch {
+        setScanError("Could not generate AI proposals. Please try again.")
+        setExtractedItems([])
+        setReviewSummary(null)
+      } finally {
+        setIsAnalyzing(false)
         clearTimeout(timer1)
         clearTimeout(timer2)
         clearTimeout(timer3)
-        clearTimeout(timer4)
       }
-    }
-    reader.readAsDataURL(file)
+    }, stepDuration * 4)
   }
 
   const undoShoppingComplete = async (ids: string[]) => {
@@ -255,7 +338,7 @@ export function AddItemForm() {
             addedOn: new Date().toISOString(),
             notes: formData.notes,
             price: item.price || formData.price,
-            brand: formData.brand,
+            brand: item.brand || formData.brand || undefined,
             orderedFrom: formData.orderedFrom || undefined,
           } as unknown as InventoryItem)
           allCompleted.push(...completedShoppingItems)
@@ -304,6 +387,8 @@ export function AddItemForm() {
 
   const resetImageUpload = () => {
     setImagePreview(null)
+    setSelectedFiles([])
+    setImagePreviews([])
     setExtractedItems([])
     setDetectedType(null)
     setAnalyzeStep(0)
@@ -515,7 +600,7 @@ export function AddItemForm() {
             {/* Unified Scan Tab */}
             <TabsContent value="scan">
               <div className="space-y-6">
-                {!imagePreview ? (
+                {!imagePreview && imagePreviews.length === 0 ? (
                   <div className="space-y-4">
                     <div className="border-2 border-dashed rounded-xl p-8 text-center">
                       <div className="mx-auto h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
@@ -531,6 +616,7 @@ export function AddItemForm() {
                           <Camera className="mr-2 h-5 w-5" />
                           Take a Photo
                         </Button>
+                        {/* Camera input — single image, auto-extract */}
                         <input
                           ref={cameraInputRef}
                           type="file"
@@ -544,12 +630,14 @@ export function AddItemForm() {
                           <ImageIcon className="mr-2 h-5 w-5" />
                           Upload from Gallery
                         </Button>
+                        {/* Gallery input — multiple images, shows preview strip */}
                         <input
                           ref={fileInputRef}
                           type="file"
                           accept="image/*"
+                          multiple
                           className="hidden"
-                          onChange={handleImageUpload}
+                          onChange={handleFileSelect}
                         />
                       </div>
                     </div>
@@ -575,6 +663,58 @@ export function AddItemForm() {
                       </div>
                     </div>
                   </div>
+                ) : !imagePreview && imagePreviews.length > 0 ? (
+                  /* Gallery preview strip — shown after selecting files, before Analyze */
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium">
+                        {imagePreviews.length} image{imagePreviews.length !== 1 ? "s" : ""} selected
+                      </h3>
+                      <Button type="button" variant="ghost" size="icon" onClick={resetImageUpload}>
+                        <X className="h-4 w-4" />
+                        <span className="sr-only">Clear all</span>
+                      </Button>
+                    </div>
+
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {imagePreviews.map((preview, index) => (
+                        <div key={index} className="relative shrink-0 w-24 h-24 rounded-lg overflow-hidden border">
+                          <img
+                            src={preview}
+                            alt={`Image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            className="absolute top-1 right-1 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow"
+                            onClick={() => removeSelectedFile(index)}
+                            aria-label={`Remove image ${index + 1}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {imagePreviews.length < 5 && (
+                        <button
+                          type="button"
+                          className="shrink-0 w-24 h-24 rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-muted-foreground hover:text-foreground hover:border-foreground transition-colors"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Plus className="h-5 w-5" />
+                          <span className="text-[10px] mt-0.5">Add more</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Up to 5 images from the same kitchen or pantry. AI will extract unique items across all images.
+                    </p>
+
+                    <Button type="button" className="w-full" onClick={handleAnalyze}>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Analyze {imagePreviews.length} image{imagePreviews.length !== 1 ? "s" : ""}
+                    </Button>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -592,18 +732,29 @@ export function AddItemForm() {
                       </Button>
                     </div>
 
-                    <div className="relative mx-auto w-full h-48 bg-muted rounded-lg overflow-hidden">
-                      <img
-                        src={imagePreview || "/placeholder.svg"}
-                        alt="Uploaded image preview"
-                        className="w-full h-full object-cover"
-                      />
-                      {isAnalyzing && (
-                        <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
-                          <div className="absolute inset-0 border-2 border-primary/50 rounded-lg animate-pulse" />
-                        </div>
-                      )}
-                    </div>
+                    {imagePreviews.length > 1 ? (
+                      /* Multi-image: show thumbnail strip */
+                      <div className="flex gap-2 overflow-x-auto pb-1 bg-muted rounded-lg p-2">
+                        {imagePreviews.map((preview, i) => (
+                          <div key={i} className={`relative shrink-0 w-20 h-20 rounded overflow-hidden border ${isAnalyzing ? "animate-pulse" : ""}`}>
+                            <img src={preview} alt={`Image ${i + 1}`} className="w-full h-full object-cover" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="relative mx-auto w-full h-48 bg-muted rounded-lg overflow-hidden">
+                        <img
+                          src={imagePreview || "/placeholder.svg"}
+                          alt="Uploaded image preview"
+                          className="w-full h-full object-cover"
+                        />
+                        {isAnalyzing && (
+                          <div className="absolute inset-0 bg-background/60 flex items-center justify-center">
+                            <div className="absolute inset-0 border-2 border-primary/50 rounded-lg animate-pulse" />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {isAnalyzing ? (
                       <div className="space-y-3 py-4">
@@ -660,12 +811,22 @@ export function AddItemForm() {
                                         className="h-4 w-4 rounded shrink-0 accent-primary"
                                         aria-label={`Include ${item.name}`}
                                       />
-                                      <Input
-                                        value={item.name}
-                                        onChange={(e) => updateExtractedItem(index, "name", e.target.value)}
-                                        className="h-8 text-base md:text-sm font-medium flex-1"
-                                        disabled={!item.included}
-                                      />
+                                      <div className="flex-1 space-y-1">
+                                        <Input
+                                          value={item.name}
+                                          onChange={(e) => updateExtractedItem(index, "name", e.target.value)}
+                                          className="h-8 text-base md:text-sm font-medium"
+                                          disabled={!item.included}
+                                          placeholder="Item name"
+                                        />
+                                        <Input
+                                          value={item.brand || ""}
+                                          onChange={(e) => updateExtractedItem(index, "brand", e.target.value)}
+                                          className="h-7 text-base md:text-xs text-muted-foreground"
+                                          disabled={!item.included}
+                                          placeholder="Brand (optional)"
+                                        />
+                                      </div>
                                       <Badge variant="outline" className="text-[10px] shrink-0">
                                         {Math.round(item.confidence * 100)}%
                                       </Badge>
@@ -1080,7 +1241,7 @@ export function AddItemForm() {
               isLoading={isSaving}
               disabled={
                 (activeTab === "scan" &&
-                  (isAnalyzing || !imagePreview || includedCount === 0)) ||
+                  (isAnalyzing || (!imagePreview && imagePreviews.length === 0) || includedCount === 0)) ||
                 (activeTab === "manual" &&
                   (!formData.name || !formData.category || !formData.expiryDate || !formData.location)) ||
                 activeTab === "suggested"
