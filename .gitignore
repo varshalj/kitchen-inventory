@@ -9,3 +9,10 @@ dist/
 .DS_Store
 *.pem
 tsconfig.tsbuildinfo
+
+# PWA generated files
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/swe-worker-*.js

@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Camera, Upload, FileText, X, Check, Loader2, ShoppingCart, Plus, ScanLine, Sparkles, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { MainLayout } from "@/components/main-layout"
-import { addInventoryItem, updateShoppingItem } from "@/lib/client/api"
+import { addInventoryItem, updateShoppingItem, fetchPendingShare, deletePendingShare } from "@/lib/client/api"
 import { ToastAction } from "@/components/ui/toast"
 import type { InventoryItem } from "@/lib/types"
 import { useUserSettings } from "@/hooks/use-user-settings"
@@ -45,6 +45,7 @@ import { fetchWithAuth } from "@/lib/api-client"
 
 export function AddItemForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { settings } = useUserSettings()
   const { toast } = useToast()
   const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
@@ -100,6 +101,22 @@ export function AddItemForm() {
       }
     }
   }, [])
+
+  // Pre-load shared image from share target (PWA share sheet)
+  useEffect(() => {
+    const shareId = searchParams.get("shareId")
+    if (!shareId) return
+    let cancelled = false
+    ;(async () => {
+      const imageData = await fetchPendingShare(shareId)
+      if (cancelled || !imageData) return
+      setImagePreviews([imageData])
+      // Clean URL and delete the temporary share
+      router.replace("/add-item", { scroll: false })
+      deletePendingShare(shareId).catch(() => {})
+    })()
+    return () => { cancelled = true }
+  }, [searchParams, router])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target as HTMLInputElement
@@ -626,7 +643,7 @@ export function AddItemForm() {
                       </div>
                       <h3 className="font-semibold text-lg mb-1">Smart Scan</h3>
                       <p className="text-sm text-muted-foreground mb-4">
-                        Take a photo to instantly extract items, or upload up to 5 photos from your gallery — shelves, receipts, or packaging. AI detects everything automatically.
+                        Take a photo to instantly extract items, or upload up to 5 photos — shelves, receipts, packaging, or order confirmation screenshots. AI detects everything automatically.
                       </p>
 
                       <div className="flex flex-col gap-3">

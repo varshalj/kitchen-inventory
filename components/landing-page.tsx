@@ -453,6 +453,9 @@ export function LandingPage() {
               >
                 Get Started for Free
               </Button>
+              <p className="text-xs text-primary-foreground/60 mt-2">
+                Works as a native app on iOS and Android. No App Store needed.
+              </p>
             </div>
           </div>
         </section>

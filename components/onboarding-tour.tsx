@@ -82,6 +82,27 @@ export function OnboardingTour() {
           },
           {
             popover: {
+              title: "Install as an App",
+              description:
+                "Add Kitchen Inventory to your home screen for quick access. On iOS, tap Share then 'Add to Home Screen'. On Android, tap the install banner.",
+            },
+          },
+          {
+            popover: {
+              title: "Scan Order Screenshots",
+              description:
+                "Ordered from Blinkit, Zepto, or Swiggy? Screenshot your order confirmation and share it to Kitchen Inventory — all items get extracted automatically.",
+            },
+          },
+          {
+            popover: {
+              title: "Share Recipe Links",
+              description:
+                "Found a recipe on YouTube or Instagram? Share the link directly to Kitchen Inventory and we'll import it for you.",
+            },
+          },
+          {
+            popover: {
               title: "You're all set!",
               description:
                 "Start by adding your first item. You can restart this tour anytime from Profile Settings.",

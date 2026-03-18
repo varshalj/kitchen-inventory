@@ -206,3 +206,14 @@ export async function updateFullRecipe(id: string, data: any): Promise<any> {
 export async function deleteRecipe(id: string): Promise<void> {
   await fetchWithAuth(`/api/recipes/${id}`, { method: "DELETE" })
 }
+
+export async function fetchPendingShare(shareId: string): Promise<string | null> {
+  const res = await fetchWithAuth(`/api/share-target/${shareId}`)
+  if (!res.ok) return null
+  const data = await res.json()
+  return data.imageData ?? null
+}
+
+export async function deletePendingShare(shareId: string): Promise<void> {
+  await fetchWithAuth(`/api/share-target/${shareId}`, { method: "DELETE" })
+}

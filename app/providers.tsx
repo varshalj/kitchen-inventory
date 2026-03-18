@@ -8,6 +8,8 @@ import { Toaster } from "@/components/ui/toaster"
 import { installConsoleCapture } from "@/lib/console-capture"
 import { ScreenshotBugNudge } from "@/components/screenshot-bug-nudge"
 import { OnboardingTour } from "@/components/onboarding-tour"
+import { PwaUpdateBanner } from "@/components/pwa-update-banner"
+import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 import { ShoppingCountProvider } from "@/contexts/shopping-count-context"
 import { RecipeImportProvider } from "@/contexts/recipe-import-context"
 
@@ -25,6 +27,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <Toaster />
             <ScreenshotBugNudge />
             <OnboardingTour />
+            <PwaUpdateBanner />
+            <PwaInstallPrompt />
           </RecipeImportProvider>
         </ShoppingCountProvider>
       </UserSettingsProvider>

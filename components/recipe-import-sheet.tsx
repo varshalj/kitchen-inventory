@@ -42,6 +42,8 @@ interface RecipeImportSheetProps {
   }) => void
   onGoHome?: (pendingImport?: { importId: string; url: string }) => void
   onBookmarkSaved?: () => void
+  initialUrl?: string
+  initialText?: string
 }
 
 type ImportPhase = "choose" | "url-input" | "text-input" | "importing" | "text-parsing" | "error"
@@ -55,7 +57,7 @@ const PROGRESS_STEPS = [
 ]
 const STEP_DELAYS = [0, 5000, 15000, 25000, 35000]
 
-export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome, onBookmarkSaved }: RecipeImportSheetProps) {
+export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome, onBookmarkSaved, initialUrl, initialText }: RecipeImportSheetProps) {
   const { toast } = useToast()
   const [url, setUrl] = useState("")
   const [pasteText, setPasteText] = useState("")
@@ -94,9 +96,15 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
       setBookmarkTitle("")
       setBookmarkUrl("")
       setBookmarkNotes("")
+    } else if (initialUrl) {
+      setUrl(initialUrl)
+      setPhase("url-input")
+    } else if (initialText) {
+      setPasteText(initialText)
+      setPhase("text-input")
     }
     return cleanup
-  }, [open, cleanup])
+  }, [open, cleanup, initialUrl, initialText])
 
   const startProgressAnimation = () => {
     setActiveStep(0)

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
   ChefHat,
@@ -155,6 +156,8 @@ function sortRecipes(recipes: Recipe[], sort: SortOption): Recipe[] {
 }
 
 export function RecipesList() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const { setPendingRecipeImportCount } = useRecipeImportCount()
   const [recipes, setRecipes] = useState<Recipe[]>([])
@@ -163,6 +166,8 @@ export function RecipesList() {
   const [sort, setSort] = useState<SortOption>("score")
   const [search, setSearch] = useState("")
   const [showImport, setShowImport] = useState(false)
+  const [shareInitialUrl, setShareInitialUrl] = useState<string | undefined>()
+  const [shareInitialText, setShareInitialText] = useState<string | undefined>()
   const [recipeReviewData, setRecipeReviewData] = useState<{
     importId: string | undefined
     recipe: ParsedRecipe
@@ -188,6 +193,21 @@ export function RecipesList() {
     url: string
     errorMessage?: string
   }>>([])
+
+  // Auto-open import sheet when arriving via share target (?importUrl or ?importText)
+  useEffect(() => {
+    const importUrl = searchParams.get("importUrl")
+    const importText = searchParams.get("importText")
+    if (importUrl) {
+      setShareInitialUrl(importUrl)
+      setShowImport(true)
+      router.replace("/recipes", { scroll: false })
+    } else if (importText) {
+      setShareInitialText(importText)
+      setShowImport(true)
+      router.replace("/recipes", { scroll: false })
+    }
+  }, [searchParams, router])
 
   const refreshPendingImports = useCallback(async () => {
     try {
@@ -583,7 +603,12 @@ export function RecipesList() {
       {/* Import sheet */}
       <RecipeImportSheet
         open={showImport}
-        onOpenChange={setShowImport}
+        onOpenChange={(open) => {
+          setShowImport(open)
+          if (!open) { setShareInitialUrl(undefined); setShareInitialText(undefined) }
+        }}
+        initialUrl={shareInitialUrl}
+        initialText={shareInitialText}
         onRecipeReady={handleRecipeReady}
         onGoHome={(pendingImport) => {
           setShowImport(false)
