@@ -105,10 +105,16 @@ export function AddItemForm() {
   // Pre-load shared image from share target (PWA share sheet)
   useEffect(() => {
     const shareId = searchParams.get("shareId")
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:shareId-effect',message:'shareId effect fired',data:{shareId,allParams:Object.fromEntries(searchParams.entries())},hypothesisId:'A',runId:'pre-fix',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion agent log
     if (!shareId) return
     let cancelled = false
     ;(async () => {
       const imageData = await fetchPendingShare(shareId)
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:fetchPendingShare-result',message:'fetchPendingShare result',data:{shareId,gotImageData:!!imageData,cancelled},hypothesisId:'A',runId:'pre-fix',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion agent log
       if (cancelled || !imageData) return
       setImagePreviews([imageData])
       // Clean URL and delete the temporary share

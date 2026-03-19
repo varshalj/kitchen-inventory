@@ -12,5 +12,6 @@ export default withPWA({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
+  skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
 })(nextConfig)
