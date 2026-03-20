@@ -43,30 +43,71 @@ type ProposalResponse = {
 }
 import { fetchWithAuth } from "@/lib/api-client"
 
-/** Convert HEIC/HEIF data URLs to JPEG via canvas. iOS Safari can render HEIC
- *  natively so we can draw it to a canvas and re-export as JPEG before sending
- *  to OpenAI which doesn't support HEIC. */
-async function convertToJpegIfNeeded(file: File, dataUrl: string): Promise<string> {
+/** Convert HEIC/HEIF files to JPEG via canvas.
+ *  Uses a blob URL (not a data URL) so iOS Safari can render the HEIC natively
+ *  through its image subsystem, then we capture the result via canvas.
+ *  data:image/heic;base64 URLs are NOT supported in programmatic Image elements
+ *  even though HEIC files work fine visually in the browser. */
+async function convertToJpegIfNeeded(file: File): Promise<string> {
   const isHeic =
     file.type === "image/heic" ||
     file.type === "image/heif" ||
     file.name.toLowerCase().endsWith(".heic") ||
     file.name.toLowerCase().endsWith(".heif")
-  if (!isHeic) return dataUrl
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const canvas = document.createElement("canvas")
-      canvas.width = img.naturalWidth
-      canvas.height = img.naturalHeight
-      const ctx = canvas.getContext("2d")
-      if (!ctx) { reject(new Error("Canvas not available")); return }
-      ctx.drawImage(img, 0, 0)
-      resolve(canvas.toDataURL("image/jpeg", 0.85))
-    }
-    img.onerror = () => reject(new Error("Could not decode HEIC image"))
-    img.src = dataUrl
-  })
+
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:convertToJpegIfNeeded',message:'called',data:{fileName:file.name,fileType:file.type,fileSize:file.size,isHeic},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion agent log
+
+  if (!isHeic) {
+    // Non-HEIC: read as data URL directly
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error("Failed to read image"))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // HEIC: use blob URL so iOS can render it via its native HEIC decoder
+  const blobUrl = URL.createObjectURL(file)
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:img.onload',message:'image loaded',data:{naturalW:img.naturalWidth,naturalH:img.naturalHeight},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion agent log
+        try {
+          const canvas = document.createElement("canvas")
+          canvas.width = img.naturalWidth || 1920
+          canvas.height = img.naturalHeight || 1080
+          const ctx = canvas.getContext("2d")
+          if (!ctx) { reject(new Error("Canvas context unavailable")); return }
+          ctx.drawImage(img, 0, 0)
+          const jpeg = canvas.toDataURL("image/jpeg", 0.85)
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:canvas.toDataURL',message:'jpeg produced',data:{jpegLen:jpeg.length},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+          // #endregion agent log
+          resolve(jpeg)
+        } catch (canvasErr) {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:canvas.catch',message:'canvas error',data:{err:String(canvasErr)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion agent log
+          reject(canvasErr)
+        }
+      }
+      img.onerror = (e) => {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:img.onerror',message:'image failed to load',data:{err:String(e)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion agent log
+        reject(new Error("HEIC image failed to load in browser"))
+      }
+      img.src = blobUrl
+    })
+  } finally {
+    URL.revokeObjectURL(blobUrl)
+  }
 }
 
 export function AddItemForm() {
@@ -169,15 +210,7 @@ export function AddItemForm() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = async () => {
-      let imageData = reader.result as string
-      try {
-        imageData = await convertToJpegIfNeeded(file, imageData)
-      } catch {
-        setScanError("Could not process this image format. Please try a JPEG or PNG photo.")
-        return
-      }
+    convertToJpegIfNeeded(file).then((imageData) => {
       setImagePreview(imageData)
       setIsAnalyzing(true)
       setAnalyzeStep(0)
@@ -229,8 +262,9 @@ export function AddItemForm() {
           clearTimeout(timer3)
         }
       }, stepDuration * 4)
-    }
-    reader.readAsDataURL(file)
+    }).catch(() => {
+      setScanError("Could not process this image. Please try a JPEG or PNG photo.")
+    })
   }
 
   // Gallery — select up to 5 images, show preview strip, user clicks Analyze
@@ -251,22 +285,7 @@ export function AddItemForm() {
     }
 
     Promise.all(
-      filesToAdd.map(
-        (file) =>
-          new Promise<string>((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = async () => {
-              try {
-                const converted = await convertToJpegIfNeeded(file, reader.result as string)
-                resolve(converted)
-              } catch {
-                reject(new Error(`Could not process "${file.name}". Use JPEG or PNG.`))
-              }
-            }
-            reader.onerror = () => reject(new Error(`Failed to read "${file.name}"`))
-            reader.readAsDataURL(file)
-          })
-      )
+      filesToAdd.map((file) => convertToJpegIfNeeded(file))
     ).then((previews) => {
       setSelectedFiles((prev) => [...prev, ...filesToAdd])
       setImagePreviews((prev) => [...prev, ...previews])

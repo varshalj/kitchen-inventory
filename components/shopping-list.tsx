@@ -738,9 +738,9 @@ export function ShoppingList() {
             </SheetTitle>
           </SheetHeader>
           {detailItem && (
-            <div className="space-y-4">
-              {/* Row 1: Quantity + Category — always rendered as a pair */}
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
+              {/* Row 1: Quantity always left; Category only in right if present */}
+              <div className={detailItem.category ? "grid grid-cols-2 gap-3" : ""}>
                 <div className="space-y-0.5">
                   <p className="text-xs text-muted-foreground">Quantity</p>
                   <p className="text-sm font-medium">
@@ -751,37 +751,43 @@ export function ShoppingList() {
                       : `${detailItem.quantity} pcs`}
                   </p>
                 </div>
-                {detailItem.category ? (
+                {detailItem.category && (
                   <div className="space-y-0.5">
                     <p className="text-xs text-muted-foreground">Category</p>
                     <Badge variant="outline" className="text-xs font-normal">
                       {detailItem.category}
                     </Badge>
                   </div>
-                ) : <div />}
+                )}
               </div>
 
-              {/* Row 2: Order source + Added by — only if at least one is present */}
-              {(detailItem.orderedFrom || detailItem.addedFrom) && (
+              {/* Row 2: orderedFrom and addedFrom — 2-col only when both present */}
+              {detailItem.orderedFrom && detailItem.addedFrom ? (
                 <div className="grid grid-cols-2 gap-3">
-                  {detailItem.orderedFrom ? (
-                    <div className="space-y-0.5">
-                      <p className="text-xs text-muted-foreground">Order from</p>
-                      <p className="text-sm font-medium">{detailItem.orderedFrom}</p>
-                    </div>
-                  ) : <div />}
-                  {detailItem.addedFrom ? (
-                    <div className="space-y-0.5">
-                      <p className="text-xs text-muted-foreground">Added by</p>
-                      <p className="text-sm font-medium capitalize">
-                        {detailItem.addedFrom === "consumed"
-                          ? "Auto (consumed)"
-                          : detailItem.addedFrom}
-                      </p>
-                    </div>
-                  ) : <div />}
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Order from</p>
+                    <p className="text-sm font-medium">{detailItem.orderedFrom}</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Added by</p>
+                    <p className="text-sm font-medium capitalize">
+                      {detailItem.addedFrom === "consumed" ? "Auto (consumed)" : detailItem.addedFrom}
+                    </p>
+                  </div>
                 </div>
-              )}
+              ) : detailItem.orderedFrom ? (
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground">Order from</p>
+                  <p className="text-sm font-medium">{detailItem.orderedFrom}</p>
+                </div>
+              ) : detailItem.addedFrom ? (
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground">Added by</p>
+                  <p className="text-sm font-medium capitalize">
+                    {detailItem.addedFrom === "consumed" ? "Auto (consumed)" : detailItem.addedFrom}
+                  </p>
+                </div>
+              ) : null}
 
               {detailItem.notes && (
                 <div className="space-y-0.5">
