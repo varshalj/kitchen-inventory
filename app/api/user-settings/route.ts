@@ -8,7 +8,7 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("user_settings")
       .select("settings")
       .eq("user_id", user.id)
@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
     }
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from("user_settings")
       .upsert(
         { user_id: user.id, settings: body.settings, updated_at: new Date().toISOString() },

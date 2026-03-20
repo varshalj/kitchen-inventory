@@ -31,7 +31,10 @@ export function getUserConfidenceThreshold(_userId: string): number {
 
 export async function logAIInteraction(interaction: Omit<AIInteraction, "id" | "createdAt">) {
   try {
-    const supabase = getSupabaseAdmin()
+    // Cast to any because the Supabase client is not typed with a generated Database schema.
+    // The table exists but isn't in the type definitions, so TypeScript resolves the
+    // row type as `never` without this cast.
+    const supabase = getSupabaseAdmin() as any
     await supabase.from("ai_interactions").insert({
       user_id: interaction.userId,
       user_input: interaction.userInput,
