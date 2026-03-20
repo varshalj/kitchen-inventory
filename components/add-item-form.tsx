@@ -43,6 +43,32 @@ type ProposalResponse = {
 }
 import { fetchWithAuth } from "@/lib/api-client"
 
+/** Convert HEIC/HEIF data URLs to JPEG via canvas. iOS Safari can render HEIC
+ *  natively so we can draw it to a canvas and re-export as JPEG before sending
+ *  to OpenAI which doesn't support HEIC. */
+async function convertToJpegIfNeeded(file: File, dataUrl: string): Promise<string> {
+  const isHeic =
+    file.type === "image/heic" ||
+    file.type === "image/heif" ||
+    file.name.toLowerCase().endsWith(".heic") ||
+    file.name.toLowerCase().endsWith(".heif")
+  if (!isHeic) return dataUrl
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement("canvas")
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext("2d")
+      if (!ctx) { reject(new Error("Canvas not available")); return }
+      ctx.drawImage(img, 0, 0)
+      resolve(canvas.toDataURL("image/jpeg", 0.85))
+    }
+    img.onerror = () => reject(new Error("Could not decode HEIC image"))
+    img.src = dataUrl
+  })
+}
+
 export function AddItemForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -144,8 +170,14 @@ export function AddItemForm() {
     if (!file) return
 
     const reader = new FileReader()
-    reader.onload = () => {
-      const imageData = reader.result as string
+    reader.onload = async () => {
+      let imageData = reader.result as string
+      try {
+        imageData = await convertToJpegIfNeeded(file, imageData)
+      } catch {
+        setScanError("Could not process this image format. Please try a JPEG or PNG photo.")
+        return
+      }
       setImagePreview(imageData)
       setIsAnalyzing(true)
       setAnalyzeStep(0)
@@ -221,15 +253,25 @@ export function AddItemForm() {
     Promise.all(
       filesToAdd.map(
         (file) =>
-          new Promise<string>((resolve) => {
+          new Promise<string>((resolve, reject) => {
             const reader = new FileReader()
-            reader.onload = () => resolve(reader.result as string)
+            reader.onload = async () => {
+              try {
+                const converted = await convertToJpegIfNeeded(file, reader.result as string)
+                resolve(converted)
+              } catch {
+                reject(new Error(`Could not process "${file.name}". Use JPEG or PNG.`))
+              }
+            }
+            reader.onerror = () => reject(new Error(`Failed to read "${file.name}"`))
             reader.readAsDataURL(file)
           })
       )
     ).then((previews) => {
       setSelectedFiles((prev) => [...prev, ...filesToAdd])
       setImagePreviews((prev) => [...prev, ...previews])
+    }).catch((err: Error) => {
+      toast({ title: "Image error", description: err.message, variant: "destructive" })
     })
   }
 
@@ -596,8 +638,8 @@ export function AddItemForm() {
         <h1 className="text-2xl font-bold">Add Item</h1>
       </div>
 
-      <Tabs defaultValue="scan" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-3 mb-6">
+      <Tabs defaultValue="scan" value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-[calc(100vh-6rem)] overflow-hidden">
+        <TabsList className="grid grid-cols-3 mb-6 shrink-0">
           <TabsTrigger value="scan" className="gap-1.5">
             <ScanLine className="h-4 w-4" />
             <span>Scan</span>
@@ -612,8 +654,8 @@ export function AddItemForm() {
           </TabsTrigger>
         </TabsList>
 
-        <form onSubmit={handleSubmit}>
-          <div ref={formContainerRef} className="max-h-[calc(100vh-13rem)] overflow-y-auto pb-20">
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div ref={formContainerRef} className="flex-1 overflow-y-auto">
             {/* Unified Scan Tab */}
             <TabsContent value="scan">
               {/* Hidden inputs always mounted so refs stay non-null across all states */}
@@ -1256,7 +1298,7 @@ export function AddItemForm() {
             </TabsContent>
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 z-10 bg-background border-t px-4 pt-4 pb-6">
+          <div className="shrink-0 bg-background border-t px-4 pt-4 pb-6">
             <div className="max-w-md mx-auto">
               <LoadingButton
                 type="submit"

@@ -739,41 +739,49 @@ export function ShoppingList() {
           </SheetHeader>
           {detailItem && (
             <div className="space-y-4">
+              {/* Row 1: Quantity + Category — always rendered as a pair */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-0.5">
                   <p className="text-xs text-muted-foreground">Quantity</p>
                   <p className="text-sm font-medium">
-                    {formatQuantityUnit(detailItem.quantity, detailItem.unit)}
+                    {detailItem.unit && detailItem.unit !== "pcs"
+                      ? `${detailItem.quantity} ${detailItem.unit}`
+                      : detailItem.quantity === 1
+                      ? "1 pc"
+                      : `${detailItem.quantity} pcs`}
                   </p>
                 </div>
-
-                {detailItem.category && (
+                {detailItem.category ? (
                   <div className="space-y-0.5">
                     <p className="text-xs text-muted-foreground">Category</p>
                     <Badge variant="outline" className="text-xs font-normal">
                       {detailItem.category}
                     </Badge>
                   </div>
-                )}
-
-                {detailItem.orderedFrom && (
-                  <div className="space-y-0.5">
-                    <p className="text-xs text-muted-foreground">Usually ordered from</p>
-                    <p className="text-sm font-medium">{detailItem.orderedFrom}</p>
-                  </div>
-                )}
-
-                {detailItem.addedFrom && (
-                  <div className="space-y-0.5">
-                    <p className="text-xs text-muted-foreground">Added by</p>
-                    <p className="text-sm font-medium capitalize">
-                      {detailItem.addedFrom === "consumed"
-                        ? "Auto (item consumed)"
-                        : detailItem.addedFrom}
-                    </p>
-                  </div>
-                )}
+                ) : <div />}
               </div>
+
+              {/* Row 2: Order source + Added by — only if at least one is present */}
+              {(detailItem.orderedFrom || detailItem.addedFrom) && (
+                <div className="grid grid-cols-2 gap-3">
+                  {detailItem.orderedFrom ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground">Order from</p>
+                      <p className="text-sm font-medium">{detailItem.orderedFrom}</p>
+                    </div>
+                  ) : <div />}
+                  {detailItem.addedFrom ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground">Added by</p>
+                      <p className="text-sm font-medium capitalize">
+                        {detailItem.addedFrom === "consumed"
+                          ? "Auto (consumed)"
+                          : detailItem.addedFrom}
+                      </p>
+                    </div>
+                  ) : <div />}
+                </div>
+              )}
 
               {detailItem.notes && (
                 <div className="space-y-0.5">
