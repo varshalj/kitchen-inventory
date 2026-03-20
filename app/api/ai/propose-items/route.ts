@@ -15,7 +15,7 @@ const proposalSchema = z.object({
   brand: z.string().optional(),
   category: z.string().min(1),
   expiryDate: z.string().min(1),
-  quantity: z.number().positive(),
+  quantity: z.number().min(0.001),  // normalizeModelOutput guarantees > 0 before this runs
   unit: z.string().optional(),
   price: z.string().optional(),
 })
@@ -83,47 +83,70 @@ function getOpenAIClient(): OpenAI | null {
 function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...raw }
 
-  if (!normalized.proposals && Array.isArray(normalized.items)) {
-    normalized.proposals = normalized.items
-    delete normalized.items
+  // Coerce alternative key names for proposals array
+  if (!Array.isArray(normalized.proposals)) {
+    for (const key of ["items", "results", "extracted_items"]) {
+      if (Array.isArray(normalized[key])) {
+        normalized.proposals = normalized[key]
+        delete normalized[key]
+        break
+      }
+    }
   }
-  if (!normalized.proposals && Array.isArray(normalized.results)) {
-    normalized.proposals = normalized.results
-    delete normalized.results
-  }
-  if (!normalized.proposals && Array.isArray(normalized.extracted_items)) {
-    normalized.proposals = normalized.extracted_items
-    delete normalized.extracted_items
+  // Ensure proposals is always an array
+  if (!Array.isArray(normalized.proposals)) {
+    normalized.proposals = []
   }
 
-  if (Array.isArray(normalized.proposals)) {
-    normalized.proposals = (normalized.proposals as Record<string, unknown>[]).map((item) => {
+  const sixMonthsOut = new Date()
+  sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6)
+  const defaultExpiry = sixMonthsOut.toISOString().split("T")[0]
+
+  normalized.proposals = (normalized.proposals as Record<string, unknown>[])
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
       const out = { ...item }
-      if (!out.expiryDate && out.expiry_date) {
-        out.expiryDate = out.expiry_date
-        delete out.expiry_date
+
+      // Normalise alternative expiry field names
+      if (!out.expiryDate && out.expiry_date) { out.expiryDate = out.expiry_date; delete out.expiry_date }
+      if (!out.expiryDate && out.expiration_date) { out.expiryDate = out.expiration_date; delete out.expiration_date }
+
+      // Guarantee required string fields are non-empty
+      if (!out.name || typeof out.name !== "string" || !(out.name as string).trim()) {
+        out.name = "Unknown Item"
       }
-      if (!out.expiryDate && out.expiration_date) {
-        out.expiryDate = out.expiration_date
-        delete out.expiration_date
+      if (!out.category || typeof out.category !== "string" || !(out.category as string).trim()) {
+        out.category = "Other"
       }
+      if (!out.expiryDate || typeof out.expiryDate !== "string" || !(out.expiryDate as string).trim()) {
+        out.expiryDate = defaultExpiry
+      }
+
+      // Guarantee quantity is a positive number
       if (out.quantity === undefined || out.quantity === null) {
         out.quantity = 1
       }
       if (typeof out.quantity === "string") {
-        out.quantity = parseFloat(out.quantity) || 1
+        out.quantity = parseFloat(out.quantity as string) || 1
       }
-      if (!out.unit || typeof out.unit !== "string") {
+      if (typeof out.quantity !== "number" || (out.quantity as number) <= 0) {
+        out.quantity = 1
+      }
+
+      // Guarantee unit is a non-empty string
+      if (!out.unit || typeof out.unit !== "string" || !(out.unit as string).trim()) {
         out.unit = "pcs"
       }
+
+      // Price must be a string if present
       if (typeof out.price === "number") {
         out.price = String(out.price)
       }
+
       return out
     })
-  }
 
-  if (typeof normalized.confidence !== "number") {
+  if (typeof normalized.confidence !== "number" || normalized.confidence < 0 || normalized.confidence > 1) {
     normalized.confidence = 0.8
   }
   if (typeof normalized.reasoning !== "string" || !normalized.reasoning) {
@@ -244,7 +267,7 @@ export async function POST(req: NextRequest) {
     const parsedOutput = modelOutputSchema.safeParse(rawModelResponse)
 
     if (!parsedOutput.success) {
-      console.error("Zod validation failed:", parsedOutput.error.message, "Raw:", JSON.stringify(rawModelResponse))
+      console.error("Zod validation failed:", JSON.stringify(parsedOutput.error.flatten()), "Raw:", JSON.stringify(rawModelResponse))
 
       await logAIInteraction({
         userId,
