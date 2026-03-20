@@ -53,16 +53,22 @@ export async function GET(_request: NextRequest) {
     const pendingImports = (rows || []).filter((r: any) => !["ready", "failed"].includes(r.status))
     const failedImports = (rows || []).filter((r: any) => r.status === "failed")
 
+    // Fetch inventory once for all ready imports (avoids N+1 DB calls per polling tick)
+    let pantryForMatching: { name: string; expiryDate: string }[] = []
+    if (readyImports.length > 0) {
+      try {
+        const pantryItems = await inventoryRepo.list(supabase, false)
+        pantryForMatching = pantryItems.map((p) => ({ name: p.name, expiryDate: p.expiryDate }))
+      } catch {
+        // non-fatal: pantry matching will just return empty results
+      }
+    }
+
     // For ready imports, compute pantry matches
     const enriched = []
     for (const row of readyImports) {
       const parsedRecipe = row.parsed_recipe
       try {
-        const pantryItems = await inventoryRepo.list(supabase, false)
-        const pantryForMatching = pantryItems.map((p) => ({
-          name: p.name,
-          expiryDate: p.expiryDate,
-        }))
         const parsedIngredients: ParsedIngredient[] = (parsedRecipe.ingredients || []).map((ing: any) => ({
           name: ing.name,
           canonicalName: ing.canonicalName,

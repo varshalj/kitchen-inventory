@@ -19,26 +19,9 @@ export async function POST(req: NextRequest) {
   const url = formData.get("url") as string | null
   const text = formData.get("text") as string | null
 
-  // #region agent log
-  console.log("[share-target:POST]", JSON.stringify({
-    hypothesisIds: ["A","D","E"],
-    baseUrl,
-    hasUser: !!user,
-    hasFile: !!(file && file.size > 0),
-    fileSize: file?.size ?? 0,
-    fileType: file?.type ?? null,
-    hasUrl: !!url,
-    hasText: !!text,
-    timestamp: Date.now(),
-  }))
-  // #endregion agent log
-
   // Priority 1: Image file → inventory scan
   if (file && file.size > 0) {
     if (!user) {
-      // #region agent log
-      console.log("[share-target:no-user-image]", JSON.stringify({ hypothesisId: "D", redirect: `${baseUrl}/auth?next=/add-item`, timestamp: Date.now() }))
-      // #endregion agent log
       return NextResponse.redirect(`${baseUrl}/auth?next=/add-item`, { status: 303 })
     }
 
@@ -55,15 +38,9 @@ export async function POST(req: NextRequest) {
 
     if (error || !data) {
       console.error("Failed to store pending share:", error)
-      // #region agent log
-      console.log("[share-target:db-error]", JSON.stringify({ hypothesisId: "A", error: error?.message, redirect: `${baseUrl}/add-item`, timestamp: Date.now() }))
-      // #endregion agent log
       return NextResponse.redirect(`${baseUrl}/add-item`, { status: 303 })
     }
 
-    // #region agent log
-    console.log("[share-target:success]", JSON.stringify({ hypothesisId: "A", shareId: data.id, redirectUrl: `${baseUrl}/add-item?shareId=${data.id}`, timestamp: Date.now() }))
-    // #endregion agent log
     return NextResponse.redirect(`${baseUrl}/add-item?shareId=${data.id}`, { status: 303 })
   }
 

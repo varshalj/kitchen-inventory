@@ -1,3 +1,5 @@
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin"
+
 export type Proposal = {
   name: string
   category: string
@@ -23,19 +25,22 @@ export type AIInteraction = {
   createdAt: string
 }
 
-const aiInteractions: AIInteraction[] = []
-
-// Simulated user_ai_settings table
-const userAISettings = new Map<string, { confidence_threshold: number }>([["demo-user", { confidence_threshold: 0.8 }]])
-
-export function getUserConfidenceThreshold(userId: string): number {
-  return userAISettings.get(userId)?.confidence_threshold ?? 0.75
+export function getUserConfidenceThreshold(_userId: string): number {
+  return 0.75
 }
 
-export function logAIInteraction(interaction: Omit<AIInteraction, "id" | "createdAt">) {
-  aiInteractions.push({
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    ...interaction,
-  })
+export async function logAIInteraction(interaction: Omit<AIInteraction, "id" | "createdAt">) {
+  try {
+    const supabase = getSupabaseAdmin()
+    await supabase.from("ai_interactions").insert({
+      user_id: interaction.userId,
+      user_input: interaction.userInput,
+      model_raw_response: interaction.modelRawResponse ?? null,
+      parsed_response: interaction.parsedResponse ?? null,
+      status: interaction.status,
+      error_message: interaction.errorMessage ?? null,
+    })
+  } catch {
+    // Non-critical: logging failures should never surface to the user
+  }
 }

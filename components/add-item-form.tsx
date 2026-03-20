@@ -105,16 +105,10 @@ export function AddItemForm() {
   // Pre-load shared image from share target (PWA share sheet)
   useEffect(() => {
     const shareId = searchParams.get("shareId")
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:shareId-effect',message:'shareId effect fired',data:{shareId,allParams:Object.fromEntries(searchParams.entries())},hypothesisId:'A',runId:'pre-fix',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
     if (!shareId) return
     let cancelled = false
     ;(async () => {
       const imageData = await fetchPendingShare(shareId)
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:fetchPendingShare-result',message:'fetchPendingShare result',data:{shareId,gotImageData:!!imageData,cancelled},hypothesisId:'A',runId:'pre-fix',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion agent log
       if (cancelled || !imageData) return
       setImagePreviews([imageData])
       // Clean URL and delete the temporary share
@@ -288,8 +282,8 @@ export function AddItemForm() {
           threshold: payload.confidenceThreshold,
           reasoning: payload.reasoning,
         })
-      } catch {
-        setScanError("Could not generate AI proposals. Please try again.")
+      } catch (err) {
+        setScanError(err instanceof Error ? err.message : "Could not analyse image. Please try again.")
         setExtractedItems([])
         setReviewSummary(null)
       } finally {
@@ -1262,23 +1256,25 @@ export function AddItemForm() {
             </TabsContent>
           </div>
 
-          <div className="mt-6 sticky bottom-0 bg-background pt-4 pb-4 border-t">
-            <LoadingButton
-              type="submit"
-              className="w-full"
-              isLoading={isSaving}
-              disabled={
-                (activeTab === "scan" &&
-                  (isAnalyzing || (!imagePreview && imagePreviews.length === 0) || includedCount === 0)) ||
-                (activeTab === "manual" &&
-                  (!formData.name || !formData.category || !formData.expiryDate || !formData.location)) ||
-                activeTab === "suggested"
-              }
-            >
-              {activeTab === "scan"
-                ? `Save${includedCount > 0 ? ` (${includedCount} item${includedCount > 1 ? "s" : ""})` : ""}`
-                : "Save Item"}
-            </LoadingButton>
+          <div className="fixed bottom-0 left-0 right-0 z-10 bg-background border-t px-4 pt-4 pb-6">
+            <div className="max-w-md mx-auto">
+              <LoadingButton
+                type="submit"
+                className="w-full"
+                isLoading={isSaving}
+                disabled={
+                  (activeTab === "scan" &&
+                    (isAnalyzing || (!imagePreview && imagePreviews.length === 0) || includedCount === 0)) ||
+                  (activeTab === "manual" &&
+                    (!formData.name || !formData.category || !formData.expiryDate || !formData.location)) ||
+                  activeTab === "suggested"
+                }
+              >
+                {activeTab === "scan"
+                  ? `Save${includedCount > 0 ? ` (${includedCount} item${includedCount > 1 ? "s" : ""})` : ""}`
+                  : "Save Item"}
+              </LoadingButton>
+            </div>
           </div>
         </form>
       </Tabs>

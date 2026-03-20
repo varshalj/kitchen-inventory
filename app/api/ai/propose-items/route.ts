@@ -183,7 +183,7 @@ async function getModelResponse(userInput: string, imageBase64?: string, imagesB
     model: "gpt-4o-mini",
     messages,
     response_format: { type: "json_object" },
-    max_tokens: 2048,
+    max_tokens: imagesBase64 && imagesBase64.length > 1 ? 4096 : 2048,
     temperature: 0.3,
   })
 
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
     if (!parsedOutput.success) {
       console.error("Zod validation failed:", parsedOutput.error.message, "Raw:", JSON.stringify(rawModelResponse))
 
-      logAIInteraction({
+      await logAIInteraction({
         userId,
         userInput,
         modelRawResponse: rawModelResponse,
@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    logAIInteraction({
+    await logAIInteraction({
       userId,
       userInput,
       modelRawResponse: rawModelResponse,
@@ -279,7 +279,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown model error"
 
-    logAIInteraction({
+    await logAIInteraction({
       userId,
       userInput,
       modelRawResponse: null,
@@ -289,6 +289,6 @@ export async function POST(req: NextRequest) {
     })
 
     const status = message.includes("not configured") ? 503 : 500
-    return NextResponse.json({ error: "Failed to generate proposals" }, { status })
+    return NextResponse.json({ error: message }, { status })
   }
 }

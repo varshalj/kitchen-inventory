@@ -46,6 +46,45 @@ import { RecipeReviewScreen } from "@/components/recipe-review-screen"
 import { supabase as supabaseClient } from "@/lib/supabase-client"
 import type { InventoryItem, ParsedRecipe, PantryMatch } from "@/lib/types"
 
+const WASTE_REASONS = [
+  { key: "expired", label: "Expired" },
+  { key: "spoiled", label: "Spoiled" },
+  { key: "unused", label: "Unused" },
+  { key: "excess", label: "Too much" },
+] as const
+
+function WasteReasonPicker({ itemId, progressBar }: { itemId: string; progressBar: React.ReactNode }) {
+  const [selected, setSelected] = useState<string | null>(null)
+  return (
+    <div className="mt-2 flex flex-wrap gap-1">
+      <span className="text-xs text-muted-foreground mr-1 self-center">Why?</span>
+      {WASTE_REASONS.map((r) => (
+        <button
+          key={r.key}
+          type="button"
+          className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+            selected === r.key
+              ? "bg-foreground text-background border-foreground"
+              : "border-border bg-muted hover:bg-muted/80"
+          }`}
+          disabled={selected !== null && selected !== r.key}
+          onClick={() => {
+            setSelected(r.key)
+            fetchWithAuth(`/api/inventory/${itemId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ wastageReason: r.key }),
+            })
+          }}
+        >
+          {r.label}
+        </button>
+      ))}
+      {progressBar}
+    </div>
+  )
+}
+
 export function InventoryDashboard() {
   const router = useRouter()
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -445,39 +484,13 @@ useEffect(() => {
       const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
       pendingActions.current.set(item.id, { type: "waste", item, cleanupTimer, reviewTimer })
 
-      const wasteReasons = [
-        { key: "expired", label: "Expired" },
-        { key: "spoiled", label: "Spoiled" },
-        { key: "unused", label: "Unused" },
-        { key: "excess", label: "Too much" },
-      ] as const
-
       toast({
         title: "Item marked as wasted",
         duration: 5000,
         description: (
           <div>
             <span>{item.name} moved to archive.</span>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <span className="text-xs text-muted-foreground mr-1">Why?</span>
-              {wasteReasons.map((r) => (
-                <button
-                  key={r.key}
-                  type="button"
-                  className="text-xs px-2 py-0.5 rounded-full border border-border bg-muted hover:bg-muted/80 transition-colors"
-                  onClick={() => {
-                    fetchWithAuth(`/api/inventory/${item.id}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ wastageReason: r.key }),
-                    })
-                  }}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-            {progressBar}
+            <WasteReasonPicker itemId={item.id} progressBar={progressBar} />
           </div>
         ),
         action: (
@@ -1122,6 +1135,7 @@ useEffect(() => {
           </DialogHeader>
           {reviewItem && (
             <ReviewPrompt
+              key={reviewItem.item.id}
               item={reviewItem.item}
               type={reviewItem.type}
               onSubmit={handleReviewSubmit}

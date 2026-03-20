@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic } from "lucide-react"
+import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { ToastAction } from "@/components/ui/toast"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ export function ShoppingList() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
   const [editItem, setEditItem] = useState<ShoppingItem | null>(null)
   const [buyItem, setBuyItem] = useState<ShoppingItem | null>(null)
+  const [detailItem, setDetailItem] = useState<ShoppingItem | null>(null)
   const [newItem, setNewItem] = useState({ name: "", quantity: 1, unit: "pcs", notes: "" })
   const [isAddingItem, setIsAddingItem] = useState(false)
   const [togglingId, setTogglingId] = useState<string | null>(null)
@@ -622,9 +624,10 @@ export function ShoppingList() {
                       <div className="flex items-center justify-between">
                         <div
                           className={cn(
-                            "font-medium truncate",
+                            "font-medium truncate cursor-pointer",
                             item.completed ? "line-through text-muted-foreground" : "",
                           )}
+                          onClick={() => setDetailItem(item)}
                         >
                           {item.brand && (
                             <span className="text-muted-foreground font-normal">{item.brand} </span>
@@ -722,6 +725,79 @@ export function ShoppingList() {
         enabledPlatformIds={settings?.deliveryPlatforms || []}
         userOrderSources={settings?.orderSources || []}
       />
+
+      {/* Item Detail Sheet */}
+      <Sheet open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
+        <SheetContent side="bottom" className="rounded-t-xl pb-8">
+          <SheetHeader className="mb-4">
+            <SheetTitle className="text-left">
+              {detailItem?.brand && (
+                <span className="text-muted-foreground font-normal">{detailItem.brand} </span>
+              )}
+              {detailItem?.name}
+            </SheetTitle>
+          </SheetHeader>
+          {detailItem && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground">Quantity</p>
+                  <p className="text-sm font-medium">
+                    {formatQuantityUnit(detailItem.quantity, detailItem.unit)}
+                  </p>
+                </div>
+
+                {detailItem.category && (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Category</p>
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {detailItem.category}
+                    </Badge>
+                  </div>
+                )}
+
+                {detailItem.orderedFrom && (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Usually ordered from</p>
+                    <p className="text-sm font-medium">{detailItem.orderedFrom}</p>
+                  </div>
+                )}
+
+                {detailItem.addedFrom && (
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">Added by</p>
+                    <p className="text-sm font-medium capitalize">
+                      {detailItem.addedFrom === "consumed"
+                        ? "Auto (item consumed)"
+                        : detailItem.addedFrom}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {detailItem.notes && (
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground">Notes</p>
+                  <p className="text-sm">{detailItem.notes}</p>
+                </div>
+              )}
+
+              {showBuyButton && !detailItem.completed && (
+                <Button
+                  className="w-full mt-2"
+                  onClick={() => {
+                    setBuyItem(detailItem)
+                    setDetailItem(null)
+                  }}
+                >
+                  <ShoppingBag className="h-4 w-4 mr-2" />
+                  Buy Now
+                </Button>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Edit Item Dialog */}
       {editItem && (
