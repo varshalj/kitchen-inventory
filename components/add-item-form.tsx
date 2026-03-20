@@ -43,11 +43,10 @@ type ProposalResponse = {
 }
 import { fetchWithAuth } from "@/lib/api-client"
 
-/** Convert HEIC/HEIF files to JPEG via canvas.
- *  Uses a blob URL (not a data URL) so iOS Safari can render the HEIC natively
- *  through its image subsystem, then we capture the result via canvas.
- *  data:image/heic;base64 URLs are NOT supported in programmatic Image elements
- *  even though HEIC files work fine visually in the browser. */
+/** Convert HEIC/HEIF files to JPEG using heic2any (WASM-based decoder).
+ *  Canvas and blob URL approaches both fail for HEIC in iOS WebKit's
+ *  programmatic Image API — confirmed by runtime logs showing img.onerror
+ *  fires immediately. heic2any handles this correctly via libheif/WASM. */
 async function convertToJpegIfNeeded(file: File): Promise<string> {
   const isHeic =
     file.type === "image/heic" ||
@@ -55,12 +54,7 @@ async function convertToJpegIfNeeded(file: File): Promise<string> {
     file.name.toLowerCase().endsWith(".heic") ||
     file.name.toLowerCase().endsWith(".heif")
 
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:convertToJpegIfNeeded',message:'called',data:{fileName:file.name,fileType:file.type,fileSize:file.size,isHeic},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion agent log
-
   if (!isHeic) {
-    // Non-HEIC: read as data URL directly
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result as string)
@@ -69,45 +63,16 @@ async function convertToJpegIfNeeded(file: File): Promise<string> {
     })
   }
 
-  // HEIC: use blob URL so iOS can render it via its native HEIC decoder
-  const blobUrl = URL.createObjectURL(file)
-  try {
-    return await new Promise((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:img.onload',message:'image loaded',data:{naturalW:img.naturalWidth,naturalH:img.naturalHeight},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-        // #endregion agent log
-        try {
-          const canvas = document.createElement("canvas")
-          canvas.width = img.naturalWidth || 1920
-          canvas.height = img.naturalHeight || 1080
-          const ctx = canvas.getContext("2d")
-          if (!ctx) { reject(new Error("Canvas context unavailable")); return }
-          ctx.drawImage(img, 0, 0)
-          const jpeg = canvas.toDataURL("image/jpeg", 0.85)
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:canvas.toDataURL',message:'jpeg produced',data:{jpegLen:jpeg.length},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-          // #endregion agent log
-          resolve(jpeg)
-        } catch (canvasErr) {
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:canvas.catch',message:'canvas error',data:{err:String(canvasErr)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-          // #endregion agent log
-          reject(canvasErr)
-        }
-      }
-      img.onerror = (e) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:img.onerror',message:'image failed to load',data:{err:String(e)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion agent log
-        reject(new Error("HEIC image failed to load in browser"))
-      }
-      img.src = blobUrl
-    })
-  } finally {
-    URL.revokeObjectURL(blobUrl)
-  }
+  // Lazy-load heic2any to avoid adding it to the main bundle
+  const heic2any = (await import("heic2any")).default
+  const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 })
+  const jpegBlob = Array.isArray(result) ? result[0] : result
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error("Failed to read converted HEIC"))
+    reader.readAsDataURL(jpegBlob)
+  })
 }
 
 export function AddItemForm() {
