@@ -188,17 +188,24 @@ export function AddItemForm() {
       const timer3 = setTimeout(() => setAnalyzeStep(3), stepDuration * 3)
       setTimeout(async () => {
         try {
+          const singlePayload = JSON.stringify({
+            userInput: "Extract all grocery and food items from this image. Identify item names, brands, categories, quantities, and estimate expiry dates.",
+            imageBase64: imageData,
+          })
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:cameraCapture',message:'single image payload',data:{payloadBytes:singlePayload.length},timestamp:Date.now(),hypothesisId:'H1-single'})}).catch(()=>{});
+          // #endregion agent log
           const response = await fetchWithAuth("/api/ai/propose-items", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userInput: "Extract all grocery and food items from this image. Identify item names, brands, categories, quantities, and estimate expiry dates.",
-              imageBase64: imageData,
-            }),
+            body: singlePayload,
           })
 
           if (!response.ok) {
             const errBody = await response.json().catch(() => null)
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:cameraCapture:error',message:'single image API error',data:{status:response.status,statusText:response.statusText,errBody},timestamp:Date.now(),hypothesisId:'H1-single'})}).catch(()=>{});
+            // #endregion agent log
             throw new Error(errBody?.error || "AI proposal request failed")
           }
 
@@ -280,17 +287,24 @@ export function AddItemForm() {
     setTimeout(async () => {
       try {
         const count = imagePreviews.length
+        const bodyPayload = JSON.stringify({
+          userInput: `Extract all grocery and food items from ${count > 1 ? `these ${count} kitchen/pantry images` : "this kitchen/pantry image"}. Identify item names, brands, categories, quantities, and estimate expiry dates.`,
+          imagesBase64: imagePreviews,
+        })
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:handleAnalyze',message:'payload size',data:{imageCount:count,payloadBytes:bodyPayload.length,perImageBytes:imagePreviews.map((p:string)=>p.length)},timestamp:Date.now(),hypothesisId:'H1-client'})}).catch(()=>{});
+        // #endregion agent log
         const response = await fetchWithAuth("/api/ai/propose-items", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userInput: `Extract all grocery and food items from ${count > 1 ? `these ${count} kitchen/pantry images` : "this kitchen/pantry image"}. Identify item names, brands, categories, quantities, and estimate expiry dates.`,
-            imagesBase64: imagePreviews,
-          }),
+          body: bodyPayload,
         })
 
         if (!response.ok) {
           const errBody = await response.json().catch(() => null)
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:handleAnalyze:error',message:'API returned error',data:{status:response.status,statusText:response.statusText,errBody},timestamp:Date.now(),hypothesisId:'H1-client'})}).catch(()=>{});
+          // #endregion agent log
           throw new Error(errBody?.error || "AI proposal request failed")
         }
 
