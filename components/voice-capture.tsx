@@ -518,12 +518,12 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                           />
 
                           {isInventory && (
-                            <CurrencyInput
-                              value={item.price || ""}
-                              onChange={(v) => updateItem(index, "price", v)}
-                              placeholder="Price (optional)"
-                              disabled={!item.included}
-                            />
+                          <CurrencyInput
+                            value={item.price || ""}
+                            onValueChange={(v) => updateItem(index, "price", v)}
+                            placeholder="Price (optional)"
+                            compact
+                          />
                           )}
                         </div>
                       </div>
