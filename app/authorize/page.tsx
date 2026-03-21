@@ -7,16 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Shield, CheckCircle, XCircle, Loader2 } from "lucide-react"
 
-// #region agent log
-function serverLog(message: string, data: Record<string, unknown>, hypothesisId: string) {
-  fetch("/api/mcp-debug-log", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ location: "authorize/page.tsx", message, data, hypothesisId, timestamp: Date.now() }),
-  }).catch(() => {})
-}
-// #endregion
-
 function AuthorizeInner() {
   const searchParams = useSearchParams()
   const [user, setUser] = useState<{ email?: string } | null>(null)
@@ -25,34 +15,17 @@ function AuthorizeInner() {
   const [approving, setApproving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // #region agent log
   const authorizationId = searchParams.get("authorization_id")
-  serverLog("consent page rendered", {
-    authorizationId,
-    allParams: Object.fromEntries([...searchParams.entries()]),
-  }, "H1")
-  // #endregion
 
   useEffect(() => {
     async function init() {
-      // #region agent log
-      serverLog("init started", { authorizationId }, "H1")
-      // #endregion
-
       if (!authorizationId) {
-        // #region agent log
-        serverLog("no authorization_id in URL", { allParams: Object.fromEntries([...searchParams.entries()]) }, "H1")
-        // #endregion
         setError("Missing authorization_id. This page should only be accessed via an MCP client OAuth flow.")
         setLoading(false)
         return
       }
 
       const { data: { user: currentUser } } = await supabase.auth.getUser()
-
-      // #region agent log
-      serverLog("auth check", { hasUser: !!currentUser, userId: currentUser?.id }, "H3")
-      // #endregion
 
       if (!currentUser) {
         const returnUrl = window.location.href
@@ -64,15 +37,6 @@ function AuthorizeInner() {
 
       // Fetch authorization details using Supabase OAuth API
       const { data: details, error: detailsError } = await (supabase.auth as any).oauth.getAuthorizationDetails(authorizationId)
-
-      // #region agent log
-      serverLog("getAuthorizationDetails result", {
-        hasDetails: !!details,
-        clientName: details?.client?.name,
-        scope: details?.scope,
-        error: detailsError?.message,
-      }, "H2")
-      // #endregion
 
       if (detailsError || !details) {
         setError(detailsError?.message || "Could not load authorization details")
@@ -91,15 +55,7 @@ function AuthorizeInner() {
     if (!authorizationId) return
     setApproving(true)
 
-    // #region agent log
-    serverLog("approve clicked", { authorizationId, clientName: authDetails?.client?.name }, "H2")
-    // #endregion
-
     const { data, error: approveError } = await (supabase.auth as any).oauth.approveAuthorization(authorizationId)
-
-    // #region agent log
-    serverLog("approveAuthorization result", { redirectTo: data?.redirect_to, error: approveError?.message }, "H2")
-    // #endregion
 
     if (approveError || !data?.redirect_to) {
       setError(approveError?.message || "Approval failed")
@@ -112,10 +68,6 @@ function AuthorizeInner() {
 
   const handleDeny = async () => {
     if (!authorizationId) return
-
-    // #region agent log
-    serverLog("deny clicked", { authorizationId }, "H2")
-    // #endregion
 
     const { data, error: denyError } = await (supabase.auth as any).oauth.denyAuthorization(authorizationId)
 
