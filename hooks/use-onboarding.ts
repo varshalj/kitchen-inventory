@@ -33,9 +33,9 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   }, [])
 
   return (
-    <OnboardingContext value={{ completed, markCompleted, reset }}>
+    <OnboardingContext.Provider value={{ completed, markCompleted, reset }}>
       {children}
-    </OnboardingContext>
+    </OnboardingContext.Provider>
   )
 }
 
