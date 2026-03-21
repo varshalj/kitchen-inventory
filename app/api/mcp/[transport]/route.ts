@@ -7,11 +7,9 @@ import { authenticateMcpRequest } from "@/lib/mcp/auth"
 import { handleToolCall } from "@/lib/mcp/tools"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-// Zod 4 (3.25.x) types differ from Zod 3's ZodType expected by McpServer.tool().
-// Schemas work at runtime; cast to satisfy the type checker.
-const str = () => z.string() as any
-const strOpt = () => z.string().optional() as any
-const numOpt = () => z.number().optional() as any
+// Pass pre-built z.object() schemas so the SDK's getZodSchemaObject returns them unchanged
+// (skipping the objectFromShape path that uses zod/v3 subpath import — unreliable in prod bundles).
+// safeParseAsync then calls the Zod 3 instance method directly, which is guaranteed to work.
 
 function registerAllTools(server: McpServer, supabase: SupabaseClient) {
   const call = async (name: string, args: Record<string, unknown>) => {
@@ -28,7 +26,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
       title: "List Inventory",
       description:
         "List current (non-archived) inventory items. Optional filters: category (e.g. dairy, vegetables), location (e.g. fridge, pantry).",
-      inputSchema: { category: strOpt(), location: strOpt() },
+      inputSchema: z.object({ category: z.string().optional(), location: z.string().optional() }) as any,
     },
     (args: any) => call("list_inventory", args),
   )
@@ -38,7 +36,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
     {
       title: "Get Expiring Soon",
       description: "Get inventory items expiring within N days (default 3). Useful for preventing food waste.",
-      inputSchema: { days: numOpt() },
+      inputSchema: z.object({ days: z.number().optional() }) as any,
     },
     (args: any) => call("get_expiring_soon", args),
   )
@@ -48,7 +46,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
     {
       title: "List Shopping",
       description: "List shopping list items. Filter by status: pending (default), completed, or all.",
-      inputSchema: { status: strOpt() },
+      inputSchema: z.object({ status: z.string().optional() }) as any,
     },
     (args: any) => call("list_shopping", args),
   )
@@ -58,7 +56,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
     {
       title: "List Recipes",
       description: "List saved recipes with title, source, servings, prep/cook time, and pantry compatibility score.",
-      inputSchema: {},
+      inputSchema: z.object({}) as any,
     },
     () => call("list_recipes", {}),
   )
@@ -68,7 +66,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
     {
       title: "Get Recipe",
       description: "Get a single recipe with full ingredients list and instructions. Requires recipe_id.",
-      inputSchema: { recipe_id: str() },
+      inputSchema: z.object({ recipe_id: z.string() }) as any,
     },
     (args: any) => call("get_recipe", args),
   )
@@ -79,7 +77,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
       title: "Suggest Meals",
       description:
         "Suggest recipes sorted by pantry compatibility score (highest first). Optional limit (default 5).",
-      inputSchema: { limit: numOpt() },
+      inputSchema: z.object({ limit: z.number().optional() }) as any,
     },
     (args: any) => call("suggest_meals", args),
   )
@@ -90,7 +88,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
       title: "Get Waste Stats",
       description:
         "Get food waste analytics: total items wasted, breakdown by category and reason. Optional days lookback (default 30).",
-      inputSchema: { days: numOpt() },
+      inputSchema: z.object({ days: z.number().optional() }) as any,
     },
     (args: any) => call("get_waste_stats", args),
   )
@@ -101,7 +99,7 @@ function registerAllTools(server: McpServer, supabase: SupabaseClient) {
       title: "Search Inventory",
       description:
         "Fuzzy search inventory items by name across current and archived items. Requires query string.",
-      inputSchema: { query: str() },
+      inputSchema: z.object({ query: z.string() }) as any,
     },
     (args: any) => call("search_inventory", args),
   )
