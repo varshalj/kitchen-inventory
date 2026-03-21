@@ -43,19 +43,60 @@ type ProposalResponse = {
 }
 import { fetchWithAuth } from "@/lib/api-client"
 
-/** Convert HEIC/HEIF files to JPEG using heic2any (WASM-based decoder).
- *  Canvas and blob URL approaches both fail for HEIC in iOS WebKit's
- *  programmatic Image API — confirmed by runtime logs showing img.onerror
- *  fires immediately. heic2any handles this correctly via libheif/WASM. */
-async function convertToJpegIfNeeded(file: File): Promise<string> {
+const MAX_IMAGE_DIMENSION = 1200
+const JPEG_QUALITY = 0.75
+
+/** Resize an image data URL to fit within MAX_IMAGE_DIMENSION and re-encode as JPEG.
+ *  This keeps each image at ~150-300KB instead of 2-3MB, staying well within
+ *  Vercel's 4.5MB body limit even with 5 images.
+ *  Confirmed by runtime logs: unresized iPhone photos are 2.3-2.6MB each as base64,
+ *  causing HTTP 413 on Vercel for 2+ images. */
+function resizeImageDataUrl(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      let { naturalWidth: w, naturalHeight: h } = img
+      if (w > MAX_IMAGE_DIMENSION || h > MAX_IMAGE_DIMENSION) {
+        const scale = MAX_IMAGE_DIMENSION / Math.max(w, h)
+        w = Math.round(w * scale)
+        h = Math.round(h * scale)
+      }
+      const canvas = document.createElement("canvas")
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext("2d")
+      if (!ctx) { reject(new Error("Canvas unavailable")); return }
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL("image/jpeg", JPEG_QUALITY))
+    }
+    img.onerror = () => reject(new Error("Failed to load image for resize"))
+    img.src = dataUrl
+  })
+}
+
+/** Process an image file for upload: HEIC→JPEG conversion if needed, then resize.
+ *  HEIC conversion uses heic2any (WASM/libheif) since iOS WebKit's programmatic
+ *  Image API cannot decode HEIC — confirmed by runtime logs. */
+async function convertAndResizeImage(file: File): Promise<string> {
   const isHeic =
     file.type === "image/heic" ||
     file.type === "image/heif" ||
     file.name.toLowerCase().endsWith(".heic") ||
     file.name.toLowerCase().endsWith(".heif")
 
-  if (!isHeic) {
-    return new Promise((resolve, reject) => {
+  let rawDataUrl: string
+  if (isHeic) {
+    const heic2any = (await import("heic2any")).default
+    const result = await heic2any({ blob: file, toType: "image/jpeg", quality: JPEG_QUALITY })
+    const jpegBlob = Array.isArray(result) ? result[0] : result
+    rawDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = () => reject(new Error("Failed to read converted HEIC"))
+      reader.readAsDataURL(jpegBlob)
+    })
+  } else {
+    rawDataUrl = await new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result as string)
       reader.onerror = () => reject(new Error("Failed to read image"))
@@ -63,16 +104,7 @@ async function convertToJpegIfNeeded(file: File): Promise<string> {
     })
   }
 
-  // Lazy-load heic2any to avoid adding it to the main bundle
-  const heic2any = (await import("heic2any")).default
-  const result = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.85 })
-  const jpegBlob = Array.isArray(result) ? result[0] : result
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error("Failed to read converted HEIC"))
-    reader.readAsDataURL(jpegBlob)
-  })
+  return resizeImageDataUrl(rawDataUrl)
 }
 
 export function AddItemForm() {
@@ -175,7 +207,7 @@ export function AddItemForm() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    convertToJpegIfNeeded(file).then((imageData) => {
+    convertAndResizeImage(file).then((imageData) => {
       setImagePreview(imageData)
       setIsAnalyzing(true)
       setAnalyzeStep(0)
@@ -257,7 +289,7 @@ export function AddItemForm() {
     }
 
     Promise.all(
-      filesToAdd.map((file) => convertToJpegIfNeeded(file))
+      filesToAdd.map((file) => convertAndResizeImage(file))
     ).then((previews) => {
       setSelectedFiles((prev) => [...prev, ...filesToAdd])
       setImagePreviews((prev) => [...prev, ...previews])
