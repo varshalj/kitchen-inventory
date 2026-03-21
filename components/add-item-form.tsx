@@ -437,18 +437,19 @@ export function AddItemForm() {
     }
   }
 
-  const handleVoiceConfirm = async (items: VoiceParsedItem[]) => {
+  const handleVoiceConfirm = async (items: VoiceParsedItem[], globals?: { location?: string; notes?: string }) => {
     const allCompleted: Array<{ id: string; name: string }> = []
     for (const item of items) {
-      const sixMonthsOut = new Date()
-      sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6)
       const { completedShoppingItems } = await addInventoryItem({
         name: item.name,
         category: item.category || "Other",
-        expiryDate: sixMonthsOut.toISOString(),
-        location: "Refrigerator",
+        expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString() : new Date(Date.now() + 30 * 86400000).toISOString(),
+        location: globals?.location || "Refrigerator",
         quantity: item.quantity,
         unit: item.unit || "pcs",
+        brand: item.brand || "",
+        price: item.price || "",
+        notes: globals?.notes || "",
         addedOn: new Date().toISOString(),
       } as unknown as InventoryItem)
       allCompleted.push(...completedShoppingItems)

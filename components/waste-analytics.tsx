@@ -5,6 +5,7 @@ import { BarChart2, DollarSign, PieChart, TrendingDown, AlertTriangle } from "lu
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainLayout } from "@/components/main-layout"
+import { LoadingTip } from "@/components/loading-tip"
 import { fetchWithAuth } from "@/lib/api-client"
 
 type TimeFrame = "week" | "month" | "quarter" | "year"
@@ -103,7 +104,21 @@ export function WasteAnalytics() {
       </div>
 
       {loading ? (
-        <p className="text-muted-foreground">Loading analytics...</p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader className="pb-2">
+                  <div className="h-4 bg-muted rounded w-2/3" />
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 bg-muted rounded w-1/2" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <LoadingTip />
+        </div>
       ) : (
         <div className="space-y-4 mb-20">
           <div className="grid grid-cols-2 gap-4">

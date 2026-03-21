@@ -5,6 +5,8 @@ import { Mic, MicOff, Loader2, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Sheet,
   SheetContent,
@@ -13,29 +15,64 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { QuantityWithUnits } from "@/components/quantity-with-units"
+import { CurrencyInput } from "@/components/currency-input"
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition"
 import { fetchWithAuth } from "@/lib/api-client"
 import { suggestInventoryItems } from "@/lib/client/api"
+import { useUserSettings } from "@/hooks/use-user-settings"
 import { cn, findFuzzyMatch } from "@/lib/utils"
 
 const MAX_DURATION_MS = 30000
+
+const CATEGORIES = [
+  "Fruits", "Vegetables", "Dairy", "Meat", "Grains",
+  "Canned", "Frozen", "Snacks", "Beverages", "Condiments", "Other",
+] as const
+
+const DEFAULT_EXPIRY_DAYS: Record<string, number> = {
+  Fruits: 7,
+  Vegetables: 7,
+  Dairy: 14,
+  Meat: 14,
+  Frozen: 90,
+  Grains: 180,
+  Canned: 180,
+  Condiments: 180,
+  Snacks: 30,
+  Beverages: 30,
+  Other: 30,
+}
+
+function defaultExpiryDate(category?: string): string {
+  const days = DEFAULT_EXPIRY_DAYS[category || "Other"] ?? 30
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split("T")[0]
+}
 
 export interface VoiceParsedItem {
   name: string
   quantity: number
   unit: string
   category?: string
+  expiryDate?: string
+  brand?: string
+  price?: string
   included: boolean
-  /** Name of an existing list item that closely matches this one */
   fuzzyMatchedName?: string
 }
 
 interface VoiceCaptureProps {
   target: "shopping" | "inventory"
-  /** Called when user confirms the parsed items */
-  onConfirm: (items: VoiceParsedItem[]) => Promise<void>
-  /** Names already in the list, used for duplicate badges */
+  onConfirm: (items: VoiceParsedItem[], globals?: { location?: string; notes?: string }) => Promise<void>
   existingNames?: string[]
 }
 
@@ -54,6 +91,12 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
   const newItemInputRef = useRef<HTMLInputElement>(null)
   const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [globalLocation, setGlobalLocation] = useState("Refrigerator")
+  const [globalNotes, setGlobalNotes] = useState("")
+
+  const { settings } = useUserSettings()
+  const isInventory = target === "inventory"
+
   const {
     supported,
     state: speechState,
@@ -64,16 +107,14 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     stop: stopListening,
   } = useSpeechRecognition({ lang: "en-IN", maxDuration: MAX_DURATION_MS })
 
-  // Stable refs so callbacks always read the latest values
   const transcriptRef = useRef(transcript)
   const interimRef = useRef(interimTranscript)
   const existingNamesRef = useRef(existingNames)
-  const isParsingRef = useRef(false) // guard against double-calls
+  const isParsingRef = useRef(false)
   useEffect(() => { transcriptRef.current = transcript }, [transcript])
   useEffect(() => { interimRef.current = interimTranscript }, [interimTranscript])
   useEffect(() => { existingNamesRef.current = existingNames }, [existingNames])
 
-  // Elapsed-time counter for the ring animation
   useEffect(() => {
     if (phase !== "listening") {
       setElapsed(0)
@@ -88,6 +129,8 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     setPhase("idle")
     setParsedItems([])
     setParseError(null)
+    setGlobalLocation("Refrigerator")
+    setGlobalNotes("")
     isParsingRef.current = false
   }
 
@@ -99,13 +142,10 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
   }
 
   const handleStopAndParse = useCallback(async () => {
-    // Prevent double-invocation (manual tap + auto-stop firing simultaneously)
     if (isParsingRef.current) return
     isParsingRef.current = true
 
     stopListening()
-
-    // Wait for recognition's onend to fire and set the final transcript in state/refs
     await new Promise((r) => setTimeout(r, 400))
 
     const finalTranscript = transcriptRef.current || interimRef.current
@@ -133,13 +173,16 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
       const data = await response.json()
       const items: VoiceParsedItem[] = (data.items || []).map((item: any) => {
         const name = item.name || "Unknown"
-        // Use the latest existingNames from the ref to avoid stale closure
         const fuzzyMatch = findFuzzyMatch(name, existingNamesRef.current)
+        const category = item.category || "Other"
         return {
           name,
           quantity: item.quantity || 1,
           unit: item.unit || "pcs",
-          category: item.category,
+          category,
+          expiryDate: target === "inventory" ? defaultExpiryDate(category) : undefined,
+          brand: "",
+          price: "",
           included: fuzzyMatch === null,
           fuzzyMatchedName: fuzzyMatch ?? undefined,
         }
@@ -161,7 +204,6 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     }
   }, [stopListening, target])
 
-  // Auto-trigger parse when recognition ends on its own (silence / max duration)
   useEffect(() => {
     if (speechState === "idle" && phase === "listening") {
       void handleStopAndParse()
@@ -176,7 +218,14 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
 
   const updateItem = (index: number, field: string, value: string | number) => {
     setParsedItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, [field]: value, included: true } : item))
+      prev.map((item, i) => {
+        if (i !== index) return item
+        const updated = { ...item, [field]: value, included: true }
+        if (field === "category" && isInventory) {
+          updated.expiryDate = defaultExpiryDate(value as string)
+        }
+        return updated
+      })
     )
   }
 
@@ -201,7 +250,16 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     if (trimmed) {
       setParsedItems((prev) => [
         ...prev,
-        { name: trimmed, quantity: 1, unit: "pcs", included: true },
+        {
+          name: trimmed,
+          quantity: 1,
+          unit: "pcs",
+          category: "Other",
+          expiryDate: isInventory ? defaultExpiryDate("Other") : undefined,
+          brand: "",
+          price: "",
+          included: true,
+        },
       ])
     }
     setAddingNewItem(false)
@@ -214,7 +272,8 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
   const handleConfirm = async () => {
     setSaving(true)
     try {
-      await onConfirm(parsedItems.filter((i) => i.included))
+      const globals = isInventory ? { location: globalLocation, notes: globalNotes } : undefined
+      await onConfirm(parsedItems.filter((i) => i.included), globals)
       setOpen(false)
       setPhase("idle")
       setParsedItems([])
@@ -225,7 +284,6 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
     }
   }
 
-  // SVG ring progress — drains over MAX_DURATION_MS
   const radius = 44
   const circumference = 2 * Math.PI * radius
   const ringProgress = Math.min(elapsed / MAX_DURATION_MS, 1)
@@ -275,8 +333,6 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
             {/* Listening / idle state */}
             {(phase === "idle" || phase === "listening") && (
               <div className="flex flex-col items-center py-6 gap-4">
-
-                {/* Mic button with draining ring */}
                 <div className="relative h-24 w-24 flex items-center justify-center">
                   {phase === "listening" && (
                     <svg
@@ -312,7 +368,6 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                   </button>
                 </div>
 
-                {/* Status copy */}
                 <div className="text-center space-y-1">
                   <p className="text-sm font-medium">
                     {phase === "listening" ? "Go ahead, I'm listening…" : "Tap the mic and say your items"}
@@ -328,7 +383,6 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                   )}
                 </div>
 
-                {/* Live transcript preview — always visible during listening */}
                 {phase === "listening" && (
                   <div className="w-full rounded-lg bg-muted/50 border border-border p-3 text-sm text-center min-h-[3rem] flex items-center justify-center">
                     {transcript || interimTranscript ? (
@@ -385,7 +439,6 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                         matchedName && !item.included ? "border-amber-300" : ""
                       )}
                     >
-                      {/* Near-duplicate warning banner */}
                       {matchedName && (
                         <div className="flex items-center justify-between rounded-md bg-amber-50 border border-amber-200 px-2 py-1.5">
                           <p className="text-xs text-amber-700">
@@ -414,8 +467,46 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                             value={item.name}
                             onChange={(e) => updateItem(index, "name", e.target.value)}
                             className="h-8 text-sm font-medium"
+                            placeholder="Item name"
                             disabled={!item.included}
                           />
+
+                          {isInventory && (
+                            <Input
+                              value={item.brand || ""}
+                              onChange={(e) => updateItem(index, "brand", e.target.value)}
+                              className="h-8 text-sm"
+                              placeholder="Brand (optional)"
+                              disabled={!item.included}
+                            />
+                          )}
+
+                          {isInventory && (
+                            <div className="grid grid-cols-2 gap-2">
+                              <Select
+                                value={item.category || "Other"}
+                                onValueChange={(v) => updateItem(index, "category", v)}
+                                disabled={!item.included}
+                              >
+                                <SelectTrigger className="h-8 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {CATEGORIES.map((c) => (
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type="date"
+                                value={item.expiryDate || ""}
+                                onChange={(e) => updateItem(index, "expiryDate", e.target.value)}
+                                className="h-8 text-sm"
+                                disabled={!item.included}
+                              />
+                            </div>
+                          )}
+
                           <QuantityWithUnits
                             value={item.quantity}
                             unit={item.unit}
@@ -425,6 +516,15 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                             }}
                             min={0.1}
                           />
+
+                          {isInventory && (
+                            <CurrencyInput
+                              value={item.price || ""}
+                              onChange={(v) => updateItem(index, "price", v)}
+                              placeholder="Price (optional)"
+                              disabled={!item.included}
+                            />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -448,7 +548,6 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                         if (e.key === "Escape") { setAddingNewItem(false); setNewItemName(""); setNewItemSuggestions([]) }
                       }}
                       onBlur={() => {
-                        // Small delay so suggestion click can fire first
                         setTimeout(() => {
                           if (!newItemName.trim()) {
                             setAddingNewItem(false)
@@ -491,6 +590,35 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                   </button>
                 )}
 
+                {/* Global fields for inventory */}
+                {isInventory && (
+                  <div className="space-y-3 pt-2 border-t">
+                    <div>
+                      <Label className="text-sm">Storage Location</Label>
+                      <Select value={globalLocation} onValueChange={setGlobalLocation}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(settings?.storageLocations || ["Refrigerator", "Freezer", "Cabinet", "Counter"]).map((loc) => (
+                            <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-sm">Notes (optional)</Label>
+                      <Textarea
+                        value={globalNotes}
+                        onChange={(e) => setGlobalNotes(e.target.value)}
+                        placeholder="Any notes for these items…"
+                        className="mt-1 text-sm resize-none"
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {parseError && (
                   <p className="text-sm text-destructive text-center">{parseError}</p>
                 )}
@@ -507,7 +635,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
                 isLoading={saving}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add {includedCount} item{includedCount !== 1 ? "s" : ""} to list
+                Add {includedCount} item{includedCount !== 1 ? "s" : ""} to {isInventory ? "inventory" : "list"}
               </LoadingButton>
             </SheetFooter>
           )}

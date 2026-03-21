@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { StarRating } from "@/components/star-rating"
+import { formatQuantityUnit } from "@/components/quantity-with-units"
 import type { InventoryItem } from "@/lib/types"
 
 interface ItemDetailSheetProps {
@@ -73,7 +74,7 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
             <DetailRow
               icon={<Package className="h-4 w-4" />}
               label="Quantity"
-              value={String(item.quantity || 1)}
+              value={formatQuantityUnit(item.quantity, item.unit)}
             />
             {item.price && (
               <DetailRow icon={<DollarSign className="h-4 w-4" />} label="Price" value={item.price} />

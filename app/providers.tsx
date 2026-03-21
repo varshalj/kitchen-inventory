@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { installConsoleCapture } from "@/lib/console-capture"
 import { ScreenshotBugNudge } from "@/components/screenshot-bug-nudge"
 import { OnboardingTour } from "@/components/onboarding-tour"
+import { OnboardingProvider } from "@/hooks/use-onboarding"
 import { PwaUpdateBanner } from "@/components/pwa-update-banner"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 import { ShoppingCountProvider } from "@/contexts/shopping-count-context"
@@ -21,16 +22,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
       <UserSettingsProvider>
-        <ShoppingCountProvider>
-          <RecipeImportProvider>
-            {children}
-            <Toaster />
-            <ScreenshotBugNudge />
-            <OnboardingTour />
-            <PwaUpdateBanner />
-            <PwaInstallPrompt />
-          </RecipeImportProvider>
-        </ShoppingCountProvider>
+        <OnboardingProvider>
+          <ShoppingCountProvider>
+            <RecipeImportProvider>
+              {children}
+              <Toaster />
+              <ScreenshotBugNudge />
+              <OnboardingTour />
+              <PwaUpdateBanner />
+              <PwaInstallPrompt />
+            </RecipeImportProvider>
+          </ShoppingCountProvider>
+        </OnboardingProvider>
       </UserSettingsProvider>
     </ThemeProvider>
   )

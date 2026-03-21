@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat, Lightbulb } from "lucide-react"
+import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -44,6 +44,7 @@ import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
 import { supabase as supabaseClient } from "@/lib/supabase-client"
+import { LoadingTip } from "@/components/loading-tip"
 import type { InventoryItem, ParsedRecipe, PantryMatch } from "@/lib/types"
 
 const WASTE_REASONS = [
@@ -52,27 +53,6 @@ const WASTE_REASONS = [
   { key: "unused", label: "Unused" },
   { key: "excess", label: "Too much" },
 ] as const
-
-const LOADING_TIPS = [
-  "Store bananas away from other fruits — they release ethylene gas that speeds up ripening.",
-  "Freeze herbs in olive oil using ice cube trays for instant flavour in cooking.",
-  "Keep ginger unpeeled in the freezer — it grates more easily and lasts months.",
-  "Wilted greens? Soak them in ice water for 10 minutes to revive crunch.",
-  "Store onions and potatoes separately — together they spoil faster.",
-  "Wrap celery in aluminium foil to keep it crisp for weeks in the fridge.",
-  "Ripe avocados last longer in the fridge — move them once they feel ready.",
-  "Store mushrooms in a paper bag, not plastic, to prevent them from getting slimy.",
-  "Bread stays fresher longer when stored in a cool, dark place rather than the fridge.",
-  "Freeze overripe bananas for smoothies or banana bread — no waste!",
-  "A bay leaf in your rice or flour container helps keep insects away.",
-  "Store tomatoes stem-side down at room temperature for best flavour.",
-  "Keep dairy products at the back of the fridge where it's coldest, not the door.",
-  "Leftover coffee? Freeze it in ice cube trays for iced coffee without dilution.",
-  "Store spring onions in a glass of water on the counter — they'll keep growing.",
-  "Citrus zest can be frozen and used later to add zing to any dish.",
-  "Airtight containers keep spices fresh 2-3x longer than open jars.",
-  "Plan meals around what expires first to cut food waste by up to 30%.",
-]
 
 function WasteReasonPicker({ itemId, progressBar }: { itemId: string; progressBar: React.ReactNode }) {
   const [selected, setSelected] = useState<string | null>(null)
@@ -121,7 +101,6 @@ export function InventoryDashboard() {
   const [reviewQueue, setReviewQueue] = useState<Array<{ item: InventoryItem; type: "consumed" | "wasted" }>>([])
   const reviewItem = reviewQueue[0] ?? null
   const [isLoading, setIsLoading] = useState(true)
-  const loadingTip = useMemo(() => LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)], [])
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBulkProcessing, setIsBulkProcessing] = useState(false)
@@ -972,7 +951,7 @@ useEffect(() => {
       <div className="grid grid-cols-1 gap-4 mb-20">
         {isLoading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
+            {[1, 2].map((i) => (
               <div key={i} className="rounded-lg border p-4 animate-pulse">
                 <div className="flex justify-between items-start">
                   <div className="space-y-2 flex-1">
@@ -986,11 +965,18 @@ useEffect(() => {
                 </div>
               </div>
             ))}
-            <div className="flex items-start gap-2 px-1 pt-2">
-              <Lightbulb className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium">Did you know?</span> {loadingTip}
-              </p>
+            <LoadingTip />
+            <div className="rounded-lg border p-4 animate-pulse">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2 flex-1">
+                  <div className="h-4 bg-muted rounded w-1/3" />
+                  <div className="h-3 bg-muted rounded w-1/4" />
+                </div>
+                <div className="h-6 bg-muted rounded w-16" />
+              </div>
+              <div className="mt-3 pt-3 border-t">
+                <div className="h-3 bg-muted rounded w-1/4" />
+              </div>
             </div>
           </div>
         ) : filteredItems.length === 0 ? (

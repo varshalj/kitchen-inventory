@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { MainLayout } from "@/components/main-layout"
+import { LoadingTip } from "@/components/loading-tip"
 import { QuantityWithUnits, formatQuantityUnit } from "@/components/quantity-with-units"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
 import { useUserSettings } from "@/hooks/use-user-settings"
@@ -574,7 +575,7 @@ export function ShoppingList() {
 
         {isLoading ? (
           <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
+            {[1, 2].map((i) => (
               <Card key={i} className="animate-pulse">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-3">
@@ -588,6 +589,19 @@ export function ShoppingList() {
                 </CardContent>
               </Card>
             ))}
+            <LoadingTip />
+            <Card className="animate-pulse">
+              <CardContent className="p-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-6 w-6 rounded-full bg-muted" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 bg-muted rounded w-2/3" />
+                    <div className="h-3 bg-muted rounded w-1/3" />
+                  </div>
+                  <div className="h-6 bg-muted rounded w-16" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         ) : displayedItems.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">

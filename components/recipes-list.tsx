@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { MainLayout } from "@/components/main-layout"
+import { LoadingTip } from "@/components/loading-tip"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
 import { getRecipes, recalculateRecipeScores, getPendingImports, dismissFailedImport, saveRecipeBookmark } from "@/lib/client/api"
@@ -555,7 +556,7 @@ export function RecipesList() {
       {/* Loading skeleton */}
       {isLoading && (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
+          {[1, 2].map((i) => (
             <div key={i} className="rounded-xl border bg-card p-4 animate-pulse">
               <div className="flex justify-between mb-2">
                 <div className="h-4 w-48 rounded bg-muted" />
@@ -564,6 +565,14 @@ export function RecipesList() {
               <div className="h-3 w-24 rounded bg-muted" />
             </div>
           ))}
+          <LoadingTip />
+          <div className="rounded-xl border bg-card p-4 animate-pulse">
+            <div className="flex justify-between mb-2">
+              <div className="h-4 w-48 rounded bg-muted" />
+              <div className="h-5 w-16 rounded-full bg-muted" />
+            </div>
+            <div className="h-3 w-24 rounded bg-muted" />
+          </div>
         </div>
       )}
 

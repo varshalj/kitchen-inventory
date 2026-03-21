@@ -1,10 +1,19 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { createContext, useContext, useState, useCallback, useEffect } from "react"
+import type React from "react"
 
 const STORAGE_KEY = "onboarding_completed"
 
-export function useOnboarding() {
+type OnboardingContextValue = {
+  completed: boolean | null
+  markCompleted: () => void
+  reset: () => void
+}
+
+const OnboardingContext = createContext<OnboardingContextValue | null>(null)
+
+export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const [completed, setCompleted] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -23,5 +32,15 @@ export function useOnboarding() {
     setCompleted(false)
   }, [])
 
-  return { completed, markCompleted, reset }
+  return (
+    <OnboardingContext value={{ completed, markCompleted, reset }}>
+      {children}
+    </OnboardingContext>
+  )
+}
+
+export function useOnboarding() {
+  const ctx = useContext(OnboardingContext)
+  if (!ctx) throw new Error("useOnboarding must be used within OnboardingProvider")
+  return ctx
 }
