@@ -14,6 +14,7 @@ import {
   Mic,
   BookmarkIcon,
   Check,
+  Bot,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -224,6 +225,31 @@ function BookmarkMockup() {
   )
 }
 
+function AIMockup() {
+  return (
+    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+      <div className="flex items-center gap-1.5 mb-1">
+        <Bot className="h-3.5 w-3.5 text-primary" />
+        <p className="font-semibold text-[11px] text-gray-700">AI Assistant</p>
+      </div>
+      <div className="rounded-lg bg-gray-50 p-2 space-y-1.5">
+        <p className="text-[10px] text-gray-500 italic">&quot;What&apos;s expiring this week?&quot;</p>
+        <div className="rounded border bg-white p-1.5 space-y-1">
+          <div className="flex justify-between">
+            <span className="font-medium">Milk</span>
+            <span className="text-red-500 font-medium">Tomorrow</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-medium">Yogurt</span>
+            <span className="text-amber-500 font-medium">3 days</span>
+          </div>
+        </div>
+      </div>
+      <p className="text-[10px] text-gray-400">Works with ChatGPT, Claude, Cursor</p>
+    </div>
+  )
+}
+
 // ─── Main landing page ─────────────────────────────────────────────────────────
 
 export function LandingPage() {
@@ -260,6 +286,14 @@ export function LandingPage() {
       description:
         "Point your camera at a receipt or a bag of groceries. AI extracts the items and adds them to your inventory instantly — review and confirm before saving.",
       mockup: <ScanMockup />,
+      badge: null,
+    },
+    {
+      icon: <Bot className="h-10 w-10 text-primary mb-4" />,
+      title: "Talk to your kitchen with AI",
+      description:
+        "Connect ChatGPT, Claude, or Cursor to your kitchen data. Ask what's expiring, get meal suggestions, or check your shopping list — all from your favourite AI assistant.",
+      mockup: <AIMockup />,
       badge: null,
     },
     {

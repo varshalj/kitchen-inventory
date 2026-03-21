@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase-client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, Globe, ShoppingBag, Bug, RotateCcw } from "lucide-react"
+import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, Globe, ShoppingBag, Bug, RotateCcw, Bot, Copy, Check, ChevronDown, ChevronRight, ShieldCheck } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,6 +46,117 @@ interface EmailAccount {
   email: string
   services: string[]
   active: boolean
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7 shrink-0"
+      onClick={() => {
+        navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      }}
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+    </Button>
+  )
+}
+
+function PlatformInstructions({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border rounded-lg">
+      <button
+        className="w-full flex items-center justify-between p-3 text-sm font-medium text-left"
+        onClick={() => setOpen(!open)}
+      >
+        {title}
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      </button>
+      {open && <div className="px-3 pb-3 text-xs text-muted-foreground space-y-2">{children}</div>}
+    </div>
+  )
+}
+
+function ConnectToAISection() {
+  const mcpUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/api/mcp`
+    : "/api/mcp"
+
+  const configSnippet = JSON.stringify(
+    {
+      mcpServers: {
+        kitchen_inventory: {
+          command: "npx",
+          args: ["mcp-remote", mcpUrl],
+        },
+      },
+    },
+    null,
+    2,
+  )
+
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="text-lg flex items-center">
+          <Bot className="mr-2 h-4 w-4" />
+          Connect to AI
+        </CardTitle>
+        <CardDescription>
+          Let AI assistants query your inventory, shopping list, recipes, and waste analytics
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-2 rounded-lg border p-2.5 bg-muted/50">
+          <code className="text-xs flex-1 break-all select-all">{mcpUrl}</code>
+          <CopyButton text={mcpUrl} />
+        </div>
+
+        <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-2.5">
+          <ShieldCheck className="h-4 w-4 text-green-700 mt-0.5 shrink-0" />
+          <p className="text-xs text-green-800">
+            Uses your existing login via OAuth. AI assistants can only read your data (read-only access).
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <PlatformInstructions title="ChatGPT">
+            <p>1. Open ChatGPT Settings &gt; Apps &gt; Create App</p>
+            <p>2. Set MCP Server URL to the URL above</p>
+            <p>3. Authentication: OAuth (auto-discovered)</p>
+            <p>4. Save and start chatting with your kitchen data</p>
+          </PlatformInstructions>
+
+          <PlatformInstructions title="Claude Desktop / Cursor / Windsurf">
+            <p>Add this to your MCP config file:</p>
+            <div className="relative">
+              <pre className="bg-gray-900 text-gray-100 text-[10px] rounded p-2.5 overflow-x-auto">
+                {configSnippet}
+              </pre>
+              <div className="absolute top-1.5 right-1.5">
+                <CopyButton text={configSnippet} />
+              </div>
+            </div>
+            <p className="mt-1">
+              Config file locations: Claude Desktop (~/.claude/claude_desktop_config.json),
+              Cursor (.cursor/mcp.json), Windsurf (~/.codeium/windsurf/mcp_config.json)
+            </p>
+          </PlatformInstructions>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export function ProfileSettings() {
@@ -598,6 +709,8 @@ export function ProfileSettings() {
       </Card>
 
       )}
+
+      <ConnectToAISection />
 
       <Card className="mb-6">
         <CardHeader>
