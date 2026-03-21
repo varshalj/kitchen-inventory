@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat } from "lucide-react"
+import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat, Lightbulb } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
@@ -52,6 +52,27 @@ const WASTE_REASONS = [
   { key: "unused", label: "Unused" },
   { key: "excess", label: "Too much" },
 ] as const
+
+const LOADING_TIPS = [
+  "Store bananas away from other fruits — they release ethylene gas that speeds up ripening.",
+  "Freeze herbs in olive oil using ice cube trays for instant flavour in cooking.",
+  "Keep ginger unpeeled in the freezer — it grates more easily and lasts months.",
+  "Wilted greens? Soak them in ice water for 10 minutes to revive crunch.",
+  "Store onions and potatoes separately — together they spoil faster.",
+  "Wrap celery in aluminium foil to keep it crisp for weeks in the fridge.",
+  "Ripe avocados last longer in the fridge — move them once they feel ready.",
+  "Store mushrooms in a paper bag, not plastic, to prevent them from getting slimy.",
+  "Bread stays fresher longer when stored in a cool, dark place rather than the fridge.",
+  "Freeze overripe bananas for smoothies or banana bread — no waste!",
+  "A bay leaf in your rice or flour container helps keep insects away.",
+  "Store tomatoes stem-side down at room temperature for best flavour.",
+  "Keep dairy products at the back of the fridge where it's coldest, not the door.",
+  "Leftover coffee? Freeze it in ice cube trays for iced coffee without dilution.",
+  "Store spring onions in a glass of water on the counter — they'll keep growing.",
+  "Citrus zest can be frozen and used later to add zing to any dish.",
+  "Airtight containers keep spices fresh 2-3x longer than open jars.",
+  "Plan meals around what expires first to cut food waste by up to 30%.",
+]
 
 function WasteReasonPicker({ itemId, progressBar }: { itemId: string; progressBar: React.ReactNode }) {
   const [selected, setSelected] = useState<string | null>(null)
@@ -100,6 +121,7 @@ export function InventoryDashboard() {
   const [reviewQueue, setReviewQueue] = useState<Array<{ item: InventoryItem; type: "consumed" | "wasted" }>>([])
   const reviewItem = reviewQueue[0] ?? null
   const [isLoading, setIsLoading] = useState(true)
+  const loadingTip = useMemo(() => LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)], [])
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBulkProcessing, setIsBulkProcessing] = useState(false)
@@ -236,7 +258,19 @@ useEffect(() => {
     setFilteredItems(result)
   }
 
-  // Function to determine card border color based on expiry date
+  const formatDaysLeft = (expiryDate: string) => {
+    const now = new Date()
+    const exp = new Date(expiryDate)
+    now.setHours(0, 0, 0, 0)
+    exp.setHours(0, 0, 0, 0)
+    const diffDays = Math.round((exp.getTime() - now.getTime()) / (1000 * 3600 * 24))
+
+    if (diffDays < 0) return `Expired ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"} ago`
+    if (diffDays === 0) return "Expiring today"
+    if (diffDays === 1) return "Expiring tomorrow"
+    return `${diffDays} days left`
+  }
+
   const getExpiryColor = (expiryDate: string) => {
     // Check if expiry date is missing or invalid
     if (!expiryDate || isNaN(new Date(expiryDate).getTime())) {
@@ -952,6 +986,12 @@ useEffect(() => {
                 </div>
               </div>
             ))}
+            <div className="flex items-start gap-2 px-1 pt-2">
+              <Lightbulb className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium">Did you know?</span> {loadingTip}
+              </p>
+            </div>
           </div>
         ) : filteredItems.length === 0 ? (
           <div className="text-center py-10">
@@ -1082,7 +1122,7 @@ useEffect(() => {
                     {isExpired && (
                       <div className="mt-1.5 text-red-500 text-xs flex items-center">
                         <AlertCircle className="h-3.5 w-3.5 mr-1 shrink-0" />
-                        Expired on {new Date(item.expiryDate).toLocaleDateString()}
+                        {formatDaysLeft(item.expiryDate)}
                       </div>
                     )}
                     {isMissingExpiry && (
@@ -1102,7 +1142,7 @@ useEffect(() => {
                   </CardContent>
                   <CardFooter className="border-t pt-2 pb-2 px-3 text-xs text-muted-foreground">
                     {!isExpired && !isMissingExpiry && (
-                      <span>Expires: {new Date(item.expiryDate).toLocaleDateString()}</span>
+                      <span>{formatDaysLeft(item.expiryDate)}</span>
                     )}
                   </CardFooter>
                 </Card>

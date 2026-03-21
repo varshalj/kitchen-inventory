@@ -35,7 +35,7 @@ export async function logAIInteraction(interaction: Omit<AIInteraction, "id" | "
     // The table exists but isn't in the type definitions, so TypeScript resolves the
     // row type as `never` without this cast.
     const supabase = getSupabaseAdmin() as any
-    await supabase.from("ai_interactions").insert({
+    const { error } = await supabase.from("ai_interactions").insert({
       user_id: interaction.userId,
       user_input: interaction.userInput,
       model_raw_response: interaction.modelRawResponse ?? null,
@@ -43,7 +43,8 @@ export async function logAIInteraction(interaction: Omit<AIInteraction, "id" | "
       status: interaction.status,
       error_message: interaction.errorMessage ?? null,
     })
-  } catch {
-    // Non-critical: logging failures should never surface to the user
+    if (error) console.error("ai_interactions insert failed:", error.message, error.code)
+  } catch (err) {
+    console.error("ai_interactions insert threw:", err)
   }
 }

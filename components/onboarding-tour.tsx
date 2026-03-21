@@ -12,6 +12,12 @@ export function OnboardingTour() {
   const startedRef = useRef(false)
 
   useEffect(() => {
+    if (completed === false) {
+      startedRef.current = false
+    }
+  }, [completed])
+
+  useEffect(() => {
     if (completed !== false) return
     if (pathname !== "/dashboard") return
     if (startedRef.current) return

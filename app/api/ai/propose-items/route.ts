@@ -211,9 +211,6 @@ async function getModelResponse(userInput: string, imageBase64?: string, imagesB
   })
 
   const content = completion.choices[0]?.message?.content
-  // #region agent log
-  console.error(`[DEBUG:propose-items:openai] finishReason=${completion.choices[0]?.finish_reason} contentLen=${content?.length ?? 0} usage=${JSON.stringify(completion.usage)}`)
-  // #endregion agent log
   if (!content) throw new Error("Empty response from OpenAI")
 
   const parsed = JSON.parse(content)
@@ -251,12 +248,6 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null)
-  // #region agent log
-  const _imgCount = body?.imagesBase64?.length ?? 0
-  const _imgSizes = (body?.imagesBase64 ?? []).map((s: string) => s?.length ?? 0)
-  const _singleSize = body?.imageBase64?.length ?? 0
-  console.error(`[DEBUG:propose-items] imageCount=${_imgCount} singleSize=${_singleSize} imgSizes=${JSON.stringify(_imgSizes)}`)
-  // #endregion agent log
   const parsedRequest = requestSchema.safeParse(body)
 
   if (!parsedRequest.success) {
@@ -310,9 +301,6 @@ export async function POST(req: NextRequest) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown model error"
-    // #region agent log
-    console.error(`[DEBUG:propose-items:catch] error=${message} stack=${error instanceof Error ? error.stack?.slice(0,300) : 'n/a'}`)
-    // #endregion agent log
 
     await logAIInteraction({
       userId,

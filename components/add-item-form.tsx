@@ -25,6 +25,7 @@ import { CurrencyInput } from "@/components/currency-input"
 import { useToast } from "@/hooks/use-toast"
 import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
+import { VoiceCapture, type VoiceParsedItem } from "@/components/voice-capture"
 
 type DetectedType = "receipt" | "food" | "package" | null
 type ProposalResponse = {
@@ -224,9 +225,6 @@ export function AddItemForm() {
             userInput: "Extract all grocery and food items from this image. Identify item names, brands, categories, quantities, and estimate expiry dates.",
             imageBase64: imageData,
           })
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:cameraCapture',message:'single image payload',data:{payloadBytes:singlePayload.length},timestamp:Date.now(),hypothesisId:'H1-single'})}).catch(()=>{});
-          // #endregion agent log
           const response = await fetchWithAuth("/api/ai/propose-items", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -235,9 +233,6 @@ export function AddItemForm() {
 
           if (!response.ok) {
             const errBody = await response.json().catch(() => null)
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:cameraCapture:error',message:'single image API error',data:{status:response.status,statusText:response.statusText,errBody},timestamp:Date.now(),hypothesisId:'H1-single'})}).catch(()=>{});
-            // #endregion agent log
             throw new Error(errBody?.error || "AI proposal request failed")
           }
 
@@ -323,9 +318,6 @@ export function AddItemForm() {
           userInput: `Extract all grocery and food items from ${count > 1 ? `these ${count} kitchen/pantry images` : "this kitchen/pantry image"}. Identify item names, brands, categories, quantities, and estimate expiry dates.`,
           imagesBase64: imagePreviews,
         })
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:handleAnalyze',message:'payload size',data:{imageCount:count,payloadBytes:bodyPayload.length,perImageBytes:imagePreviews.map((p:string)=>p.length)},timestamp:Date.now(),hypothesisId:'H1-client'})}).catch(()=>{});
-        // #endregion agent log
         const response = await fetchWithAuth("/api/ai/propose-items", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -334,9 +326,6 @@ export function AddItemForm() {
 
         if (!response.ok) {
           const errBody = await response.json().catch(() => null)
-          // #region agent log
-          fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'add-item-form.tsx:handleAnalyze:error',message:'API returned error',data:{status:response.status,statusText:response.statusText,errBody},timestamp:Date.now(),hypothesisId:'H1-client'})}).catch(()=>{});
-          // #endregion agent log
           throw new Error(errBody?.error || "AI proposal request failed")
         }
 
@@ -446,6 +435,30 @@ export function AddItemForm() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleVoiceConfirm = async (items: VoiceParsedItem[]) => {
+    const allCompleted: Array<{ id: string; name: string }> = []
+    for (const item of items) {
+      const sixMonthsOut = new Date()
+      sixMonthsOut.setMonth(sixMonthsOut.getMonth() + 6)
+      const { completedShoppingItems } = await addInventoryItem({
+        name: item.name,
+        category: item.category || "Other",
+        expiryDate: sixMonthsOut.toISOString(),
+        location: "Refrigerator",
+        quantity: item.quantity,
+        unit: item.unit || "pcs",
+        addedOn: new Date().toISOString(),
+      } as unknown as InventoryItem)
+      allCompleted.push(...completedShoppingItems)
+    }
+    toast({
+      title: "Items Saved",
+      description: `${items.length} item${items.length !== 1 ? "s" : ""} added to your inventory.`,
+    })
+    showShoppingMatchToast(allCompleted)
+    router.push("/dashboard")
   }
 
   const toggleItemIncluded = (index: number) => {
@@ -752,6 +765,23 @@ export function AddItemForm() {
                           <ScanLine className="h-4 w-4" />
                         </div>
                         <span className="text-xs font-medium">Packages</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="relative flex items-center justify-center gap-3">
+                        <div className="flex-1 border-t border-border" />
+                        <span className="text-xs text-muted-foreground">or</span>
+                        <div className="flex-1 border-t border-border" />
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <VoiceCapture
+                          target="inventory"
+                          onConfirm={handleVoiceConfirm}
+                          existingNames={allInventoryNames}
+                        />
+                        <span className="text-sm text-muted-foreground">Add items by voice</span>
                       </div>
                     </div>
                   </div>
