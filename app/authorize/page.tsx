@@ -7,32 +7,125 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Shield, CheckCircle, XCircle, Loader2 } from "lucide-react"
 
+// #region agent log
+function serverLog(message: string, data: Record<string, unknown>, hypothesisId: string) {
+  fetch("/api/mcp-debug-log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ location: "authorize/page.tsx", message, data, hypothesisId, timestamp: Date.now() }),
+  }).catch(() => {})
+}
+// #endregion
+
 function AuthorizeInner() {
   const searchParams = useSearchParams()
   const [user, setUser] = useState<{ email?: string } | null>(null)
+  const [authDetails, setAuthDetails] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [approving, setApproving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const clientId = searchParams.get("client_id")
-  const redirectUri = searchParams.get("redirect_uri")
-  const responseType = searchParams.get("response_type")
-  const state = searchParams.get("state")
-  const codeChallenge = searchParams.get("code_challenge")
-  const codeChallengeMethod = searchParams.get("code_challenge_method")
-  const scope = searchParams.get("scope")
   // #region agent log
   const authorizationId = searchParams.get("authorization_id")
-  fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authorize/page.tsx:render',message:'consent page rendered',data:{authorizationId,clientId,state,scope,allParams:Object.fromEntries([...searchParams.entries()])},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  serverLog("consent page rendered", {
+    authorizationId,
+    allParams: Object.fromEntries([...searchParams.entries()]),
+  }, "H1")
   // #endregion
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }: any) => {
-      if (data?.user) {
-        setUser(data.user)
+    async function init() {
+      // #region agent log
+      serverLog("init started", { authorizationId }, "H1")
+      // #endregion
+
+      if (!authorizationId) {
+        // #region agent log
+        serverLog("no authorization_id in URL", { allParams: Object.fromEntries([...searchParams.entries()]) }, "H1")
+        // #endregion
+        setError("Missing authorization_id. This page should only be accessed via an MCP client OAuth flow.")
+        setLoading(false)
+        return
       }
+
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+
+      // #region agent log
+      serverLog("auth check", { hasUser: !!currentUser, userId: currentUser?.id }, "H3")
+      // #endregion
+
+      if (!currentUser) {
+        const returnUrl = window.location.href
+        window.location.href = `/auth?next=${encodeURIComponent(returnUrl)}`
+        return
+      }
+
+      setUser(currentUser)
+
+      // Fetch authorization details using Supabase OAuth API
+      const { data: details, error: detailsError } = await (supabase.auth as any).oauth.getAuthorizationDetails(authorizationId)
+
+      // #region agent log
+      serverLog("getAuthorizationDetails result", {
+        hasDetails: !!details,
+        clientName: details?.client?.name,
+        scope: details?.scope,
+        error: detailsError?.message,
+      }, "H2")
+      // #endregion
+
+      if (detailsError || !details) {
+        setError(detailsError?.message || "Could not load authorization details")
+        setLoading(false)
+        return
+      }
+
+      setAuthDetails(details)
       setLoading(false)
-    })
-  }, [])
+    }
+
+    init()
+  }, [authorizationId])
+
+  const handleApprove = async () => {
+    if (!authorizationId) return
+    setApproving(true)
+
+    // #region agent log
+    serverLog("approve clicked", { authorizationId, clientName: authDetails?.client?.name }, "H2")
+    // #endregion
+
+    const { data, error: approveError } = await (supabase.auth as any).oauth.approveAuthorization(authorizationId)
+
+    // #region agent log
+    serverLog("approveAuthorization result", { redirectTo: data?.redirect_to, error: approveError?.message }, "H2")
+    // #endregion
+
+    if (approveError || !data?.redirect_to) {
+      setError(approveError?.message || "Approval failed")
+      setApproving(false)
+      return
+    }
+
+    window.location.href = data.redirect_to
+  }
+
+  const handleDeny = async () => {
+    if (!authorizationId) return
+
+    // #region agent log
+    serverLog("deny clicked", { authorizationId }, "H2")
+    // #endregion
+
+    const { data, error: denyError } = await (supabase.auth as any).oauth.denyAuthorization(authorizationId)
+
+    if (denyError || !data?.redirect_to) {
+      setError(denyError?.message || "Denial failed")
+      return
+    }
+
+    window.location.href = data.redirect_to
+  }
 
   if (loading) {
     return (
@@ -42,65 +135,30 @@ function AuthorizeInner() {
     )
   }
 
-  if (!user) {
-    const returnUrl = typeof window !== "undefined" ? window.location.href : "/authorize"
-    const loginUrl = `/auth?next=${encodeURIComponent(returnUrl)}`
-
+  if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
-            <Shield className="h-12 w-12 text-primary mx-auto mb-2" />
-            <CardTitle>Sign in required</CardTitle>
+            <Shield className="h-12 w-12 text-destructive mx-auto mb-2" />
+            <CardTitle>Authorization Error</CardTitle>
           </CardHeader>
           <CardContent className="text-center text-sm text-muted-foreground">
-            Sign in to your Kitchen Inventory account to authorize AI assistant access.
+            {error}
           </CardContent>
-          <CardFooter>
-            <Button className="w-full" onClick={() => (window.location.href = loginUrl)}>
-              Sign in
-            </Button>
-          </CardFooter>
         </Card>
       </div>
     )
   }
 
-  const handleApprove = async () => {
-    setApproving(true)
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authorize/page.tsx:handleApprove',message:'approve clicked',data:{authorizationId,clientId,state,redirectUri},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
-
-    const params = new URLSearchParams()
-    if (clientId) params.set("client_id", clientId)
-    if (redirectUri) params.set("redirect_uri", redirectUri)
-    if (responseType) params.set("response_type", responseType)
-    if (state) params.set("state", state)
-    if (codeChallenge) params.set("code_challenge", codeChallenge)
-    if (codeChallengeMethod) params.set("code_challenge_method", codeChallengeMethod)
-    if (scope) params.set("scope", scope)
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    window.location.href = `${supabaseUrl}/auth/v1/authorize?${params.toString()}`
-  }
-
-  const handleDeny = () => {
-    if (redirectUri) {
-      const url = new URL(redirectUri)
-      url.searchParams.set("error", "access_denied")
-      if (state) url.searchParams.set("state", state)
-      window.location.href = url.toString()
-    } else {
-      window.close()
-    }
-  }
-
-  const scopes = scope?.split(" ").filter(Boolean) || ["read"]
+  const scopes = authDetails?.scope?.split(" ").filter(Boolean) || []
 
   const scopeDescriptions: Record<string, string> = {
     read: "View your inventory, shopping list, recipes, and waste analytics",
     write: "Add or modify inventory items, shopping list, and recipes",
+    openid: "Verify your identity",
+    profile: "Access your profile information",
+    email: "Access your email address",
   }
 
   return (
@@ -112,18 +170,21 @@ function AuthorizeInner() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground text-center">
-            An AI assistant wants to access your Kitchen Inventory data as <strong>{user.email}</strong>.
+            <strong>{authDetails?.client?.name || "An AI assistant"}</strong> wants to access your Kitchen Inventory data as{" "}
+            <strong>{user?.email}</strong>.
           </p>
 
-          <div className="rounded-lg border p-3 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Permissions requested</p>
-            {scopes.map((s) => (
-              <div key={s} className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                <span className="text-sm">{scopeDescriptions[s] || s}</span>
-              </div>
-            ))}
-          </div>
+          {scopes.length > 0 && (
+            <div className="rounded-lg border p-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Permissions requested</p>
+              {scopes.map((s: string) => (
+                <div key={s} className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                  <span className="text-sm">{scopeDescriptions[s] || s}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
             <p className="text-xs text-amber-800">

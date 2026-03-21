@@ -89,16 +89,18 @@ function PlatformInstructions({
 }
 
 function ConnectToAISection() {
-  const mcpUrl = typeof window !== "undefined"
+  const mcpBaseUrl = typeof window !== "undefined"
     ? `${window.location.origin}/api/mcp`
     : "/api/mcp"
+  // The Streamable HTTP endpoint is at /api/mcp/mcp (the [transport] segment = "mcp")
+  const mcpUrl = `${mcpBaseUrl}/mcp`
 
   const configSnippet = JSON.stringify(
     {
       mcpServers: {
         kitchen_inventory: {
           command: "npx",
-          args: ["mcp-remote", mcpUrl],
+          args: ["-y", "mcp-remote", mcpUrl, "--transport", "http-only"],
         },
       },
     },
