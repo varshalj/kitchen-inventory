@@ -671,7 +671,7 @@ export function AddItemForm() {
   const bulkApplyEnabled = true
 
   return (
-    <MainLayout>
+    <MainLayout className="pb-0">
       <div className="flex items-center mb-6">
         <Button variant="ghost" size="icon" className="mr-2" asChild>
           <Link href="/dashboard">
@@ -776,14 +776,12 @@ export function AddItemForm() {
                         <div className="flex-1 border-t border-border" />
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <VoiceCapture
-                          target="inventory"
-                          onConfirm={handleVoiceConfirm}
-                          existingNames={allInventoryNames}
-                        />
-                        <span className="text-sm text-muted-foreground">Add items by voice</span>
-                      </div>
+                      <VoiceCapture
+                        target="inventory"
+                        onConfirm={handleVoiceConfirm}
+                        existingNames={allInventoryNames}
+                        fullWidth
+                      />
                     </div>
                   </div>
                 ) : !imagePreview && imagePreviews.length > 0 ? (
@@ -1359,7 +1357,7 @@ export function AddItemForm() {
             </TabsContent>
           </div>
 
-          <div className="shrink-0 bg-background border-t px-4 pt-4 pb-6">
+          <div className="shrink-0 sticky bottom-0 bg-background border-t px-4 pt-4 pb-6">
             <div className="max-w-md mx-auto">
               <LoadingButton
                 type="submit"

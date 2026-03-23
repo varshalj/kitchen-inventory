@@ -159,20 +159,9 @@ useEffect(() => {
       const safeItems = Array.isArray(inventoryItems) ? inventoryItems : []
 
       setItems(safeItems)
-
-      fuseRef.current = new Fuse(safeItems, {
-        keys: ["name", "category", "location"],
-        threshold: 0.4,
-        includeScore: true,
-      })
     } catch (error) {
       console.error("Failed to load inventory:", error)
       setItems([])
-      fuseRef.current = new Fuse([], {
-        keys: ["name", "category", "location"],
-        threshold: 0.4,
-        includeScore: true,
-      })
     } finally {
       setIsLoading(false)
     }
@@ -180,6 +169,15 @@ useEffect(() => {
 
   load()
 }, [])
+
+  // Rebuild Fuse index whenever items change so search never returns stale results
+  useEffect(() => {
+    fuseRef.current = new Fuse(items, {
+      keys: ["name", "category", "location"],
+      threshold: 0.4,
+      includeScore: true,
+    })
+  }, [items])
 
   useEffect(() => {
     filterAndSortItems(activeFilter, searchQuery, sortBy)

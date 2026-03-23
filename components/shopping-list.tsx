@@ -752,7 +752,7 @@ export function ShoppingList() {
             </SheetTitle>
           </SheetHeader>
           {detailItem && (
-            <div className="space-y-3">
+            <div className="space-y-3 px-4">
               {/* Row 1: Quantity always left; Category only in right if present */}
               <div className={detailItem.category ? "grid grid-cols-2 gap-3" : ""}>
                 <div className="space-y-0.5">

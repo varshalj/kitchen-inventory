@@ -74,11 +74,12 @@ interface VoiceCaptureProps {
   target: "shopping" | "inventory"
   onConfirm: (items: VoiceParsedItem[], globals?: { location?: string; notes?: string }) => Promise<void>
   existingNames?: string[]
+  fullWidth?: boolean
 }
 
 type Phase = "idle" | "listening" | "parsing" | "review"
 
-export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCaptureProps) {
+export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth }: VoiceCaptureProps) {
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>("idle")
   const [parsedItems, setParsedItems] = useState<VoiceParsedItem[]>([])
@@ -293,7 +294,18 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
   const elapsedLabel = `0:${String(elapsedSec).padStart(2, "0")}`
 
   if (!supported) {
-    return (
+    return fullWidth ? (
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full h-12 justify-start gap-3 opacity-50 cursor-not-allowed"
+        disabled
+      >
+        <MicOff className="h-5 w-5 text-muted-foreground" />
+        <span className="font-medium">Add items by voice</span>
+        <span className="ml-auto text-xs text-muted-foreground">Not supported</span>
+      </Button>
+    ) : (
       <Button
         type="button"
         variant="outline"
@@ -309,16 +321,29 @@ export function VoiceCapture({ target, onConfirm, existingNames = [] }: VoiceCap
 
   return (
     <>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-9 w-9 shrink-0"
-        onClick={handleOpen}
-        title="Add items by voice"
-      >
-        <Mic className="h-4 w-4" />
-      </Button>
+      {fullWidth ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full h-12 justify-start gap-3"
+          onClick={handleOpen}
+        >
+          <Mic className="h-5 w-5 text-primary" />
+          <span className="font-medium">Add items by voice</span>
+          <span className="ml-auto text-xs text-muted-foreground">Tap to start</span>
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={handleOpen}
+          title="Add items by voice"
+        >
+          <Mic className="h-4 w-4" />
+        </Button>
+      )}
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">

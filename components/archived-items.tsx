@@ -84,30 +84,22 @@ export function ArchivedItems() {
       </div>
 
       <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-4 mb-6">
-          <TabsTrigger value="all">
-            All
-            <Badge variant="secondary" className="ml-2">
-              {items.length}
-            </Badge>
+        <TabsList className="grid grid-cols-4 mb-6 h-auto">
+          <TabsTrigger value="all" className="flex-col gap-0.5 py-1.5 h-auto">
+            <span className="text-xs leading-tight">All</span>
+            <Badge variant="secondary" className="text-xs px-1.5">{items.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="consumed">
-            Consumed
-            <Badge variant="secondary" className="ml-2">
-              {consumedItems.length}
-            </Badge>
+          <TabsTrigger value="consumed" className="flex-col gap-0.5 py-1.5 h-auto">
+            <span className="text-xs leading-tight">Consumed</span>
+            <Badge variant="secondary" className="text-xs px-1.5">{consumedItems.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="wasted">
-            Wasted
-            <Badge variant="secondary" className="ml-2">
-              {wastedItems.length}
-            </Badge>
+          <TabsTrigger value="wasted" className="flex-col gap-0.5 py-1.5 h-auto">
+            <span className="text-xs leading-tight">Wasted</span>
+            <Badge variant="secondary" className="text-xs px-1.5">{wastedItems.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="other">
-            Other
-            <Badge variant="secondary" className="ml-2">
-              {otherItems.length}
-            </Badge>
+          <TabsTrigger value="other" className="flex-col gap-0.5 py-1.5 h-auto">
+            <span className="text-xs leading-tight">Other</span>
+            <Badge variant="secondary" className="text-xs px-1.5">{otherItems.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
