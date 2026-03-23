@@ -293,6 +293,10 @@ useEffect(() => {
   }
 
   const handleTouchStart = (e: React.TouchEvent, id: string) => {
+    const openIds = Object.keys(openSwipesRef.current)
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:handleTouchStart',message:'touchstart fired',data:{cardId:id,openSwipes:openIds,willSuppressTap:openIds.length>0},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+    // #endregion
     // If any swipe is currently open, mark that we should suppress the next tap
     if (Object.keys(openSwipesRef.current).length > 0) {
       justClosedSwipeRef.current = true
@@ -375,6 +379,9 @@ useEffect(() => {
     openSwipesRef.current = next
 
     const item = items.find((i) => i.id === id)
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:handleSwipeAction',message:'handleSwipeAction called',data:{cardId:id,action,itemFound:!!item,totalItems:items.length},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
+    // #endregion
     if (!item) return
 
     if (action === "consumed") void handleConsumeItem(item)
@@ -810,7 +817,7 @@ useEffect(() => {
         </Button>
       </div>
 
-      <div className="sticky top-0 z-10 bg-background pt-2 pb-4 space-y-3">
+      <div className="sticky top-0 z-30 bg-background pt-2 pb-4 space-y-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1063,7 +1070,12 @@ useEffect(() => {
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 w-24 bg-amber-500 text-white active:brightness-90"
-                    onClick={() => handleSwipeAction(item.id, "waste")}
+                    onClick={() => {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:wastedBtn.onClick',message:'Wasted button click fired',data:{cardId:item.id,openSwipes:Object.keys(openSwipesRef.current)},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+                      // #endregion
+                      handleSwipeAction(item.id, "waste")
+                    }}
                   >
                     <Trash className="h-5 w-5" />
                     <span className="text-xs font-medium">Wasted</span>
@@ -1071,7 +1083,12 @@ useEffect(() => {
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 w-24 bg-red-500 text-white active:brightness-90"
-                    onClick={() => handleSwipeAction(item.id, "delete")}
+                    onClick={() => {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:deleteBtn.onClick',message:'Delete button click fired',data:{cardId:item.id},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+                      // #endregion
+                      handleSwipeAction(item.id, "delete")
+                    }}
                   >
                     <Trash2 className="h-5 w-5" />
                     <span className="text-xs font-medium">Delete</span>
@@ -1083,7 +1100,12 @@ useEffect(() => {
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 h-full w-28 bg-green-500 text-white active:brightness-90"
-                    onClick={() => handleSwipeAction(item.id, "consumed")}
+                    onClick={() => {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:consumedBtn.onClick',message:'Consumed button click fired',data:{cardId:item.id,openSwipes:Object.keys(openSwipesRef.current)},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+                      // #endregion
+                      handleSwipeAction(item.id, "consumed")
+                    }}
                   >
                     <Check className="h-5 w-5" />
                     <span className="text-xs font-medium">Consumed</span>
@@ -1097,13 +1119,15 @@ useEffect(() => {
                     else cardSliderRefs.current.delete(item.id)
                   }}
                   className="relative z-10"
-                  style={{ willChange: "transform" }}
                 >
                 <Card
-                  className={`${getExpiryColor(item.expiryDate)} border-l-4 relative cursor-pointer ${
+                  className={`rounded-none ${getExpiryColor(item.expiryDate)} border-l-4 relative cursor-pointer ${
                     selectionMode && selectedIds.has(item.id) ? "ring-2 ring-primary" : ""
                   }`}
                   onClick={() => {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:card.onClick',message:'Card body click fired',data:{cardId:item.id,justClosedSwipe:justClosedSwipeRef.current,itemFoundInState:items.some(i=>i.id===item.id)},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
+                    // #endregion
                     if (justClosedSwipeRef.current) {
                       justClosedSwipeRef.current = false
                       return
