@@ -293,9 +293,8 @@ useEffect(() => {
   }
 
   const handleTouchStart = (e: React.TouchEvent, id: string) => {
-    const openIds = Object.keys(openSwipesRef.current)
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:handleTouchStart',message:'touchstart fired',data:{cardId:id,openSwipes:openIds,willSuppressTap:openIds.length>0},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:handleTouchStart',message:'touchstart on wrapper',data:{id,openSwipes:Object.keys(openSwipesRef.current),target:(e.target as HTMLElement)?.tagName,targetClass:(e.target as HTMLElement)?.className?.slice?.(0,60)},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
     // #endregion
     // If any swipe is currently open, mark that we should suppress the next tap
     if (Object.keys(openSwipesRef.current).length > 0) {
@@ -379,9 +378,6 @@ useEffect(() => {
     openSwipesRef.current = next
 
     const item = items.find((i) => i.id === id)
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:handleSwipeAction',message:'handleSwipeAction called',data:{cardId:id,action,itemFound:!!item,totalItems:items.length},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
-    // #endregion
     if (!item) return
 
     if (action === "consumed") void handleConsumeItem(item)
@@ -536,6 +532,9 @@ useEffect(() => {
   }
 
   const handleWasteItem = async (item: InventoryItem) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:handleWasteItem',message:'handleWasteItem entered',data:{itemId:item.id,itemName:item.name},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+    // #endregion
     // Optimistic remove
     setItems((prev) => prev.filter((i) => i.id !== item.id))
     triggerHaptic(HAPTIC_SUCCESS)
@@ -1072,7 +1071,7 @@ useEffect(() => {
                     className="flex flex-col items-center justify-center gap-1 w-24 bg-amber-500 text-white active:brightness-90"
                     onClick={() => {
                       // #region agent log
-                      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:wastedBtn.onClick',message:'Wasted button click fired',data:{cardId:item.id,openSwipes:Object.keys(openSwipesRef.current)},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
+                      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:wastedBtn.onClick',message:'Wasted btn onClick fired',data:{id:item.id},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{});
                       // #endregion
                       handleSwipeAction(item.id, "waste")
                     }}
@@ -1083,12 +1082,7 @@ useEffect(() => {
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 w-24 bg-red-500 text-white active:brightness-90"
-                    onClick={() => {
-                      // #region agent log
-                      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:deleteBtn.onClick',message:'Delete button click fired',data:{cardId:item.id},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
-                      // #endregion
-                      handleSwipeAction(item.id, "delete")
-                    }}
+                    onClick={() => handleSwipeAction(item.id, "delete")}
                   >
                     <Trash2 className="h-5 w-5" />
                     <span className="text-xs font-medium">Delete</span>
@@ -1100,12 +1094,7 @@ useEffect(() => {
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 h-full w-28 bg-green-500 text-white active:brightness-90"
-                    onClick={() => {
-                      // #region agent log
-                      fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:consumedBtn.onClick',message:'Consumed button click fired',data:{cardId:item.id,openSwipes:Object.keys(openSwipesRef.current)},timestamp:Date.now(),hypothesisId:'H-C'})}).catch(()=>{});
-                      // #endregion
-                      handleSwipeAction(item.id, "consumed")
-                    }}
+                    onClick={() => handleSwipeAction(item.id, "consumed")}
                   >
                     <Check className="h-5 w-5" />
                     <span className="text-xs font-medium">Consumed</span>
@@ -1126,7 +1115,7 @@ useEffect(() => {
                   }`}
                   onClick={() => {
                     // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:card.onClick',message:'Card body click fired',data:{cardId:item.id,justClosedSwipe:justClosedSwipeRef.current,itemFoundInState:items.some(i=>i.id===item.id)},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'inventory-dashboard.tsx:card.onClick',message:'Card body onClick fired',data:{id:item.id,justClosed:justClosedSwipeRef.current},timestamp:Date.now(),hypothesisId:'H-D'})}).catch(()=>{});
                     // #endregion
                     if (justClosedSwipeRef.current) {
                       justClosedSwipeRef.current = false
