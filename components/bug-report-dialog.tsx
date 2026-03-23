@@ -16,6 +16,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { formatLogsForReport } from "@/lib/console-capture"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
+import { supabase } from "@/lib/supabase-client"
 
 interface BugReportDialogProps {
   open: boolean
@@ -37,6 +38,17 @@ export function BugReportDialog({ open, onOpenChange }: BugReportDialogProps) {
       const pageUrl = typeof window !== "undefined" ? window.location.href : "unknown"
       const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "unknown"
 
+      // Best-effort: include user identity so bug reports are traceable
+      let userId: string | null = null
+      let userEmail: string | null = null
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        userId = user?.id ?? null
+        userEmail = user?.email ?? null
+      } catch {
+        // Non-fatal — continue without identity
+      }
+
       const response = await fetch("/api/bug-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,6 +57,8 @@ export function BugReportDialog({ open, onOpenChange }: BugReportDialogProps) {
           pageUrl,
           userAgent,
           consoleLogs: logs,
+          userId,
+          userEmail,
         }),
       })
 

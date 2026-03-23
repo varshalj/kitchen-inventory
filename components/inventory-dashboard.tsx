@@ -93,8 +93,6 @@ export function InventoryDashboard() {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeFilter, setActiveFilter] = useState("all")
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
-  const [touchStart, setTouchStart] = useState<{ id: string; x: number } | null>(null)
-  const [swipedItems, setSwipedItems] = useState<{ [key: string]: string }>({})
   const [sortBy, setSortBy] = useState("expiryDate")
   const [showMealPlanModal, setShowMealPlanModal] = useState(false)
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null)
@@ -117,6 +115,31 @@ export function InventoryDashboard() {
   const { toast } = useToast()
   const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
+
+  // iOS-style swipe-to-reveal state
+  const cardSliderRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const touchTrackRef = useRef<{
+    id: string
+    startX: number
+    startY: number
+    gestureDecided: boolean
+    isHorizontal: boolean
+    currentDelta: number
+  } | null>(null)
+  const openSwipesRef = useRef<{ [id: string]: "left" | "right" }>({})
+  const justClosedSwipeRef = useRef(false)
+
+  const SWIPE_THRESHOLD = 72
+  const LEFT_PANEL_W = 192  // 2 × 96px (Wasted + Delete)
+  const RIGHT_PANEL_W = 112 // Consumed
+
+  const applyCardTransform = (id: string, x: number, animated: boolean) => {
+    const el = cardSliderRefs.current.get(id)
+    if (!el) return
+    el.style.transition = animated ? "transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)" : "none"
+    el.style.transform = x !== 0 ? `translateX(${x}px)` : ""
+  }
+
   const pendingActions = useRef<Map<string, {
     type: "delete" | "consume" | "waste"
     item: InventoryItem
@@ -270,58 +293,93 @@ useEffect(() => {
   }
 
   const handleTouchStart = (e: React.TouchEvent, id: string) => {
-    setTouchStart({
+    // If any swipe is currently open, mark that we should suppress the next tap
+    if (Object.keys(openSwipesRef.current).length > 0) {
+      justClosedSwipeRef.current = true
+      // Close all open swipes
+      Object.keys(openSwipesRef.current).forEach((otherId) => {
+        applyCardTransform(otherId, 0, true)
+      })
+      openSwipesRef.current = {}
+    } else {
+      justClosedSwipeRef.current = false
+    }
+
+    touchTrackRef.current = {
       id,
-      x: e.touches[0].clientX,
-    })
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      gestureDecided: false,
+      isHorizontal: false,
+      currentDelta: 0,
+    }
   }
 
   const handleTouchMove = (e: React.TouchEvent, id: string) => {
-    if (!touchStart) return
+    const track = touchTrackRef.current
+    if (!track || track.id !== id) return
 
-    if (touchStart.id !== id) return
+    const deltaX = e.touches[0].clientX - track.startX
+    const deltaY = e.touches[0].clientY - track.startY
 
-    const touchEnd = e.touches[0].clientX
-    const diff = touchStart.x - touchEnd
-
-    // Determine swipe direction
-    if (Math.abs(diff) > 50) {
-      if (diff > 0) {
-        // Swipe left - Delete
-        setSwipedItems((prev) => ({ ...prev, [id]: "delete" }))
-      } else {
-        // Swipe right - Mark as consumed
-        setSwipedItems((prev) => ({ ...prev, [id]: "consumed" }))
-      }
-    } else {
-      // Reset if swipe not far enough
-      setSwipedItems((prev) => {
-        const newState = { ...prev }
-        delete newState[id]
-        return newState
-      })
+    // Decide gesture direction on first meaningful movement
+    if (!track.gestureDecided) {
+      if (Math.abs(deltaX) < 5 && Math.abs(deltaY) < 5) return
+      track.isHorizontal = Math.abs(deltaX) > Math.abs(deltaY)
+      track.gestureDecided = true
     }
+
+    if (!track.isHorizontal) return
+
+    // Clamp delta to panel widths to prevent over-swiping
+    const clampedDelta = deltaX < 0
+      ? Math.max(-LEFT_PANEL_W, deltaX)
+      : Math.min(RIGHT_PANEL_W, deltaX)
+
+    track.currentDelta = clampedDelta
+    applyCardTransform(id, clampedDelta, false)
   }
 
   const handleTouchEnd = (id: string) => {
-    setTouchStart(null)
-  }
-
-  const confirmSwipeAction = (id: string, action: string) => {
-    const item = items.find((i) => i.id === id)
-
-    if (action === "delete" && item) {
-      handleDeleteItem(item)
-    } else if (action === "consumed" && item) {
-      void handleConsumeItem(item)
+    const track = touchTrackRef.current
+    if (!track || track.id !== id) {
+      touchTrackRef.current = null
+      return
     }
 
-    // Reset swiped state
-    setSwipedItems((prev) => {
-      const newState = { ...prev }
-      delete newState[id]
-      return newState
-    })
+    const delta = track.currentDelta
+    touchTrackRef.current = null
+
+    if (delta < -SWIPE_THRESHOLD) {
+      // Snap open left panel (Wasted + Delete)
+      applyCardTransform(id, -LEFT_PANEL_W, true)
+      openSwipesRef.current = { ...openSwipesRef.current, [id]: "left" }
+    } else if (delta > SWIPE_THRESHOLD) {
+      // Snap open right panel (Consumed)
+      applyCardTransform(id, RIGHT_PANEL_W, true)
+      openSwipesRef.current = { ...openSwipesRef.current, [id]: "right" }
+    } else {
+      // Snap back to closed
+      applyCardTransform(id, 0, true)
+      const next = { ...openSwipesRef.current }
+      delete next[id]
+      openSwipesRef.current = next
+    }
+  }
+
+  const handleSwipeAction = (id: string, action: "consumed" | "waste" | "delete") => {
+    // Close the swipe panel before triggering the action
+    applyCardTransform(id, 0, true)
+    const next = { ...openSwipesRef.current }
+    delete next[id]
+    openSwipesRef.current = next
+
+    const item = items.find((i) => i.id === id)
+    if (!item) return
+
+    if (action === "consumed") void handleConsumeItem(item)
+    else if (action === "waste") void handleWasteItem(item)
+    else if (action === "delete") handleDeleteItem(item)
   }
 
   const progressBar = (
@@ -994,40 +1052,64 @@ useEffect(() => {
             return (
               <div
                 key={item.id}
-                className="relative overflow-hidden"
+                className="relative overflow-hidden rounded-lg"
+                style={{ touchAction: "pan-y" }}
                 onTouchStart={(e) => handleTouchStart(e, item.id)}
                 onTouchMove={(e) => handleTouchMove(e, item.id)}
                 onTouchEnd={() => handleTouchEnd(item.id)}
               >
-                {/* Swipe action buttons */}
-                {swipedItems[item.id] && (
-                  <div className="absolute inset-y-0 right-0 left-0 flex items-center justify-between z-10">
-                    {swipedItems[item.id] === "consumed" && (
-                      <div
-                        className="h-full flex items-center justify-center bg-green-500 text-white px-4"
-                        onClick={() => confirmSwipeAction(item.id, "consumed")}
-                      >
-                        <Check className="h-5 w-5 mr-2" />
-                        <span>Mark as Consumed</span>
-                      </div>
-                    )}
-                    {swipedItems[item.id] === "delete" && (
-                      <div
-                        className="h-full flex items-center justify-center bg-red-500 text-white px-4 ml-auto"
-                        onClick={() => confirmSwipeAction(item.id, "delete")}
-                      >
-                        <Trash2 className="h-5 w-5 mr-2" />
-                        <span>Delete</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Left action panel: Wasted + Delete (revealed by swiping LEFT) */}
+                <div className="absolute inset-y-0 right-0 flex z-0">
+                  <button
+                    type="button"
+                    className="flex flex-col items-center justify-center gap-1 w-24 bg-amber-500 text-white active:brightness-90"
+                    onClick={() => handleSwipeAction(item.id, "waste")}
+                  >
+                    <Trash className="h-5 w-5" />
+                    <span className="text-xs font-medium">Wasted</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex flex-col items-center justify-center gap-1 w-24 bg-red-500 text-white active:brightness-90"
+                    onClick={() => handleSwipeAction(item.id, "delete")}
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <span className="text-xs font-medium">Delete</span>
+                  </button>
+                </div>
 
+                {/* Right action panel: Consumed (revealed by swiping RIGHT) */}
+                <div className="absolute inset-y-0 left-0 z-0">
+                  <button
+                    type="button"
+                    className="flex flex-col items-center justify-center gap-1 h-full w-28 bg-green-500 text-white active:brightness-90"
+                    onClick={() => handleSwipeAction(item.id, "consumed")}
+                  >
+                    <Check className="h-5 w-5" />
+                    <span className="text-xs font-medium">Consumed</span>
+                  </button>
+                </div>
+
+                {/* Card slider — sits on top, slides to reveal panels */}
+                <div
+                  ref={(el) => {
+                    if (el) cardSliderRefs.current.set(item.id, el)
+                    else cardSliderRefs.current.delete(item.id)
+                  }}
+                  className="relative z-10"
+                  style={{ willChange: "transform" }}
+                >
                 <Card
-                  className={`${getExpiryColor(item.expiryDate)} border-l-4 relative cursor-pointer transition-all ${
-                    swipedItems[item.id] ? "opacity-50" : ""
-                  } ${selectionMode && selectedIds.has(item.id) ? "ring-2 ring-primary" : ""}`}
-                  onClick={() => selectionMode ? toggleItemSelection(item.id) : setDetailItem(item)}
+                  className={`${getExpiryColor(item.expiryDate)} border-l-4 relative cursor-pointer ${
+                    selectionMode && selectedIds.has(item.id) ? "ring-2 ring-primary" : ""
+                  }`}
+                  onClick={() => {
+                    if (justClosedSwipeRef.current) {
+                      justClosedSwipeRef.current = false
+                      return
+                    }
+                    selectionMode ? toggleItemSelection(item.id) : setDetailItem(item)
+                  }}
                 >
                   <CardContent className="p-3 pb-2">
                     <div className="flex justify-between items-start">
@@ -1130,6 +1212,7 @@ useEffect(() => {
                     )}
                   </CardFooter>
                 </Card>
+                </div>{/* end card slider */}
               </div>
             )
           })

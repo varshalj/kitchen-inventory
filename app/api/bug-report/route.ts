@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   try {
-    const { description, pageUrl, userAgent, consoleLogs } = await request.json()
+    const { description, pageUrl, userAgent, consoleLogs, userId, userEmail } = await request.json()
 
     if (!description || typeof description !== "string") {
       return NextResponse.json({ error: "Description is required" }, { status: 400 })
@@ -26,6 +26,10 @@ export async function POST(request: Request) {
       `**Page URL:** ${pageUrl || "N/A"}`,
       `**User Agent:** ${userAgent || "N/A"}`,
       `**Reported at:** ${new Date().toISOString()}`,
+      ``,
+      `**Reporter:**`,
+      `- User ID: \`${userId || "not authenticated"}\``,
+      `- Email: ${userEmail ? `\`${userEmail}\`` : "not available"}`,
     ]
 
     if (consoleLogs && consoleLogs.trim()) {
