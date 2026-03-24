@@ -106,7 +106,8 @@ export function BuyBottomSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-xl max-h-[80vh] overflow-y-auto">
+      <SheetContent side="bottom" className="rounded-t-xl max-h-[80vh]">
+        <div className="flex-1 min-h-0 overflow-y-auto">
         <SheetHeader className="text-left">
           <SheetTitle className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5" />
@@ -145,6 +146,7 @@ export function BuyBottomSheet({
               </TabsContent>
             ))}
           </Tabs>
+        </div>
         </div>
       </SheetContent>
     </Sheet>

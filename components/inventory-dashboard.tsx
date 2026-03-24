@@ -293,9 +293,6 @@ useEffect(() => {
   }
 
   const handleTouchStart = (e: React.TouchEvent, id: string) => {
-    // #region agent log
-    try { const l=JSON.parse(localStorage.getItem('_dbg')||'[]'); l.push({loc:'handleTouchStart',id,openSwipes:Object.keys(openSwipesRef.current),tag:(e.target as HTMLElement)?.tagName,t:Date.now(),h:'H-D'}); localStorage.setItem('_dbg',JSON.stringify(l.slice(-20))); } catch{}
-    // #endregion
     // If any swipe is currently open, mark that we should suppress the next tap
     if (Object.keys(openSwipesRef.current).length > 0) {
       justClosedSwipeRef.current = true
@@ -532,9 +529,6 @@ useEffect(() => {
   }
 
   const handleWasteItem = async (item: InventoryItem) => {
-    // #region agent log
-    try { const l=JSON.parse(localStorage.getItem('_dbg')||'[]'); l.push({loc:'handleWasteItem',id:item.id,name:item.name,t:Date.now(),h:'H-C'}); localStorage.setItem('_dbg',JSON.stringify(l.slice(-20))); } catch{}
-    // #endregion
     // Optimistic remove
     setItems((prev) => prev.filter((i) => i.id !== item.id))
     triggerHaptic(HAPTIC_SUCCESS)
@@ -1070,12 +1064,7 @@ useEffect(() => {
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 w-24 bg-amber-500 text-white active:brightness-90"
                     onTouchStart={(e) => e.stopPropagation()}
-                    onClick={() => {
-                      // #region agent log
-                      try { const l=JSON.parse(localStorage.getItem('_dbg')||'[]'); l.push({loc:'wastedBtn.onClick',id:item.id,t:Date.now(),h:'H-A'}); localStorage.setItem('_dbg',JSON.stringify(l.slice(-20))); } catch{}
-                      // #endregion
-                      handleSwipeAction(item.id, "waste")
-                    }}
+                    onClick={() => handleSwipeAction(item.id, "waste")}
                   >
                     <Trash className="h-5 w-5" />
                     <span className="text-xs font-medium">Wasted</span>
@@ -1117,9 +1106,6 @@ useEffect(() => {
                     selectionMode && selectedIds.has(item.id) ? "ring-2 ring-primary" : ""
                   }`}
                   onClick={() => {
-                    // #region agent log
-                    try { const l=JSON.parse(localStorage.getItem('_dbg')||'[]'); l.push({loc:'card.onClick',id:item.id,justClosed:justClosedSwipeRef.current,t:Date.now(),h:'H-D'}); localStorage.setItem('_dbg',JSON.stringify(l.slice(-20))); } catch{}
-                    // #endregion
                     if (justClosedSwipeRef.current) {
                       justClosedSwipeRef.current = false
                       return

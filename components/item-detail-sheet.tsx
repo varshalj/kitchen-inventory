@@ -34,7 +34,8 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-xl max-h-[85vh] overflow-y-auto">
+      <SheetContent side="bottom" className="rounded-t-xl max-h-[85vh]">
+        <div className="flex-1 min-h-0 overflow-y-auto">
         <SheetHeader className="text-left">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -131,6 +132,7 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
               Delete
             </Button>
           </div>
+        </div>
         </div>
       </SheetContent>
     </Sheet>

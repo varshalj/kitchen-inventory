@@ -346,7 +346,8 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
       )}
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[85vh]">
+          <div className="flex-1 min-h-0 overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Voice Add</SheetTitle>
             <SheetDescription>
@@ -649,6 +650,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
                 )}
               </div>
             )}
+          </div>
           </div>
 
           {phase === "review" && (
