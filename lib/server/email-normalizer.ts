@@ -1,6 +1,10 @@
 import { CATEGORIES, DEFAULT_EXPIRY_DAYS, KNOWN_GROCERY_PLATFORMS } from "@/lib/constants"
 import { ALL_UNITS } from "@/components/quantity-with-units"
 
+// #region agent log
+fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'email-normalizer.ts:module-init',message:'ALL_UNITS type check',data:{isArray:Array.isArray(ALL_UNITS),type:typeof ALL_UNITS,value:ALL_UNITS},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+// #endregion
+
 export interface NormalizedItem {
   name: string
   brand?: string
@@ -55,6 +59,9 @@ function normalizeCategory(raw?: string): string {
 
 function normalizeUnit(raw?: string): string {
   if (!raw) return "pcs"
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'email-normalizer.ts:normalizeUnit',message:'before ALL_UNITS.find',data:{raw,isArray:Array.isArray(ALL_UNITS),typeofFind:typeof (ALL_UNITS as any)?.find},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const match = ALL_UNITS.find((u) => u.toLowerCase() === raw.toLowerCase())
   return match ?? "pcs"
 }
