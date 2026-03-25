@@ -14,26 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-export const UNIT_GROUPS = [
-  {
-    label: "Pieces",
-    units: ["pcs", "dozen"],
-  },
-  {
-    label: "Weight",
-    units: ["g", "kg", "oz", "lb"],
-  },
-  {
-    label: "Volume",
-    units: ["ml", "L", "fl oz", "cup"],
-  },
-  {
-    label: "Cooking",
-    units: ["tsp", "tbsp"],
-  },
-]
-
-export const ALL_UNITS = UNIT_GROUPS.flatMap((g) => g.units)
+import { UNIT_GROUPS, ALL_UNITS } from "@/lib/constants"
+export { UNIT_GROUPS, ALL_UNITS }
 
 /** Format a quantity + unit pair for display, e.g. "500g" or "2 pcs" */
 export function formatQuantityUnit(quantity?: number, unit?: string): string {

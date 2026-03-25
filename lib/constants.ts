@@ -26,6 +26,15 @@ export function defaultExpiryDate(category?: string): string {
   return d.toISOString().split("T")[0]
 }
 
+export const UNIT_GROUPS = [
+  { label: "Pieces", units: ["pcs", "dozen"] },
+  { label: "Weight", units: ["g", "kg", "oz", "lb"] },
+  { label: "Volume", units: ["ml", "L", "fl oz", "cup"] },
+  { label: "Cooking", units: ["tsp", "tbsp"] },
+]
+
+export const ALL_UNITS = UNIT_GROUPS.flatMap((g) => g.units)
+
 export const KNOWN_GROCERY_PLATFORMS: Record<string, string> = {
   "swiggy.com": "Swiggy Instamart",
   "swiggy.in": "Swiggy Instamart",
