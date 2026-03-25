@@ -32,31 +32,7 @@ import { cn, findFuzzyMatch } from "@/lib/utils"
 
 const MAX_DURATION_MS = 30000
 
-const CATEGORIES = [
-  "Fruits", "Vegetables", "Dairy", "Meat", "Grains",
-  "Canned", "Frozen", "Snacks", "Beverages", "Condiments", "Other",
-] as const
-
-const DEFAULT_EXPIRY_DAYS: Record<string, number> = {
-  Fruits: 7,
-  Vegetables: 7,
-  Dairy: 14,
-  Meat: 14,
-  Frozen: 90,
-  Grains: 180,
-  Canned: 180,
-  Condiments: 180,
-  Snacks: 30,
-  Beverages: 30,
-  Other: 30,
-}
-
-function defaultExpiryDate(category?: string): string {
-  const days = DEFAULT_EXPIRY_DAYS[category || "Other"] ?? 30
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().split("T")[0]
-}
+import { CATEGORIES, DEFAULT_EXPIRY_DAYS, defaultExpiryDate } from "@/lib/constants"
 
 export interface VoiceParsedItem {
   name: string

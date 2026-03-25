@@ -6,11 +6,13 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useShoppingCount } from "@/contexts/shopping-count-context"
 import { useRecipeImportCount } from "@/contexts/recipe-import-context"
+import { useEmailIngestionCount } from "@/contexts/email-ingestion-context"
 
 export function BottomNavigation() {
   const pathname = usePathname()
   const { incompleteCount } = useShoppingCount()
   const { pendingRecipeImportCount } = useRecipeImportCount()
+  const { pendingEmailIngestionCount } = useEmailIngestionCount()
 
   const isActive = (path: string) => {
     if (path === "/dashboard" && pathname === "/dashboard") return true
@@ -31,7 +33,12 @@ export function BottomNavigation() {
     <div className="fixed bottom-0 left-0 right-0 border-t bg-background z-50">
       <div className="flex justify-around items-center h-16 relative">
         <Link href="/dashboard" className={navLinkClass("/dashboard")}>
-          <Home className="h-5 w-5 transition-transform duration-200" />
+          <div className="relative">
+            <Home className="h-5 w-5 transition-transform duration-200" />
+            {pendingEmailIngestionCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary animate-pulse" />
+            )}
+          </div>
           <span>Inventory</span>
           {isActive("/dashboard") && (
             <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />

@@ -13,6 +13,7 @@ import { PwaUpdateBanner } from "@/components/pwa-update-banner"
 import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 import { ShoppingCountProvider } from "@/contexts/shopping-count-context"
 import { RecipeImportProvider } from "@/contexts/recipe-import-context"
+import { EmailIngestionProvider } from "@/contexts/email-ingestion-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -25,12 +26,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <OnboardingProvider>
           <ShoppingCountProvider>
             <RecipeImportProvider>
-              {children}
-              <Toaster />
-              <ScreenshotBugNudge />
-              <OnboardingTour />
-              <PwaUpdateBanner />
-              <PwaInstallPrompt />
+              <EmailIngestionProvider>
+                {children}
+                <Toaster />
+                <ScreenshotBugNudge />
+                <OnboardingTour />
+                <PwaUpdateBanner />
+                <PwaInstallPrompt />
+              </EmailIngestionProvider>
             </RecipeImportProvider>
           </ShoppingCountProvider>
         </OnboardingProvider>

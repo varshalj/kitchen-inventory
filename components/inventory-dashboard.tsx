@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat } from "lucide-react"
@@ -45,7 +45,10 @@ import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
 import { supabase as supabaseClient } from "@/lib/supabase-client"
 import { LoadingTip } from "@/components/loading-tip"
+import { EmailIngestionBanner } from "@/components/email-ingestion-banner"
+import { useEmailIngestionCount } from "@/contexts/email-ingestion-context"
 import type { InventoryItem, ParsedRecipe, PantryMatch } from "@/lib/types"
+import type { EmailIngestionRow } from "@/lib/server/repositories/email-ingestion-repo"
 
 const WASTE_REASONS = [
   { key: "expired", label: "Expired" },
@@ -115,6 +118,8 @@ export function InventoryDashboard() {
   const { toast } = useToast()
   const { toastWithNudge, bugReportOpen, setBugReportOpen } = useBugReportNudge()
   const fuseRef = useRef<Fuse<InventoryItem> | null>(null)
+  const [emailIngestions, setEmailIngestions] = useState<EmailIngestionRow[]>([])
+  const { setPendingEmailIngestionCount } = useEmailIngestionCount()
 
   // iOS-style swipe-to-reveal state
   const cardSliderRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -192,6 +197,26 @@ useEffect(() => {
 
   load()
 }, [])
+
+  // Poll email ingestions on mount
+  const loadEmailIngestions = useCallback(async () => {
+    try {
+      const res = await fetchWithAuth("/api/email-ingestion/pending")
+      if (!res.ok) return
+      const data = await res.json()
+      const rows = data.ingestions ?? []
+      setEmailIngestions(rows)
+      setPendingEmailIngestionCount(rows.length)
+    } catch {
+      // Non-fatal
+    }
+  }, [setPendingEmailIngestionCount])
+
+  useEffect(() => {
+    loadEmailIngestions()
+    const interval = setInterval(loadEmailIngestions, 60_000)
+    return () => clearInterval(interval)
+  }, [loadEmailIngestions])
 
   // Rebuild Fuse index whenever items change so search never returns stale results
   useEffect(() => {
@@ -809,6 +834,24 @@ useEffect(() => {
           <span>Import Recipe</span>
         </Button>
       </div>
+
+      {emailIngestions.length > 0 && (
+        <div className="mb-4">
+          <EmailIngestionBanner
+            ingestions={emailIngestions}
+            onRefresh={() => {
+              loadEmailIngestions()
+              // Re-fetch inventory in case items were added
+              fetchWithAuth("/api/inventory?archived=false")
+                .then((r) => r.json())
+                .then((data) => {
+                  if (Array.isArray(data)) setItems(data)
+                })
+                .catch(() => {})
+            }}
+          />
+        </div>
+      )}
 
       <div className="sticky top-0 z-30 bg-background pt-2 pb-4 space-y-3">
         <div className="flex gap-2">

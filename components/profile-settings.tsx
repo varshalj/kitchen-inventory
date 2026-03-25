@@ -184,6 +184,9 @@ export function ProfileSettings() {
   const [confirmRemove, setConfirmRemove] = useState<{ type: "source" | "location"; value: string; affectedCount: number } | null>(null)
   const [showBugReport, setShowBugReport] = useState(false)
   const { reset: resetOnboarding } = useOnboarding()
+  const [emailToken, setEmailToken] = useState<string | null>(null)
+  const [emailTokenLoading, setEmailTokenLoading] = useState(false)
+  const [showForwardingGuide, setShowForwardingGuide] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -198,6 +201,15 @@ export function ProfileSettings() {
 
     void load()
   }, [settings])
+
+  useEffect(() => {
+    fetchWithAuth("/api/email-forwarding-token")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.token) setEmailToken(data.token)
+      })
+      .catch(() => {})
+  }, [])
 
   const handleCurrencyChange = (value: string) => {
     updateSettings({ currency: value })
@@ -345,6 +357,116 @@ export function ProfileSettings() {
             </div>
           </div>
         </CardHeader>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center">
+            <Mail className="mr-2 h-4 w-4" />
+            Email Order Import
+          </CardTitle>
+          <CardDescription>Forward grocery order emails to add items automatically</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {emailToken ? (
+            <>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Your forwarding address</Label>
+                <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
+                  <code className="text-sm flex-1 break-all select-all">
+                    kinv.orders+{emailToken}@gmail.com
+                  </code>
+                  <CopyButton text={`kinv.orders+${emailToken}@gmail.com`} />
+                </div>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-sm font-medium text-left w-full"
+                  onClick={() => setShowForwardingGuide(!showForwardingGuide)}
+                >
+                  How to set it up
+                  {showForwardingGuide ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {showForwardingGuide && (
+                  <ol className="mt-2 text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                    <li>Open your Gmail or email app</li>
+                    <li>Find a grocery order email (Swiggy, Blinkit, Zepto, etc.)</li>
+                    <li>Forward it to the address above</li>
+                    <li>Come back here — your items will appear for review on the inventory dashboard</li>
+                  </ol>
+                )}
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Works with Swiggy, Blinkit, Zepto, BigBasket, Amazon, Flipkart, and more.
+              </p>
+
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={async () => {
+                    setEmailTokenLoading(true)
+                    try {
+                      const res = await fetchWithAuth("/api/email-forwarding-token", { method: "POST" })
+                      const data = await res.json()
+                      if (data?.token) {
+                        setEmailToken(data.token)
+                        toast({ title: "New address generated", description: "Your old forwarding address no longer works." })
+                      }
+                    } catch {
+                      toast({ title: "Failed to regenerate", variant: "destructive" })
+                    } finally {
+                      setEmailTokenLoading(false)
+                    }
+                  }}
+                  disabled={emailTokenLoading}
+                >
+                  {emailTokenLoading ? "Generating..." : "Generate new address"}
+                </button>
+
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                  onClick={() => setShowBugReport(true)}
+                >
+                  <Bug className="h-3 w-3" />
+                  Email not processed?
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                Generate a forwarding address to start importing orders from email
+              </p>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  setEmailTokenLoading(true)
+                  try {
+                    const res = await fetchWithAuth("/api/email-forwarding-token", { method: "POST" })
+                    const data = await res.json()
+                    if (data?.token) {
+                      setEmailToken(data.token)
+                      toast({ title: "Forwarding address created" })
+                    }
+                  } catch {
+                    toast({ title: "Failed to generate", variant: "destructive" })
+                  } finally {
+                    setEmailTokenLoading(false)
+                  }
+                }}
+                disabled={emailTokenLoading}
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                {emailTokenLoading ? "Generating..." : "Set Up Email Import"}
+              </Button>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       {(!FEATURE_FLAGS.EMAIL_SCRAPING || !FEATURE_FLAGS.NOTIFICATIONS) && (

@@ -55,10 +55,45 @@ export async function POST(request: NextRequest) {
 
     const payload = await request.json()
 
+    // Support bulk insert (array payload) for email ingestion
+    if (Array.isArray(payload)) {
+      const results: any[] = []
+      for (const item of payload) {
+        const created = await inventoryRepo.create(supabase, item)
+        results.push(created)
+      }
+
+      // Auto-complete matching shopping list items for all bulk items
+      let completedShoppingItems: Array<{ id: string; name: string }> = []
+      try {
+        const { data: activeShoppingItems } = await supabase
+          .from("shopping_items")
+          .select("id, name")
+          .eq("user_id", user.id)
+          .eq("completed", false)
+
+        const matched = (activeShoppingItems ?? []).filter((s) =>
+          results.some((r) => shoppingNameMatchesInventory(r.name ?? "", s.name)),
+        )
+
+        if (matched.length > 0) {
+          await supabase
+            .from("shopping_items")
+            .update({ completed: true })
+            .in("id", matched.map((m) => m.id))
+            .eq("user_id", user.id)
+          completedShoppingItems = matched.map((m) => ({ id: m.id, name: m.name }))
+        }
+      } catch {
+        // Non-fatal
+      }
+
+      return NextResponse.json({ items: results, _completedShoppingItems: completedShoppingItems }, { status: 201 })
+    }
+
     const created = await inventoryRepo.create(supabase, payload)
 
-    // Auto-complete matching active shopping list items (no duplicate inventory creation
-    // since we update the DB directly, bypassing the client toggle handler)
+    // Auto-complete matching active shopping list items
     let completedShoppingItems: Array<{ id: string; name: string }> = []
     try {
       const { data: activeShoppingItems } = await supabase

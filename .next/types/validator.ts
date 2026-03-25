@@ -218,6 +218,42 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../app/api/email-forwarding-token/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/email-forwarding-token">> = Specific
+  const handler = {} as typeof import("../../app/api/email-forwarding-token/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/email-ingestion/[id]/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/email-ingestion/[id]">> = Specific
+  const handler = {} as typeof import("../../app/api/email-ingestion/[id]/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/email-ingestion/callback/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/email-ingestion/callback">> = Specific
+  const handler = {} as typeof import("../../app/api/email-ingestion/callback/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../app/api/email-ingestion/pending/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/email-ingestion/pending">> = Specific
+  const handler = {} as typeof import("../../app/api/email-ingestion/pending/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../app/api/inventory/[id]/consume/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/inventory/[id]/consume">> = Specific
