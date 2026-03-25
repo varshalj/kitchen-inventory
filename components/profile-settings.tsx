@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase-client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, Globe, ShoppingBag, Bug, RotateCcw, Bot, Copy, Check, ChevronDown, ChevronRight, ShieldCheck } from "lucide-react"
+import { ArrowLeft, Bell, LogOut, User, DollarSign, Archive, Mail, Plus, Trash, Store, X, MapPin, AlertTriangle, Globe, ShoppingBag, Bug, RotateCcw, Bot, Copy, Check, ChevronDown, ChevronRight, ShieldCheck, ExternalLink, Filter } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -367,11 +367,12 @@ export function ProfileSettings() {
           </CardTitle>
           <CardDescription>Forward grocery order emails to add items automatically</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {emailToken ? (
             <>
+              {/* Step 1 */}
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Your forwarding address</Label>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 1 — Copy your forwarding address</p>
                 <div className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2">
                   <code className="text-sm flex-1 break-all select-all">
                     kinv.orders+{emailToken}@gmail.com
@@ -380,33 +381,72 @@ export function ProfileSettings() {
                 </div>
               </div>
 
-              <div>
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-sm font-medium text-left w-full"
-                  onClick={() => setShowForwardingGuide(!showForwardingGuide)}
+              {/* Step 2 */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Step 2 — Set up Gmail auto-forwarding</p>
+                <p className="text-xs text-muted-foreground">
+                  Create a Gmail filter that automatically forwards order emails from Swiggy, Blinkit, Zepto and others to your address above.
+                </p>
+                <a
+                  href={`https://mail.google.com/mail/u/0/#create-filter?from=(swiggy.in+OR+swiggy.com+OR+blinkit.com+OR+grofers.com+OR+zepto.co+OR+zeptonow.com+OR+bigbasket.com+OR+amazon.in+OR+flipkart.com+OR+jiomart.com+OR+dunzo.com+OR+countrydelight.in)`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                 >
-                  How to set it up
-                  {showForwardingGuide ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-                {showForwardingGuide && (
-                  <ol className="mt-2 text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
-                    <li>Open your Gmail or email app</li>
-                    <li>Find a grocery order email (Swiggy, Blinkit, Zepto, etc.)</li>
-                    <li>Forward it to the address above</li>
-                    <li>Come back here — your items will appear for review on the inventory dashboard</li>
-                  </ol>
-                )}
+                  <Filter className="h-3.5 w-3.5" />
+                  Open Gmail filter setup
+                  <ExternalLink className="h-3 w-3 opacity-60" />
+                </a>
+                <p className="text-xs text-muted-foreground">
+                  In Gmail: scroll to <span className="font-medium">Forward it to</span> → click <span className="font-medium">Add forwarding address</span> → paste your address from Step 1 → click <span className="font-medium">Create filter</span>.
+                </p>
+
+                <div>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowForwardingGuide(!showForwardingGuide)}
+                  >
+                    {showForwardingGuide ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    Not using Gmail? See filter criteria
+                  </button>
+                  {showForwardingGuide && (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-start gap-2 bg-muted/50 rounded-lg px-3 py-2">
+                        <code className="text-xs flex-1 break-all select-all text-muted-foreground">
+                          (swiggy.in OR swiggy.com OR blinkit.com OR grofers.com OR zepto.co OR zeptonow.com OR bigbasket.com OR amazon.in OR flipkart.com OR jiomart.com OR dunzo.com OR countrydelight.in)
+                        </code>
+                        <CopyButton text="(swiggy.in OR swiggy.com OR blinkit.com OR grofers.com OR zepto.co OR zeptonow.com OR bigbasket.com OR amazon.in OR flipkart.com OR jiomart.com OR dunzo.com OR countrydelight.in)" />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Use this as the <span className="font-medium">From</span> criteria when creating a filter in your email client.{" "}
+                        <a
+                          href="https://support.google.com/mail/answer/10957?hl=en"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline inline-flex items-center gap-0.5"
+                        >
+                          Gmail forwarding guide
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <p className="text-xs text-muted-foreground">
-                Works with Swiggy, Blinkit, Zepto, BigBasket, Amazon, Flipkart, and more.
-              </p>
+              {/* Step 3 */}
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 space-y-0.5">
+                <p className="text-xs font-semibold text-amber-800">Step 3 — Wait for activation (up to 24h)</p>
+                <p className="text-xs text-amber-700">
+                  After you add the forwarding address, Gmail sends us a confirmation. We'll verify it shortly. Once confirmed, all future order emails forward automatically.
+                </p>
+              </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-1">
                 <button
                   type="button"
-                  className="text-xs text-primary hover:underline"
+                  className="text-xs text-muted-foreground hover:text-foreground"
                   onClick={async () => {
                     setEmailTokenLoading(true)
                     try {
@@ -414,7 +454,7 @@ export function ProfileSettings() {
                       const data = await res.json()
                       if (data?.token) {
                         setEmailToken(data.token)
-                        toast({ title: "New address generated", description: "Your old forwarding address no longer works." })
+                        toast({ title: "New address generated", description: "Your old forwarding address no longer works. Update your Gmail filter too." })
                       }
                     } catch {
                       toast({ title: "Failed to regenerate", variant: "destructive" })
@@ -440,7 +480,7 @@ export function ProfileSettings() {
           ) : (
             <div className="text-center py-4">
               <p className="text-sm text-muted-foreground mb-3">
-                Generate a forwarding address to start importing orders from email
+                Generate a forwarding address to start importing orders from email automatically
               </p>
               <Button
                 variant="outline"
@@ -451,7 +491,7 @@ export function ProfileSettings() {
                     const data = await res.json()
                     if (data?.token) {
                       setEmailToken(data.token)
-                      toast({ title: "Forwarding address created" })
+                      toast({ title: "Forwarding address created", description: "Follow the steps below to complete setup." })
                     }
                   } catch {
                     toast({ title: "Failed to generate", variant: "destructive" })
