@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast"
 import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 import { VoiceCapture, type VoiceParsedItem } from "@/components/voice-capture"
+import { CATEGORIES } from "@/lib/constants"
 
 type DetectedType = "receipt" | "food" | "package" | null
 type ProposalResponse = {
@@ -1180,17 +1181,9 @@ export function AddItemForm() {
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Fruits">Fruits</SelectItem>
-                      <SelectItem value="Vegetables">Vegetables</SelectItem>
-                      <SelectItem value="Dairy">Dairy</SelectItem>
-                      <SelectItem value="Meat">Meat</SelectItem>
-                      <SelectItem value="Grains">Grains</SelectItem>
-                      <SelectItem value="Canned">Canned</SelectItem>
-                      <SelectItem value="Frozen">Frozen</SelectItem>
-                      <SelectItem value="Snacks">Snacks</SelectItem>
-                      <SelectItem value="Beverages">Beverages</SelectItem>
-                      <SelectItem value="Condiments">Condiments</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                      {CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

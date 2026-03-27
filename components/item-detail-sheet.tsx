@@ -28,6 +28,10 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
   const { settings } = useUserSettings()
   const currencySymbol = (CURRENCIES.find((c) => c.code === (settings?.currency || "INR")) || CURRENCIES[0]).symbol
 
+  // #region agent log
+  if (item?.price) { fetch('http://127.0.0.1:7243/ingest/72c94e8d-cbb3-4204-8fea-137a739b0fb2',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'item-detail-sheet.tsx:render',message:'price raw value',data:{rawPrice:item.price,currencySymbol,hasCurrencyPrefix:/^[₹$€£]/.test(item.price)},timestamp:Date.now(),hypothesisId:'H-A'})}).catch(()=>{}); }
+  // #endregion
+
   if (!item) return null
 
   const isExpired = item.expiryDate && new Date(item.expiryDate) < new Date()

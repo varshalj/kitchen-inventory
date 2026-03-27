@@ -13,6 +13,7 @@ import type { InventoryItem } from "@/lib/types"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { QuantityWithUnits } from "@/components/quantity-with-units"
 import { CurrencyInput } from "@/components/currency-input"
+import { CATEGORIES } from "@/lib/constants"
 import { StarRating } from "@/components/star-rating"
 import { cn } from "@/lib/utils"
 
@@ -85,17 +86,9 @@ export function EditItemForm({ item, onSave, onCancel }: EditItemFormProps) {
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="Fruits">Fruits</SelectItem>
-              <SelectItem value="Vegetables">Vegetables</SelectItem>
-              <SelectItem value="Dairy">Dairy</SelectItem>
-              <SelectItem value="Meat">Meat</SelectItem>
-              <SelectItem value="Grains">Grains</SelectItem>
-              <SelectItem value="Canned">Canned</SelectItem>
-              <SelectItem value="Frozen">Frozen</SelectItem>
-              <SelectItem value="Snacks">Snacks</SelectItem>
-              <SelectItem value="Beverages">Beverages</SelectItem>
-              <SelectItem value="Condiments">Condiments</SelectItem>
-              <SelectItem value="Other">Other</SelectItem>
+              {CATEGORIES.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
