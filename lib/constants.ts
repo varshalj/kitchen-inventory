@@ -1,6 +1,6 @@
 export const CATEGORIES = [
   "Fruits", "Vegetables", "Dairy", "Meat", "Grains",
-  "Canned", "Frozen", "Snacks", "Beverages", "Condiments", "Other",
+  "Canned", "Frozen", "Snacks", "Beverages", "Condiments", "Spices", "Other",
 ] as const
 
 export type Category = (typeof CATEGORIES)[number]
@@ -14,6 +14,7 @@ export const DEFAULT_EXPIRY_DAYS: Record<string, number> = {
   Grains: 180,
   Canned: 180,
   Condiments: 180,
+  Spices: 365,
   Snacks: 30,
   Beverages: 30,
   Other: 30,

@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/sheet"
 import { StarRating } from "@/components/star-rating"
 import { formatQuantityUnit } from "@/components/quantity-with-units"
+import { CURRENCIES } from "@/components/currency-input"
+import { useUserSettings } from "@/hooks/use-user-settings"
 import type { InventoryItem } from "@/lib/types"
 
 interface ItemDetailSheetProps {
@@ -23,6 +25,9 @@ interface ItemDetailSheetProps {
 }
 
 export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: ItemDetailSheetProps) {
+  const { settings } = useUserSettings()
+  const currencySymbol = (CURRENCIES.find((c) => c.code === (settings?.currency || "INR")) || CURRENCIES[0]).symbol
+
   if (!item) return null
 
   const isExpired = item.expiryDate && new Date(item.expiryDate) < new Date()
@@ -78,7 +83,7 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
               value={formatQuantityUnit(item.quantity, item.unit)}
             />
             {item.price && (
-              <DetailRow icon={<DollarSign className="h-4 w-4" />} label="Price" value={item.price} />
+              <DetailRow icon={<DollarSign className="h-4 w-4" />} label="Price" value={`${currencySymbol}${item.price}`} />
             )}
             {item.orderedFrom && (
               <DetailRow icon={<Store className="h-4 w-4" />} label="Ordered From" value={item.orderedFrom} />

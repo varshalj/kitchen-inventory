@@ -41,6 +41,16 @@ export async function POST(
         return String(s)
       })
     }
+    // Strip any leading quantity/unit prefix the LLM accidentally included in ingredient names.
+    // e.g. "½ cup (35-40g dry) Poha" → "Poha", "2 tbsp Olive Oil" → "Olive Oil"
+    const QUANTITY_PREFIX_RE = /^[\d¼½¾⅓⅔⅛⅜⅝⅞.,\/ ()]+(?:cups?|tbsps?|tsps?|tablespoons?|teaspoons?|g|kg|ml|L|oz|lb|pcs|fl\s*oz)?\s*/i
+    if (parsedRecipe && Array.isArray(parsedRecipe.ingredients)) {
+      parsedRecipe.ingredients = parsedRecipe.ingredients.map((ing: any) => {
+        if (!ing || typeof ing.name !== 'string') return ing
+        const cleaned = ing.name.replace(QUANTITY_PREFIX_RE, "").trim()
+        return cleaned.length > 0 ? { ...ing, name: cleaned } : ing
+      })
+    }
     if (!parsedRecipe || !parsedRecipe.title) {
       await recipeImportRepo.updateFromCallback(supabase, id, {
         status: "failed",
