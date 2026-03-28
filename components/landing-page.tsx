@@ -286,7 +286,7 @@ export function LandingPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-lg">
         <div className="container mx-auto px-4 md:px-6 max-w-7xl flex h-14 items-center">
@@ -306,7 +306,7 @@ export function LandingPage() {
 
       <main>
         {/* Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-white to-muted pt-6 pb-12 md:pt-10 md:pb-16">
+        <section className="relative overflow-hidden bg-gradient-to-b from-background to-muted pt-6 pb-12 md:pt-10 md:pb-16">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
             <div className="grid gap-10 md:grid-cols-2 md:gap-16 items-center">
               <div className="flex flex-col justify-center space-y-4">
@@ -335,7 +335,7 @@ export function LandingPage() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="bg-white py-12 md:py-20">
+        <section id="features" className="bg-background py-12 md:py-20">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
             <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center mb-10">
               <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">
@@ -371,7 +371,7 @@ export function LandingPage() {
         </section>
 
         {/* FAQ Section */}
-        <section className="bg-white py-12 md:py-16">
+        <section className="bg-background py-12 md:py-16">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
             <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
               <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">Frequently Asked Questions</h2>
@@ -384,18 +384,21 @@ export function LandingPage() {
                 <AccordionItem value="item-1">
                   <AccordionTrigger>How does the email integration work?</AccordionTrigger>
                   <AccordionContent>
-                    The app securely connects to your email account and scans for order confirmations from supported
-                    grocery delivery services — Swiggy, Blinkit, Zepto, BigBasket, Amazon Fresh, and JioMart. When
-                    you receive an order confirmation, items are automatically extracted and added to your inventory.
-                    You can toggle this feature on or off for each connected account in your profile settings.
+                    You forward your grocery order confirmation emails to a unique address provided in your profile
+                    settings. The app extracts the items and adds them to your inventory automatically. No email account
+                    access or login is required — you simply forward the emails you choose. Works with Swiggy,
+                    Blinkit, Zepto, BigBasket, Amazon Fresh, JioMart, and more.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-2">
                   <AccordionTrigger>Is my data secure and private?</AccordionTrigger>
                   <AccordionContent>
-                    Yes. We only scan for order confirmation emails from supported grocery services and never access
-                    your personal emails. Your inventory data is stored securely and is never shared with third parties.
-                    You can delete your account and all associated data at any time from your profile settings.
+                    Yes. We never access your email account — you only forward the specific emails you choose. Your
+                    inventory data is stored securely in Supabase and is never sold or shared with third parties.
+                    To delete your account and all associated data, contact us at varshaljain@gmail.com and we will
+                    process it within 7 days. See our{" "}
+                    <Link href="/privacy" className="text-primary underline underline-offset-2">Privacy Policy</Link>
+                    {" "}for full details.
                   </AccordionContent>
                 </AccordionItem>
                 <AccordionItem value="item-3">
@@ -410,10 +413,10 @@ export function LandingPage() {
                 <AccordionItem value="item-4">
                   <AccordionTrigger>Do I need to manually add all my items?</AccordionTrigger>
                   <AccordionContent>
-                    No! The app offers several convenient ways to add items: email integration automatically adds items
+                    No! The app offers several convenient ways to add items: email forwarding automatically adds items
                     from grocery deliveries; AI camera scan lets you photograph a receipt or bag of groceries to add
-                    multiple items at once; voice add lets you speak items into your shopping list hands-free; and Quick
-                    Add covers common pantry staples with preset expiry estimates. Manual entry is always available too.
+                    multiple items at once; voice add lets you speak items into your shopping list hands-free; and
+                    manual entry with AI-suggested expiry dates is always available too.
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
