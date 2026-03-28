@@ -26,7 +26,7 @@ export function BottomNavigation() {
     cn(
       "relative flex flex-col items-center justify-center w-full h-full text-xs gap-1 rounded-md transition-all duration-200",
       "hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-      isActive(path) ? "text-primary font-medium" : "text-muted-foreground",
+      isActive(path) ? "text-orange-500 font-medium" : "text-muted-foreground",
     )
 
   return (
@@ -36,26 +36,26 @@ export function BottomNavigation() {
           <div className="relative">
             <Home className="h-5 w-5 transition-transform duration-200" />
             {pendingEmailIngestionCount > 0 && (
-              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
             )}
           </div>
-          <span>Inventory</span>
+          <span>Home</span>
           {isActive("/dashboard") && (
-            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />
+            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-orange-500" />
           )}
         </Link>
 
         <Link href="/analytics" className={navLinkClass("/analytics")}>
           <BarChart2 className="h-5 w-5 transition-transform duration-200" />
-          <span>Analytics</span>
+          <span>Stats</span>
           {isActive("/analytics") && (
-            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />
+            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-orange-500" />
           )}
         </Link>
 
         <Link
           href="/add-item"
-          className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center justify-center w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg active:scale-90 transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center justify-center w-14 h-14 rounded-full bg-orange-500 text-white shadow-lg active:scale-90 transition-transform duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2"
         >
           <Plus className="h-6 w-6" />
           <span className="sr-only">Add Item</span>
@@ -70,9 +70,9 @@ export function BottomNavigation() {
               </span>
             )}
           </div>
-          <span>Shopping</span>
+          <span>Shop</span>
           {isActive("/shopping-list") && (
-            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />
+            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-orange-500" />
           )}
         </Link>
 
@@ -80,12 +80,12 @@ export function BottomNavigation() {
           <div className="relative">
             <ChefHat className="h-5 w-5 transition-transform duration-200" />
             {pendingRecipeImportCount > 0 && (
-              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
             )}
           </div>
           <span>Recipes</span>
           {isActive("/recipes") && (
-            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-primary" />
+            <span className="absolute bottom-1 h-0.5 w-6 rounded-full bg-orange-500" />
           )}
         </Link>
       </div>

@@ -26,9 +26,9 @@ function InventoryMockup() {
   return (
     <div className="w-full max-w-xs mx-auto">
       {/* Phone frame */}
-      <div className="rounded-3xl border-4 border-gray-800 shadow-2xl overflow-hidden bg-gray-50">
+      <div className="rounded-3xl border-4 border-foreground shadow-2xl overflow-hidden bg-muted">
         {/* Status bar */}
-        <div className="bg-gray-800 px-4 py-2 flex justify-between items-center">
+        <div className="bg-foreground px-4 py-2 flex justify-between items-center">
           <span className="text-white text-[10px]">9:41</span>
           <div className="flex gap-1">
             <div className="w-3 h-1.5 bg-white/60 rounded-sm" />
@@ -40,14 +40,14 @@ function InventoryMockup() {
         <div className="bg-white px-3 pt-3 pb-4 space-y-2">
           <div className="flex justify-between items-center mb-3">
             <span className="font-bold text-sm">Kitchen Inventory</span>
-            <span className="text-[10px] text-gray-400">3 items</span>
+            <span className="text-[10px] text-muted-foreground">3 items</span>
           </div>
           {/* Item 1 – expiring */}
           <div className="rounded-xl border p-2.5 bg-red-50 border-red-100">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs font-semibold">Greek Yogurt</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Refrigerator · 500g</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Refrigerator · 500g</p>
               </div>
               <span className="text-[9px] font-medium bg-red-100 text-red-600 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
                 2 days
@@ -59,7 +59,7 @@ function InventoryMockup() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs font-semibold">Basmati Rice</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Pantry · 2kg</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Pantry · 2kg</p>
               </div>
               <span className="text-[9px] font-medium bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
                 6 mo
@@ -71,7 +71,7 @@ function InventoryMockup() {
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs font-semibold">Spinach</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Refrigerator · 1 bunch</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Refrigerator · 1 bunch</p>
               </div>
               <span className="text-[9px] font-medium bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
                 5 days
@@ -87,7 +87,7 @@ function InventoryMockup() {
 function ExpiryMockup() {
   return (
     <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 text-xs w-full">
-      <p className="font-semibold text-[11px] text-gray-500 uppercase tracking-wide">Expiring soon</p>
+      <p className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">Expiring soon</p>
       {[
         { name: "Paneer", loc: "Refrigerator", days: "1 day", color: "bg-red-100 text-red-600" },
         { name: "Coriander", loc: "Refrigerator", days: "3 days", color: "bg-amber-100 text-amber-700" },
@@ -96,7 +96,7 @@ function ExpiryMockup() {
         <div key={item.name} className="flex items-center justify-between">
           <div>
             <p className="font-medium text-xs">{item.name}</p>
-            <p className="text-[10px] text-gray-400">{item.loc}</p>
+            <p className="text-[10px] text-muted-foreground">{item.loc}</p>
           </div>
           <span className={`text-[9px] font-medium rounded-full px-1.5 py-0.5 ${item.color}`}>{item.days}</span>
         </div>
@@ -121,7 +121,7 @@ function RecipeMockup() {
             YouTube
           </span>
         </div>
-        <p className="text-[10px] text-gray-500">Ingredients: Spinach ✓, Paneer ✓, Cream ✓, Spices…</p>
+        <p className="text-[10px] text-muted-foreground">Ingredients: Spinach ✓, Paneer ✓, Cream ✓, Spices…</p>
       </div>
     </div>
   )
@@ -131,7 +131,7 @@ function ShoppingMockup() {
   return (
     <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
       <div className="flex justify-between items-center">
-        <p className="font-semibold text-[11px] text-gray-500 uppercase tracking-wide">Shopping List</p>
+        <p className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">Shopping List</p>
         <div className="flex items-center gap-1 text-[10px] text-primary font-medium">
           <Mic className="h-3 w-3" /> Voice
         </div>
@@ -143,10 +143,10 @@ function ShoppingMockup() {
       ].map((item) => (
         <div key={item.name} className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className={`h-3.5 w-3.5 rounded border flex items-center justify-center ${item.done ? "bg-primary border-primary" : "border-gray-300"}`}>
+            <div className={`h-3.5 w-3.5 rounded border flex items-center justify-center ${item.done ? "bg-primary border-primary" : "border-input"}`}>
               {item.done && <Check className="h-2.5 w-2.5 text-white" />}
             </div>
-            <span className={item.done ? "line-through text-gray-400" : ""}>{item.name}</span>
+            <span className={item.done ? "line-through text-muted-foreground" : ""}>{item.name}</span>
           </div>
           {!item.done && (
             <span className="text-[9px] bg-primary text-white rounded-full px-1.5 py-0.5 font-medium">BUY</span>
@@ -162,7 +162,7 @@ function ScanMockup() {
     <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <Camera className="h-3.5 w-3.5 text-primary" />
-        <p className="font-semibold text-[11px] text-gray-700">AI detected 4 items</p>
+        <p className="font-semibold text-[11px] text-foreground">AI detected 4 items</p>
       </div>
       {[
         { name: "Amul Butter 500g", cat: "Dairy", include: true },
@@ -171,13 +171,13 @@ function ScanMockup() {
         { name: "Tropicana Orange 1L", cat: "Beverages", include: false },
       ].map((item) => (
         <div key={item.name} className="flex items-center gap-2">
-          <div className={`h-3 w-3 rounded border shrink-0 flex items-center justify-center ${item.include ? "bg-primary border-primary" : "border-gray-300"}`}>
+          <div className={`h-3 w-3 rounded border shrink-0 flex items-center justify-center ${item.include ? "bg-primary border-primary" : "border-input"}`}>
             {item.include && <Check className="h-2 w-2 text-white" />}
           </div>
           <div className="flex-1 min-w-0">
             <p className="truncate font-medium">{item.name}</p>
           </div>
-          <span className="text-[9px] text-gray-400 shrink-0">{item.cat}</span>
+          <span className="text-[9px] text-muted-foreground shrink-0">{item.cat}</span>
         </div>
       ))}
     </div>
@@ -189,15 +189,15 @@ function EmailMockup() {
     <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <Mail className="h-3.5 w-3.5 text-primary" />
-        <p className="font-semibold text-[11px] text-gray-700">Order synced automatically</p>
+        <p className="font-semibold text-[11px] text-foreground">Order synced automatically</p>
       </div>
-      <div className="rounded-lg bg-gray-50 p-2 text-[10px] space-y-1">
-        <p className="font-medium text-gray-700">Blinkit · Order #BL84923</p>
-        <p className="text-gray-400">3 items added to inventory</p>
+      <div className="rounded-lg bg-muted p-2 text-[10px] space-y-1">
+        <p className="font-medium text-foreground">Blinkit · Order #BL84923</p>
+        <p className="text-muted-foreground">3 items added to inventory</p>
       </div>
       <div className="flex flex-wrap gap-1">
         {["Swiggy", "Blinkit", "Zepto", "BigBasket", "Amazon Fresh"].map((s) => (
-          <span key={s} className="text-[8px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">{s}</span>
+          <span key={s} className="text-[8px] bg-muted text-muted-foreground rounded px-1.5 py-0.5">{s}</span>
         ))}
       </div>
     </div>
@@ -209,7 +209,7 @@ function BookmarkMockup() {
     <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <BookmarkIcon className="h-3.5 w-3.5 text-amber-500" />
-        <p className="font-semibold text-[11px] text-gray-700">Saved bookmark</p>
+        <p className="font-semibold text-[11px] text-foreground">Saved bookmark</p>
       </div>
       <div className="rounded-lg border p-2 space-y-1">
         <div className="flex items-start justify-between gap-2">
@@ -218,9 +218,9 @@ function BookmarkMockup() {
             Bookmark
           </span>
         </div>
-        <p className="text-[10px] text-gray-400 truncate">youtube.com · Saved for later</p>
+        <p className="text-[10px] text-muted-foreground truncate">youtube.com · Saved for later</p>
       </div>
-      <p className="text-[10px] text-gray-400 italic">Full import support coming soon</p>
+      <p className="text-[10px] text-muted-foreground italic">Save any recipe link for later</p>
     </div>
   )
 }
@@ -230,10 +230,10 @@ function AIMockup() {
     <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <Bot className="h-3.5 w-3.5 text-primary" />
-        <p className="font-semibold text-[11px] text-gray-700">AI Assistant</p>
+        <p className="font-semibold text-[11px] text-foreground">AI Assistant</p>
       </div>
-      <div className="rounded-lg bg-gray-50 p-2 space-y-1.5">
-        <p className="text-[10px] text-gray-500 italic">&quot;What&apos;s expiring this week?&quot;</p>
+      <div className="rounded-lg bg-muted p-2 space-y-1.5">
+        <p className="text-[10px] text-muted-foreground italic">&quot;What&apos;s expiring this week?&quot;</p>
         <div className="rounded border bg-white p-1.5 space-y-1">
           <div className="flex justify-between">
             <span className="font-medium">Milk</span>
@@ -245,7 +245,7 @@ function AIMockup() {
           </div>
         </div>
       </div>
-      <p className="text-[10px] text-gray-400">Works with ChatGPT, Claude, Cursor</p>
+      <p className="text-[10px] text-muted-foreground">Works with ChatGPT, Claude, Cursor</p>
     </div>
   )
 }
@@ -297,12 +297,12 @@ export function LandingPage() {
       badge: null,
     },
     {
-      icon: <Mail className="h-10 w-10 text-amber-500 mb-4" />,
+      icon: <Mail className="h-10 w-10 text-primary mb-4" />,
       title: "Auto-fill from delivery orders",
       description:
-        "Connect your email once. Order confirmations from Swiggy, Blinkit, Zepto, BigBasket, Amazon Fresh, and JioMart automatically update your inventory.",
+        "Forward your grocery order emails and items are automatically added to your inventory. Works with Swiggy, Blinkit, Zepto, BigBasket, Amazon, and more.",
       mockup: <EmailMockup />,
-      badge: "Coming soon",
+      badge: null,
     },
     {
       icon: <BookmarkIcon className="h-10 w-10 text-amber-500 mb-4" />,
@@ -349,7 +349,7 @@ export function LandingPage() {
 
       <main>
         {/* Hero Section */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-white to-gray-50 pt-6 pb-12 md:pt-10 md:pb-16">
+        <section className="relative overflow-hidden bg-gradient-to-b from-white to-muted pt-6 pb-12 md:pt-10 md:pb-16">
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
             <div className="grid gap-10 md:grid-cols-2 md:gap-16 items-center">
               <div className="flex flex-col justify-center space-y-4">
@@ -357,7 +357,7 @@ export function LandingPage() {
                   <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
                     Never waste food again. Track, cook, and shop smarter.
                   </h1>
-                  <p className="text-gray-500 md:text-xl leading-relaxed">
+                  <p className="text-muted-foreground md:text-xl leading-relaxed">
                     Track your kitchen inventory, import recipes matched to what you have, and shop from your phone with one tap.
                   </p>
                 </div>
@@ -384,7 +384,7 @@ export function LandingPage() {
               <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">
                 Everything your kitchen needs, in one app
               </h2>
-              <p className="max-w-[85%] text-gray-500 md:text-xl/relaxed">
+              <p className="max-w-[85%] text-muted-foreground md:text-xl/relaxed">
                 From tracking what's in your fridge to importing recipes from YouTube — all the tools you need to reduce waste and cook more.
               </p>
             </div>
@@ -403,7 +403,7 @@ export function LandingPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-gray-500 mt-2 text-sm leading-relaxed">{feature.description}</p>
+                      <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{feature.description}</p>
                     </div>
                     <div className="mt-auto pt-2">{feature.mockup}</div>
                   </CardContent>
@@ -418,7 +418,7 @@ export function LandingPage() {
           <div className="container mx-auto px-4 md:px-6 max-w-7xl">
             <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
               <h2 className="text-2xl font-bold tracking-tighter sm:text-3xl">Frequently Asked Questions</h2>
-              <p className="max-w-[85%] text-gray-500 md:text-xl/relaxed">
+              <p className="max-w-[85%] text-muted-foreground md:text-xl/relaxed">
                 Find answers to common questions about how the app works.
               </p>
             </div>
@@ -519,24 +519,24 @@ export function LandingPage() {
               </div>
               <span className="text-sm font-medium">Kitchen Inventory</span>
             </div>
-            <div className="flex gap-4 text-sm text-gray-500">
+            <div className="flex gap-4 text-sm text-muted-foreground">
               <Link href="#" className="hover:underline">Terms</Link>
               <Link href="#" className="hover:underline">Privacy</Link>
               <Link href="#" className="hover:underline">Contact</Link>
             </div>
             <div className="flex items-center gap-1">
-              <Shield className="h-4 w-4 text-gray-500" />
-              <span className="text-xs text-gray-500">Secure &amp; Private</span>
+              <Shield className="h-4 w-4 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Secure &amp; Private</span>
             </div>
           </div>
-          <div className="mt-4 text-center text-xs text-gray-500">
+          <div className="mt-4 text-center text-xs text-muted-foreground">
             © {new Date().getFullYear()} Kitchen Inventory. All rights reserved.
           </div>
-          <div className="mt-2 text-center text-xs text-gray-400">
+          <div className="mt-2 text-center text-xs text-muted-foreground">
             Vibe coded with AI tools and crafted with love by{" "}
             <a
               href="mailto:varshaljain@gmail.com"
-              className="underline underline-offset-2 hover:text-gray-600 transition-colors"
+              className="underline underline-offset-2 hover:text-foreground transition-colors"
             >
               Varshal Jain
             </a>

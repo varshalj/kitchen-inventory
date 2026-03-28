@@ -1,0 +1,5 @@
+{"location":"item-detail-sheet.tsx:render","message":"price raw value","data":{"rawPrice":"19","currencySymbol":"₹","hasCurrencyPrefix":false},"timestamp":1774630811404,"hypothesisId":"H-A"}
+{"location":"item-detail-sheet.tsx:render","message":"price raw value","data":{"rawPrice":"10","currencySymbol":"₹","hasCurrencyPrefix":false},"timestamp":1774630816323,"hypothesisId":"H-A"}
+{"location":"item-detail-sheet.tsx:render","message":"price raw value","data":{"rawPrice":"81","currencySymbol":"₹","hasCurrencyPrefix":false},"timestamp":1774630818444,"hypothesisId":"H-A"}
+{"location":"item-detail-sheet.tsx:render","message":"price raw value","data":{"rawPrice":"9","currencySymbol":"₹","hasCurrencyPrefix":false},"timestamp":1774630820207,"hypothesisId":"H-A"}
+{"location":"item-detail-sheet.tsx:render","message":"price raw value","data":{"rawPrice":"79","currencySymbol":"₹","hasCurrencyPrefix":false},"timestamp":1774630822107,"hypothesisId":"H-A"}
