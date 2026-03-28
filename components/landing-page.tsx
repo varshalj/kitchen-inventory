@@ -86,7 +86,7 @@ function InventoryMockup() {
 
 function ExpiryMockup() {
   return (
-    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 text-xs w-full">
+    <div className="rounded-xl border bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-3 space-y-2 text-xs w-full">
       <p className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">Expiring soon</p>
       {[
         { name: "Paneer", loc: "Refrigerator", days: "1 day", color: "bg-red-100 text-red-600" },
@@ -107,7 +107,7 @@ function ExpiryMockup() {
 
 function RecipeMockup() {
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden w-full text-xs">
+    <div className="rounded-xl border bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] overflow-hidden w-full text-xs">
       <div className="bg-gradient-to-r from-orange-400 to-red-400 p-3 text-white">
         <p className="font-bold text-sm">Palak Paneer</p>
         <p className="text-[10px] opacity-80 mt-0.5">30 min · 4 servings</p>
@@ -129,7 +129,7 @@ function RecipeMockup() {
 
 function ShoppingMockup() {
   return (
-    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+    <div className="rounded-xl border bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-3 space-y-2 w-full text-xs">
       <div className="flex justify-between items-center">
         <p className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">Shopping List</p>
         <div className="flex items-center gap-1 text-[10px] text-primary font-medium">
@@ -159,7 +159,7 @@ function ShoppingMockup() {
 
 function ScanMockup() {
   return (
-    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+    <div className="rounded-xl border bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-3 space-y-2 w-full text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <Camera className="h-3.5 w-3.5 text-primary" />
         <p className="font-semibold text-[11px] text-foreground">AI detected 4 items</p>
@@ -186,7 +186,7 @@ function ScanMockup() {
 
 function EmailMockup() {
   return (
-    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+    <div className="rounded-xl border bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-3 space-y-2 w-full text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <Mail className="h-3.5 w-3.5 text-primary" />
         <p className="font-semibold text-[11px] text-foreground">Order synced automatically</p>
@@ -206,7 +206,7 @@ function EmailMockup() {
 
 function AIMockup() {
   return (
-    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
+    <div className="rounded-xl border bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-3 space-y-2 w-full text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <Bot className="h-3.5 w-3.5 text-primary" />
         <p className="font-semibold text-[11px] text-foreground">AI Assistant</p>
@@ -288,7 +288,7 @@ export function LandingPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-lg">
         <div className="container mx-auto px-4 md:px-6 max-w-7xl flex h-14 items-center">
           <div className="flex items-center space-x-2">
             <div className="rounded-full bg-primary/10 p-1">

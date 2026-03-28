@@ -1,32 +1,61 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { MainLayout } from "@/components/main-layout"
+import { LoadingTip } from "@/components/loading-tip"
 
 export function InventoryLoading() {
   return (
     <MainLayout>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <Skeleton className="h-8 w-48" />
-        <div className="flex gap-2">
-          <Skeleton className="h-10 w-10 rounded-md" />
-          <Skeleton className="h-10 w-10 rounded-md" />
-        </div>
+        <Skeleton className="h-9 w-9 rounded-full" />
+      </div>
+
+      <div className="mb-6 flex gap-2">
+        <Skeleton className="h-10 flex-1 rounded-xl" />
+        <Skeleton className="h-10 w-32 rounded-xl" />
+      </div>
+
+      <div className="mb-4 flex gap-2">
+        <Skeleton className="h-9 flex-1 rounded-xl" />
+        <Skeleton className="h-9 w-9 rounded-xl" />
+      </div>
+
+      <div className="flex gap-2 mb-4">
+        <Skeleton className="h-8 w-20 rounded-xl" />
+        <Skeleton className="h-8 w-28 rounded-xl" />
+        <Skeleton className="h-8 w-24 rounded-xl" />
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {Array(5)
-          .fill(0)
-          .map((_, i) => (
-            <div key={i} className="border rounded-lg p-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <Skeleton className="h-5 w-32 mb-2" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-                <Skeleton className="h-6 w-20 rounded-full" />
+        {[0, 1].map((i) => (
+          <div key={i} className="rounded-xl p-4 bg-card shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+            <div className="flex justify-between items-start">
+              <div className="space-y-2 flex-1">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-3 w-1/4" />
               </div>
-              <Skeleton className="h-4 w-40 mt-4" />
+              <Skeleton className="h-6 w-16 rounded-full" />
             </div>
-          ))}
+            <div className="mt-3 pt-3 border-t">
+              <Skeleton className="h-3 w-1/4" />
+            </div>
+          </div>
+        ))}
+
+        <LoadingTip />
+
+        <div className="rounded-xl p-4 bg-card shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+          <div className="flex justify-between items-start">
+            <div className="space-y-2 flex-1">
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-3 w-1/4" />
+            </div>
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+          <div className="mt-3 pt-3 border-t">
+            <Skeleton className="h-3 w-1/4" />
+          </div>
+        </div>
       </div>
     </MainLayout>
   )

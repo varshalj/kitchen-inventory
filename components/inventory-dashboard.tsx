@@ -39,6 +39,7 @@ import { StarRating } from "@/components/star-rating"
 import { ReviewPrompt } from "@/components/review-prompt"
 import { fetchWithAuth } from "@/lib/api-client"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
+import { cn } from "@/lib/utils"
 import { ItemDetailSheet } from "@/components/item-detail-sheet"
 import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
@@ -854,7 +855,7 @@ useEffect(() => {
         </div>
       )}
 
-      <div className="sticky top-0 z-30 bg-background pt-2 pb-4 space-y-3">
+      <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-lg pt-2 pb-4 space-y-3 -mx-3 px-3 rounded-b-2xl">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1092,6 +1093,7 @@ useEffect(() => {
           filteredItems.map((item, i) => {
             const isExpired = new Date(item.expiryDate) < new Date()
             const isMissingExpiry = !item.expiryDate || isNaN(new Date(item.expiryDate).getTime())
+            const daysUntilExpiry = isMissingExpiry ? Infinity : Math.ceil((new Date(item.expiryDate).getTime() - Date.now()) / (1000 * 3600 * 24))
 
             return (
               <AnimatedItem key={item.id} index={i}>
@@ -1146,7 +1148,7 @@ useEffect(() => {
                   className="relative z-10"
                 >
                 <Card
-                  className={`rounded-none ${getExpiryColor(item.expiryDate)} border-l-4 relative cursor-pointer ${
+                  className={`rounded-none border-0 border-l-4 ${getExpiryColor(item.expiryDate)} relative cursor-pointer ${
                     selectionMode && selectedIds.has(item.id) ? "ring-2 ring-primary" : ""
                   }`}
                   onClick={() => {
@@ -1157,6 +1159,17 @@ useEffect(() => {
                     selectionMode ? toggleItemSelection(item.id) : setDetailItem(item)
                   }}
                 >
+                  {(isExpired || (!isMissingExpiry && daysUntilExpiry <= 3)) && (
+                    <span className={cn(
+                      "absolute top-3 right-3 h-2.5 w-2.5 rounded-full z-10",
+                      isExpired ? "bg-red-500" : "bg-amber-500",
+                    )}>
+                      <span className={cn(
+                        "absolute inset-0 rounded-full animate-ping",
+                        isExpired ? "bg-red-400" : "bg-amber-400",
+                      )} />
+                    </span>
+                  )}
                   <CardContent className="p-3 pb-2">
                     <div className="flex justify-between items-start">
                       <div className="flex items-start gap-3 flex-1 min-w-0">

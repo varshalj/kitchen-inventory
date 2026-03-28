@@ -106,7 +106,7 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
   const thumbnail = recipe.imageUrl || (recipe.sourcePlatform === "youtube" ? getYouTubeThumbnail(recipe.sourceUrl) : null)
   return (
     <Link href={`/recipes/${recipe.id}`} className="block">
-      <div className="rounded-xl border bg-card shadow-sm hover:shadow-md transition-shadow active:scale-[0.99] overflow-hidden">
+      <div className="rounded-xl border bg-card shadow-[0_2px_12px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.08)] transition-shadow active:scale-[0.99] overflow-hidden">
         {thumbnail && (
           <div className="aspect-video w-full overflow-hidden bg-muted">
             <img

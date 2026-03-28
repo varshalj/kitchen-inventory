@@ -69,3 +69,13 @@
   0%   { left: -40%; }
   100% { left: 140%; }
 }
+
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes sheet-slide-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}

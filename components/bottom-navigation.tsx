@@ -30,7 +30,7 @@ export function BottomNavigation() {
     )
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 border-t bg-background z-50">
+    <div className="fixed bottom-0 left-0 right-0 border-t bg-background/80 backdrop-blur-lg z-50">
       <div className="flex justify-around items-center h-16 relative">
         <Link href="/dashboard" className={navLinkClass("/dashboard")}>
           <div className="relative">
