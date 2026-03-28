@@ -453,7 +453,7 @@ export function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t bg-white py-6 md:py-8">
+      <footer className="border-t bg-background py-6 md:py-8">
         <div className="container mx-auto px-4 md:px-6 max-w-7xl">
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <div className="flex items-center gap-2">
@@ -463,9 +463,9 @@ export function LandingPage() {
               <span className="text-sm font-medium">Kitchen Inventory</span>
             </div>
             <div className="flex gap-4 text-sm text-muted-foreground">
-              <Link href="#" className="hover:underline">Terms</Link>
-              <Link href="#" className="hover:underline">Privacy</Link>
-              <Link href="#" className="hover:underline">Contact</Link>
+              <Link href="/terms" className="hover:underline">Terms</Link>
+              <Link href="/privacy" className="hover:underline">Privacy</Link>
+              <a href="mailto:varshaljain@gmail.com" className="hover:underline">Contact</a>
             </div>
             <div className="flex items-center gap-1">
               <Shield className="h-4 w-4 text-muted-foreground" />
