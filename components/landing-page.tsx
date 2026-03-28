@@ -12,9 +12,9 @@ import {
   Camera,
   Mail,
   Mic,
-  BookmarkIcon,
   Check,
   Bot,
+  CookingPot,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -204,27 +204,6 @@ function EmailMockup() {
   )
 }
 
-function BookmarkMockup() {
-  return (
-    <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
-      <div className="flex items-center gap-1.5 mb-1">
-        <BookmarkIcon className="h-3.5 w-3.5 text-amber-500" />
-        <p className="font-semibold text-[11px] text-foreground">Saved bookmark</p>
-      </div>
-      <div className="rounded-lg border p-2 space-y-1">
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-medium">Chettinad Chicken Curry</p>
-          <span className="text-[9px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 shrink-0 font-medium">
-            Bookmark
-          </span>
-        </div>
-        <p className="text-[10px] text-muted-foreground truncate">youtube.com · Saved for later</p>
-      </div>
-      <p className="text-[10px] text-muted-foreground italic">Save any recipe link for later</p>
-    </div>
-  )
-}
-
 function AIMockup() {
   return (
     <div className="rounded-xl border bg-white shadow-sm p-3 space-y-2 w-full text-xs">
@@ -304,14 +283,6 @@ export function LandingPage() {
       mockup: <EmailMockup />,
       badge: null,
     },
-    {
-      icon: <BookmarkIcon className="h-10 w-10 text-amber-500 mb-4" />,
-      title: "Recipe bookmarks",
-      description:
-        "Found a recipe you can't import yet? Save it as a bookmark with your own notes and retry when support is added.",
-      mockup: <BookmarkMockup />,
-      badge: "Coming soon",
-    },
   ]
 
   return (
@@ -321,21 +292,7 @@ export function LandingPage() {
         <div className="container mx-auto px-4 md:px-6 max-w-7xl flex h-14 items-center">
           <div className="flex items-center space-x-2">
             <div className="rounded-full bg-primary/10 p-1">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-5 w-5 text-primary"
-              >
-                <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z" />
-                <line x1="6" x2="18" y1="17" y2="17" />
-              </svg>
+              <CookingPot className="h-5 w-5 text-primary" />
             </div>
             <span className="font-bold">Kitchen Inventory</span>
           </div>
@@ -501,21 +458,7 @@ export function LandingPage() {
           <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
             <div className="flex items-center gap-2">
               <div className="rounded-full bg-primary/10 p-1">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-5 w-5 text-primary"
-                >
-                  <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z" />
-                  <line x1="6" x2="18" y1="17" y2="17" />
-                </svg>
+                <CookingPot className="h-5 w-5 text-primary" />
               </div>
               <span className="text-sm font-medium">Kitchen Inventory</span>
             </div>

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { MainLayout } from "@/components/main-layout"
+import { AnimatedItem } from "@/components/ui/animated-list"
 import { LoadingTip } from "@/components/loading-tip"
 import { QuantityWithUnits, formatQuantityUnit } from "@/components/quantity-with-units"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
@@ -614,8 +615,9 @@ export function ShoppingList() {
         ) : (
           /* Feature 5 — Natural page scroll, no ScrollArea */
           <div className="space-y-3">
-            {displayedItems.map((item) => (
-              <Card key={item.id} className={item.completed ? "bg-muted/50" : ""}>
+            {displayedItems.map((item, i) => (
+              <AnimatedItem key={item.id} index={i}>
+              <Card className={item.completed ? "bg-muted/50" : ""}>
                 <CardContent className="p-3">
                   <div className="flex items-center gap-3">
                     <LoadingButton
@@ -717,6 +719,7 @@ export function ShoppingList() {
                   </div>
                 </CardContent>
               </Card>
+              </AnimatedItem>
             ))}
           </div>
         )}

@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ToastAction } from "@/components/ui/toast"
 import { MainLayout } from "@/components/main-layout"
+import { AnimatedItem } from "@/components/ui/animated-list"
 import { EditItemForm } from "@/components/edit-item-form"
 import { useToast } from "@/hooks/use-toast"
 import Fuse from "fuse.js"
@@ -1088,13 +1089,13 @@ useEffect(() => {
             </Button>
           </div>
         ) : (
-          filteredItems.map((item) => {
+          filteredItems.map((item, i) => {
             const isExpired = new Date(item.expiryDate) < new Date()
             const isMissingExpiry = !item.expiryDate || isNaN(new Date(item.expiryDate).getTime())
 
             return (
+              <AnimatedItem key={item.id} index={i}>
               <div
-                key={item.id}
                 className="relative overflow-hidden rounded-lg"
                 style={{ touchAction: "pan-y" }}
                 onTouchStart={(e) => handleTouchStart(e, item.id)}
@@ -1259,6 +1260,7 @@ useEffect(() => {
                 </Card>
                 </div>{/* end card slider */}
               </div>
+              </AnimatedItem>
             )
           })
         )}

@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { MainLayout } from "@/components/main-layout"
+import { AnimatedItem } from "@/components/ui/animated-list"
 import { LoadingTip } from "@/components/loading-tip"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
@@ -603,8 +604,10 @@ export function RecipesList() {
       {/* Recipe list */}
       {!isLoading && sortedRecipes.length > 0 && (
         <div className="space-y-3">
-          {sortedRecipes.map((recipe) => (
-            <RecipeCard key={recipe.id} recipe={recipe} />
+          {sortedRecipes.map((recipe, i) => (
+            <AnimatedItem key={recipe.id} index={i}>
+              <RecipeCard recipe={recipe} />
+            </AnimatedItem>
           ))}
         </div>
       )}

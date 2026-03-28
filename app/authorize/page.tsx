@@ -81,7 +81,7 @@ function AuthorizeInner() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-muted">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
@@ -89,7 +89,7 @@ function AuthorizeInner() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-muted p-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <Shield className="h-12 w-12 text-destructive mx-auto mb-2" />
@@ -114,7 +114,7 @@ function AuthorizeInner() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-muted p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           <Shield className="h-12 w-12 text-primary mx-auto mb-2" />
@@ -163,7 +163,7 @@ export default function AuthorizePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="min-h-screen flex items-center justify-center bg-muted">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       }

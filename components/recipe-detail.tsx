@@ -39,7 +39,7 @@ const STATUS_CONFIG: Record<PantryMatchStatus, { label: string; color: string; i
   available: { label: "In pantry", color: "bg-green-100 text-green-800 border-green-200", icon: Check },
   expiring: { label: "Expiring soon", color: "bg-amber-100 text-amber-800 border-amber-200", icon: AlertTriangle },
   expired: { label: "Expired", color: "bg-red-100 text-red-800 border-red-200", icon: X },
-  missing: { label: "Missing", color: "bg-gray-100 text-gray-600 border-gray-200", icon: ShoppingCart },
+  missing: { label: "Missing", color: "bg-muted text-muted-foreground border-border", icon: ShoppingCart },
 }
 
 interface RecipeDetailProps {
