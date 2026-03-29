@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -35,6 +35,7 @@ import { getRecipes, recalculateRecipeScores, getPendingImports, dismissFailedIm
 import { useToast } from "@/hooks/use-toast"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
+import Fuse from "fuse.js"
 import type { Recipe, ParsedRecipe, PantryMatch } from "@/lib/types"
 import { useRecipeImportCount } from "@/contexts/recipe-import-context"
 
@@ -359,15 +360,23 @@ export function RecipesList() {
     if (fromSheet) setShowImport(true)
   }
 
-  const sortedRecipes = sortRecipes(recipes, sort).filter((r) => {
-    if (!search.trim()) return true
-    const q = search.toLowerCase()
-    return (
-      r.title.toLowerCase().includes(q) ||
-      (r.notes?.toLowerCase().includes(q) ?? false) ||
-      (r.ingredientNames?.some((name) => name.toLowerCase().includes(q)) ?? false)
-    )
-  })
+  const recipeFuse = useMemo(
+    () =>
+      new Fuse(recipes, {
+        keys: ["title", "notes", "ingredientNames"],
+        threshold: 0.3,
+        includeScore: true,
+      }),
+    [recipes],
+  )
+
+  const sortedRecipes = useMemo(() => {
+    const sorted = sortRecipes(recipes, sort)
+    if (!search.trim()) return sorted
+    const fuseResults = recipeFuse.search(search)
+    const matchedIds = new Set(fuseResults.map((r) => r.item.id))
+    return sorted.filter((r) => matchedIds.has(r.id))
+  }, [recipes, sort, search, recipeFuse])
 
   const anyStale = recipes.some((r) => isScoreStale(r.pantryLastChecked))
 

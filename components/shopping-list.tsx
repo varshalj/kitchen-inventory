@@ -412,7 +412,11 @@ export function ShoppingList() {
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
-      result = result.filter((i) => i.name.toLowerCase().includes(q))
+      result = result.filter((i) =>
+        i.name.toLowerCase().includes(q) ||
+        (i.brand?.toLowerCase().includes(q) ?? false) ||
+        (i.notes?.toLowerCase().includes(q) ?? false)
+      )
     }
 
     if (sortBy === "name") {

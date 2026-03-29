@@ -223,7 +223,7 @@ useEffect(() => {
   // Rebuild Fuse index whenever items change so search never returns stale results
   useEffect(() => {
     fuseRef.current = new Fuse(items, {
-      keys: ["name", "category", "location"],
+      keys: ["name", "category", "location", "brand", "notes", "orderedFrom", "reviewTags"],
       threshold: 0.4,
       includeScore: true,
     })
