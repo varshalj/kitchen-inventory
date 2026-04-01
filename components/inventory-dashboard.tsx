@@ -1185,6 +1185,7 @@ useEffect(() => {
                         <div className="min-w-0 flex-1">
                           <h3 className="font-medium line-clamp-2 leading-snug">{item.name}</h3>
                           <p className="text-sm text-muted-foreground mt-0.5">
+                            {item.brand && <span className="font-medium">{item.brand} · </span>}
                             {item.location}
                             {(item.quantity ?? 0) >= 1 && (
                               <>

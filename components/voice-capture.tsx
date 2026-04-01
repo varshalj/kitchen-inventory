@@ -34,6 +34,16 @@ const MAX_DURATION_MS = 30000
 
 import { CATEGORIES, DEFAULT_EXPIRY_DAYS, defaultExpiryDate } from "@/lib/constants"
 
+function normaliseQuantity(qty: number, unit: string): { quantity: number; unit: string } {
+  if (unit === "kg" && qty > 0 && qty < 1) {
+    return { quantity: Math.round(qty * 1000), unit: "g" }
+  }
+  if (unit === "l" && qty > 0 && qty < 1) {
+    return { quantity: Math.round(qty * 1000), unit: "ml" }
+  }
+  return { quantity: parseFloat(qty.toFixed(2)), unit }
+}
+
 export interface VoiceParsedItem {
   name: string
   quantity: number
@@ -42,6 +52,7 @@ export interface VoiceParsedItem {
   expiryDate?: string
   brand?: string
   price?: string
+  location?: string
   included: boolean
   fuzzyMatchedName?: string
 }
@@ -152,14 +163,16 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
         const name = item.name || "Unknown"
         const fuzzyMatch = findFuzzyMatch(name, existingNamesRef.current)
         const category = item.category || "Other"
+        const { quantity, unit } = normaliseQuantity(item.quantity || 1, item.unit || "pcs")
         return {
           name,
-          quantity: item.quantity || 1,
-          unit: item.unit || "pcs",
+          quantity,
+          unit,
           category,
           expiryDate: target === "inventory" ? defaultExpiryDate(category) : undefined,
           brand: "",
           price: "",
+          location: globalLocation,
           included: fuzzyMatch === null,
           fuzzyMatchedName: fuzzyMatch ?? undefined,
         }
@@ -507,6 +520,23 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
                                 disabled={!item.included}
                               />
                             </div>
+                          )}
+
+                          {isInventory && (
+                            <Select
+                              value={item.location || globalLocation}
+                              onValueChange={(v) => updateItem(index, "location", v)}
+                              disabled={!item.included}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Storage location" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(settings?.storageLocations || ["Refrigerator", "Freezer", "Cabinet", "Counter"]).map((loc) => (
+                                  <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           )}
 
                           <QuantityWithUnits

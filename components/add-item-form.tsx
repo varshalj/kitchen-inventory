@@ -28,6 +28,16 @@ import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 import { VoiceCapture, type VoiceParsedItem } from "@/components/voice-capture"
 import { CATEGORIES } from "@/lib/constants"
 
+function normaliseQuantity(qty: number, unit: string): { quantity: number; unit: string } {
+  if (unit === "kg" && qty > 0 && qty < 1) {
+    return { quantity: Math.round(qty * 1000), unit: "g" }
+  }
+  if (unit === "l" && qty > 0 && qty < 1) {
+    return { quantity: Math.round(qty * 1000), unit: "ml" }
+  }
+  return { quantity: parseFloat(qty.toFixed(2)), unit }
+}
+
 type DetectedType = "receipt" | "food" | "package" | null
 type ProposalResponse = {
   proposals: Array<{
@@ -137,6 +147,7 @@ export function AddItemForm() {
       unit: string
       confidence: number
       price?: string
+      location?: string
       included: boolean
     }>
   >([])
@@ -239,12 +250,22 @@ export function AddItemForm() {
 
           const payload = (await response.json()) as ProposalResponse
           setExtractedItems(
-            payload.proposals.map((proposal) => ({
-              ...proposal,
-              unit: (proposal as any).unit || "pcs",
-              confidence: payload.confidence,
-              included: true,
-            }))
+            payload.proposals.map((proposal) => {
+              const rawPrice = (proposal as any).price ?? ""
+              const cleanPrice = typeof rawPrice === "string" ? rawPrice.replace(/^[^\d.]+/, "") : String(rawPrice)
+              const rawUnit = (proposal as any).unit || "pcs"
+              const rawQty = typeof (proposal as any).quantity === "number" ? (proposal as any).quantity : 1
+              const { quantity, unit } = normaliseQuantity(rawQty, rawUnit)
+              return {
+                ...proposal,
+                price: cleanPrice,
+                quantity,
+                unit,
+                confidence: payload.confidence,
+                location: formData.location,
+                included: true,
+              }
+            })
           )
           setReviewSummary({
             confidence: payload.confidence,
@@ -332,12 +353,22 @@ export function AddItemForm() {
 
         const payload = (await response.json()) as ProposalResponse
         setExtractedItems(
-          payload.proposals.map((proposal) => ({
-            ...proposal,
-            unit: (proposal as any).unit || "pcs",
-            confidence: payload.confidence,
-            included: true,
-          }))
+          payload.proposals.map((proposal) => {
+            const rawPrice = (proposal as any).price ?? ""
+            const cleanPrice = typeof rawPrice === "string" ? rawPrice.replace(/^[^\d.]+/, "") : String(rawPrice)
+            const rawUnit = (proposal as any).unit || "pcs"
+            const rawQty = typeof (proposal as any).quantity === "number" ? (proposal as any).quantity : 1
+            const { quantity, unit } = normaliseQuantity(rawQty, rawUnit)
+            return {
+              ...proposal,
+              price: cleanPrice,
+              quantity,
+              unit,
+              confidence: payload.confidence,
+              location: formData.location,
+              included: true,
+            }
+          })
         )
         setReviewSummary({
           confidence: payload.confidence,
@@ -411,7 +442,7 @@ export function AddItemForm() {
             name: item.name,
             category: item.category,
             expiryDate: new Date(item.expiryDate).toISOString(),
-            location: formData.location || "Refrigerator",
+            location: item.location || formData.location || "Refrigerator",
             quantity: item.quantity,
             unit: item.unit || "pcs",
             addedOn: new Date().toISOString(),
@@ -445,7 +476,7 @@ export function AddItemForm() {
         name: item.name,
         category: item.category || "Other",
         expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString() : new Date(Date.now() + 30 * 86400000).toISOString(),
-        location: globals?.location || "Refrigerator",
+        location: item.location || globals?.location || "Refrigerator",
         quantity: item.quantity,
         unit: item.unit || "pcs",
         brand: item.brand || "",
@@ -539,6 +570,7 @@ export function AddItemForm() {
           confidence: 0,
           price: "",
           brand: "",
+          location: formData.location,
         },
       ])
     }
@@ -991,6 +1023,22 @@ export function AddItemForm() {
                                       />
                                     </div>
 
+                                    {/* Row 2b: location */}
+                                    <Select
+                                      value={item.location || formData.location}
+                                      onValueChange={(value) => updateExtractedItem(index, "location", value)}
+                                      disabled={!item.included}
+                                    >
+                                      <SelectTrigger className="h-9 text-sm">
+                                        <SelectValue placeholder="Storage location" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {(settings?.storageLocations || ["Refrigerator", "Freezer", "Cabinet", "Counter"]).map((loc) => (
+                                          <SelectItem key={loc} value={loc}>{loc}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+
                                     {/* Row 3: quantity + unit */}
                                     <QuantityWithUnits
                                       value={item.quantity}
@@ -1064,7 +1112,13 @@ export function AddItemForm() {
                               <button
                                 type="button"
                                 className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                                onClick={() => { setScanAddingItem(true); setScanNewItemName("") }}
+                                onClick={() => {
+                                  setScanAddingItem(true)
+                                  setScanNewItemName("")
+                                  setTimeout(() => {
+                                    formContainerRef.current?.scrollTo({ top: formContainerRef.current.scrollHeight, behavior: "smooth" })
+                                  }, 50)
+                                }}
                               >
                                 <Plus className="h-4 w-4" />
                                 Add item

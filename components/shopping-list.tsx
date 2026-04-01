@@ -291,6 +291,7 @@ export function ShoppingList() {
 
         toast({
           title: `${item.name} added to inventory`,
+          duration: 5000,
           description: (
             <div>
               <span>Remember to set the expiry date in your dashboard.</span>

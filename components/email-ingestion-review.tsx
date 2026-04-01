@@ -29,6 +29,11 @@ import { cn } from "@/lib/utils"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import type { EmailIngestionRow } from "@/lib/server/repositories/email-ingestion-repo"
 
+function formatPrice(price: string | undefined): string {
+  const n = parseFloat(price ?? "")
+  return isNaN(n) ? (price ?? "") : n.toFixed(2)
+}
+
 interface ReviewItem {
   included: boolean
   name: string
@@ -168,7 +173,7 @@ export function EmailIngestionReview({
             <SheetDescription>
               {[
                 ingestion.order_date && `Ordered ${new Date(ingestion.order_date).toLocaleDateString()}`,
-                ingestion.order_total && `Total: ${ingestion.order_total}`,
+                ingestion.order_total && `Total: ${formatPrice(ingestion.order_total)}`,
                 ingestion.order_id && `#${ingestion.order_id}`,
               ]
                 .filter(Boolean)
@@ -255,7 +260,7 @@ export function EmailIngestionReview({
                       }}
                     />
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
                       <Input
                         type="date"
                         value={item.expiryDate}

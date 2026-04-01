@@ -17,11 +17,14 @@ import {
 import { UNIT_GROUPS, ALL_UNITS } from "@/lib/constants"
 export { UNIT_GROUPS, ALL_UNITS }
 
-/** Format a quantity + unit pair for display, e.g. "500g" or "2 pcs" */
+/** Format a quantity + unit pair for display, e.g. "500g", "2 pcs", or "1 pc" */
 export function formatQuantityUnit(quantity?: number, unit?: string): string {
   const qty = quantity ?? 1
   const u = unit ?? "pcs"
-  return u === "pcs" ? `×${qty}` : `${qty}${u}`
+  if (u === "pcs") {
+    return qty === 1 ? "1 pc" : `${qty} pcs`
+  }
+  return `${qty}${u}`
 }
 
 interface QuantityWithUnitsProps {

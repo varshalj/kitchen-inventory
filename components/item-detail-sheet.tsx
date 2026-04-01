@@ -16,6 +16,11 @@ import { CURRENCIES } from "@/components/currency-input"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import type { InventoryItem } from "@/lib/types"
 
+function formatPrice(price: string | undefined): string {
+  const n = parseFloat(price ?? "")
+  return isNaN(n) ? (price ?? "") : n.toFixed(2)
+}
+
 interface ItemDetailSheetProps {
   item: InventoryItem | null
   open: boolean
@@ -49,8 +54,7 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
                 {item.name}
               </SheetTitle>
               <SheetDescription>
-                {item.category}
-                {item.quantity && item.quantity > 1 && ` \u00b7 Qty: ${item.quantity}`}
+                {item.location}
               </SheetDescription>
             </div>
             <Badge
@@ -83,14 +87,14 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
               value={formatQuantityUnit(item.quantity, item.unit)}
             />
             {item.price && (
-              <DetailRow icon={<DollarSign className="h-4 w-4" />} label="Price" value={`${currencySymbol}${item.price}`} />
+              <DetailRow icon={<DollarSign className="h-4 w-4" />} label="Price" value={`${currencySymbol}${formatPrice(item.price)}`} />
             )}
             {item.orderedFrom && (
               <DetailRow icon={<Store className="h-4 w-4" />} label="Ordered From" value={item.orderedFrom} />
             )}
           </div>
 
-          {item.rating && item.rating > 0 && (
+          {(item.rating ?? 0) > 0 && (
             <div className="flex items-center gap-2 pt-1">
               <span className="text-sm text-muted-foreground">Rating:</span>
               <StarRating value={item.rating} size="sm" readOnly />
