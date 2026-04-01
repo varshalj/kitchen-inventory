@@ -97,7 +97,7 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
           {(item.rating ?? 0) > 0 && (
             <div className="flex items-center gap-2 pt-1">
               <span className="text-sm text-muted-foreground">Rating:</span>
-              <StarRating value={item.rating} size="sm" readOnly />
+              <StarRating value={item.rating ?? 0} size="sm" readOnly />
             </div>
           )}
 
