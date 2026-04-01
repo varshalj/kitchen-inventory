@@ -204,7 +204,7 @@ export async function updateFullRecipe(id: string, data: any): Promise<any> {
 }
 
 export async function deleteRecipe(id: string): Promise<void> {
-  await fetchWithAuth(`/api/recipes/${id}`, { method: "DELETE" })
+  await parseResponse(await fetchWithAuth(`/api/recipes/${id}`, { method: "DELETE" }))
 }
 
 export async function fetchPendingShare(shareId: string): Promise<string | null> {

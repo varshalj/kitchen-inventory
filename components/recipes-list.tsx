@@ -32,6 +32,7 @@ import { LoadingTip } from "@/components/loading-tip"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
 import { getRecipes, recalculateRecipeScores, getPendingImports, dismissFailedImport, saveRecipeBookmark } from "@/lib/client/api"
+import { KITCHEN_RECIPES_CHANGED, type KitchenRecipesChangedDetail } from "@/lib/recipes-events"
 import { useToast } from "@/hooks/use-toast"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
@@ -261,6 +262,18 @@ export function RecipesList() {
     loadRecipes()
     refreshPendingImports()
   }, [loadRecipes, refreshPendingImports])
+
+  useEffect(() => {
+    const onRecipesChanged = (e: Event) => {
+      const detail = (e as CustomEvent<KitchenRecipesChangedDetail>).detail
+      if (detail?.removedId) {
+        setRecipes((prev) => prev.filter((r) => r.id !== detail.removedId))
+      }
+      void loadRecipes()
+    }
+    window.addEventListener(KITCHEN_RECIPES_CHANGED, onRecipesChanged)
+    return () => window.removeEventListener(KITCHEN_RECIPES_CHANGED, onRecipesChanged)
+  }, [loadRecipes])
 
   // Keep nav dot in sync with active imports + ready banners
   useEffect(() => {

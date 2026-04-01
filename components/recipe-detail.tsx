@@ -33,6 +33,7 @@ import { useToast } from "@/hooks/use-toast"
 import { getRecipeById, addToShoppingList, deleteRecipe } from "@/lib/client/api"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn } from "@/lib/utils"
+import { KITCHEN_RECIPES_CHANGED, type KitchenRecipesChangedDetail } from "@/lib/recipes-events"
 import type { Recipe, RecipeIngredient, ParsedRecipe, PantryMatch, PantryMatchStatus } from "@/lib/types"
 
 const STATUS_CONFIG: Record<PantryMatchStatus, { label: string; color: string; icon: typeof Check }> = {
@@ -169,8 +170,9 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
   const [selectedGroceryItems, setSelectedGroceryItems] = useState<Set<number>>(new Set())
   const [isEditing, setIsEditing] = useState(false)
 
-  // Delete state
+  // Delete: banner during countdown; spinner only while DELETE request runs
   const [isDeleting, setIsDeleting] = useState(false)
+  const [pendingRemoval, setPendingRemoval] = useState(false)
 
   const loadRecipe = useCallback(async () => {
     try {
@@ -271,8 +273,8 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
   }
 
   const handleDelete = () => {
-    if (!recipe) return
-    setIsDeleting(true)
+    if (!recipe || pendingRemoval || isDeleting) return
+    setPendingRemoval(true)
 
     let undone = false
 
@@ -283,10 +285,10 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
     )
 
     toast({
-      title: "Recipe deleted",
+      title: "Removing recipe…",
       description: (
         <>
-          Tap Undo to restore it
+          It will be removed in a few seconds. Tap Undo to keep it. Leaving this page cancels removal.
           {progressBar}
         </>
       ),
@@ -297,7 +299,7 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
           onClick={() => {
             undone = true
             if (undoTimerRef.current) clearTimeout(undoTimerRef.current)
-            setIsDeleting(false)
+            setPendingRemoval(false)
             toast({ title: "Delete cancelled" })
           }}
         >
@@ -308,16 +310,25 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
 
     undoTimerRef.current = setTimeout(async () => {
       if (undone) return
+      setIsDeleting(true)
       try {
         await deleteRecipe(id)
+        window.dispatchEvent(
+          new CustomEvent<KitchenRecipesChangedDetail>(KITCHEN_RECIPES_CHANGED, {
+            detail: { removedId: id },
+          }),
+        )
+        router.refresh()
         router.push("/recipes")
       } catch (err) {
-        setIsDeleting(false)
+        setPendingRemoval(false)
         toast({
           title: "Failed to delete",
           description: err instanceof Error ? err.message : "Please try again.",
           variant: "destructive",
         })
+      } finally {
+        setIsDeleting(false)
       }
     }, 5000)
   }
@@ -413,6 +424,12 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
 
   return (
     <MainLayout>
+      {pendingRemoval && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+          Pending removal — use <span className="font-semibold">Undo</span> in the toast to keep this recipe.
+          Leaving this page cancels removal.
+        </div>
+      )}
       {/* Back + action buttons row */}
       <div className="flex items-center justify-between mb-4">
         <Link href="/recipes">
@@ -445,7 +462,7 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
             size="icon"
             className="h-9 w-9 text-destructive hover:text-destructive"
             onClick={handleDelete}
-            disabled={isDeleting}
+            disabled={isDeleting || pendingRemoval}
             isLoading={isDeleting}
             title="Delete recipe"
           >
