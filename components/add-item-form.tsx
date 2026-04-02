@@ -208,6 +208,20 @@ export function AddItemForm() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const firstStorageLocation = settings?.storageLocations?.[0] ?? "Refrigerator"
+
+  /** Per-item wins; else global default; else first saved location; else Refrigerator. */
+  const resolveScanItemLocation = useCallback(
+    (item: { location?: string }) => {
+      const explicit = item.location?.trim()
+      if (explicit) return explicit
+      const global = formData.location?.trim()
+      if (global) return global
+      return settings?.storageLocations?.[0] ?? "Refrigerator"
+    },
+    [formData.location, settings?.storageLocations],
+  )
+
   const analyzeSteps = [
     "Detecting image type...",
     "Identifying items...",
@@ -262,7 +276,6 @@ export function AddItemForm() {
                 quantity,
                 unit,
                 confidence: payload.confidence,
-                location: formData.location,
                 included: true,
               }
             })
@@ -365,7 +378,6 @@ export function AddItemForm() {
               quantity,
               unit,
               confidence: payload.confidence,
-              location: formData.location,
               included: true,
             }
           })
@@ -442,7 +454,7 @@ export function AddItemForm() {
             name: item.name,
             category: item.category,
             expiryDate: new Date(item.expiryDate).toISOString(),
-            location: item.location || formData.location || "Refrigerator",
+            location: resolveScanItemLocation(item),
             quantity: item.quantity,
             unit: item.unit || "pcs",
             addedOn: new Date().toISOString(),
@@ -570,7 +582,6 @@ export function AddItemForm() {
           confidence: 0,
           price: "",
           brand: "",
-          location: formData.location,
         },
       ])
     }
@@ -704,8 +715,8 @@ export function AddItemForm() {
   const bulkApplyEnabled = true
 
   return (
-    <MainLayout className="pb-0">
-      <div className="flex items-center mb-6">
+    <MainLayout className="pb-0 min-h-[100dvh] flex flex-col">
+      <div className="flex items-center mb-6 shrink-0">
         <Button variant="ghost" size="icon" className="mr-2" asChild>
           <Link href="/dashboard">
             <ArrowLeft className="h-4 w-4" />
@@ -715,7 +726,7 @@ export function AddItemForm() {
         <h1 className="text-2xl font-bold">Add Item</h1>
       </div>
 
-      <Tabs defaultValue="scan" value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-[calc(100vh-6rem)] overflow-hidden">
+      <Tabs defaultValue="scan" value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0 overflow-hidden">
         <TabsList className="grid grid-cols-3 mb-6 shrink-0">
           <TabsTrigger value="scan" className="gap-1.5">
             <ScanLine className="h-4 w-4" />
@@ -731,8 +742,13 @@ export function AddItemForm() {
           </TabsTrigger>
         </TabsList>
 
-        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-          <div ref={formContainerRef} className="flex-1 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0">
+          <div
+            ref={formContainerRef}
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
+          >
+            <div className="flex min-h-full flex-col">
+              <div className="min-h-0 flex-1">
             {/* Unified Scan Tab */}
             <TabsContent value="scan">
               {/* Hidden inputs always mounted so refs stay non-null across all states */}
@@ -1025,7 +1041,7 @@ export function AddItemForm() {
 
                                     {/* Row 2b: location */}
                                     <Select
-                                      value={item.location || formData.location}
+                                      value={item.location || formData.location || firstStorageLocation}
                                       onValueChange={(value) => updateExtractedItem(index, "location", value)}
                                       disabled={!item.included}
                                     >
@@ -1127,9 +1143,12 @@ export function AddItemForm() {
 
                             <div className="space-y-4">
                               <div className="space-y-2">
-                                <Label htmlFor="scan-location">Storage Location</Label>
+                                <Label htmlFor="scan-location">Default storage location</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  Applies to items that don&apos;t use a per-item location above. Changing this does not overwrite per-item choices.
+                                </p>
                                 <Select
-                                  value={formData.location}
+                                  value={formData.location || firstStorageLocation}
                                   onValueChange={(value) => handleSelectChange("location", value)}
                                   required
                                 >
@@ -1137,7 +1156,7 @@ export function AddItemForm() {
                                     <SelectValue placeholder="Select location" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {(settings?.storageLocations || []).map((loc) => (
+                                    {(settings?.storageLocations || ["Refrigerator", "Freezer", "Cabinet", "Counter"]).map((loc) => (
                                       <SelectItem key={loc} value={loc}>{loc}</SelectItem>
                                     ))}
                                   </SelectContent>
@@ -1402,26 +1421,28 @@ export function AddItemForm() {
                 )}
               </div>
             </TabsContent>
-          </div>
+              </div>
 
-          <div className="shrink-0 bg-background border-t px-4 pt-4 pb-6">
-            <div className="max-w-md mx-auto">
-              <LoadingButton
-                type="submit"
-                className="w-full"
-                isLoading={isSaving}
-                disabled={
-                  (activeTab === "scan" &&
-                    (isAnalyzing || (!imagePreview && imagePreviews.length === 0) || includedCount === 0)) ||
-                  (activeTab === "manual" &&
-                    (!formData.name || !formData.category || !formData.expiryDate || !formData.location)) ||
-                  activeTab === "suggested"
-                }
-              >
-                {activeTab === "scan"
-                  ? `Save${includedCount > 0 ? ` (${includedCount} item${includedCount > 1 ? "s" : ""})` : ""}`
-                  : "Save Item"}
-              </LoadingButton>
+              <div className="sticky bottom-0 z-20 mt-auto border-t border-border bg-background/95 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+                <div className="mx-auto max-w-md">
+                  <LoadingButton
+                    type="submit"
+                    className="w-full"
+                    isLoading={isSaving}
+                    disabled={
+                      (activeTab === "scan" &&
+                        (isAnalyzing || (!imagePreview && imagePreviews.length === 0) || includedCount === 0)) ||
+                      (activeTab === "manual" &&
+                        (!formData.name || !formData.category || !formData.expiryDate || !formData.location)) ||
+                      activeTab === "suggested"
+                    }
+                  >
+                    {activeTab === "scan"
+                      ? `Save${includedCount > 0 ? ` (${includedCount} item${includedCount > 1 ? "s" : ""})` : ""}`
+                      : "Save Item"}
+                  </LoadingButton>
+                </div>
+              </div>
             </div>
           </div>
         </form>
