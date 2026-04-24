@@ -19,10 +19,11 @@ function canonicalizeUrl(raw: string): string {
 function detectPlatform(url: string): string {
   try {
     const host = new URL(url).hostname.replace("www.", "")
-    if (host.includes("youtube.com") || host.includes("youtu.be")) return "youtube"
-    if (host.includes("instagram.com")) return "instagram"
-    if (host.includes("twitter.com") || host.includes("x.com")) return "twitter"
-    if (host.includes("tiktok.com")) return "tiktok"
+    const is = (domain: string) => host === domain || host.endsWith(`.${domain}`)
+    if (is("youtube.com") || is("youtu.be")) return "youtube"
+    if (is("instagram.com")) return "instagram"
+    if (is("twitter.com") || is("x.com")) return "twitter"
+    if (is("tiktok.com")) return "tiktok"
     return "blog"
   } catch {
     return "unknown"

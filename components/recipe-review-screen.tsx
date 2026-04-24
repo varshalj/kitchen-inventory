@@ -571,7 +571,8 @@ export function RecipeReviewScreen({
           />
           {editableSourceUrl && (() => {
             try {
-              new URL(editableSourceUrl)
+              const urlObj = new URL(editableSourceUrl)
+              if (!["http:", "https:"].includes(urlObj.protocol)) return null
               return (
                 <a
                   href={editableSourceUrl}
