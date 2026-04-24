@@ -887,7 +887,12 @@ export function ShoppingList() {
 
       {/* Copy for Instamart sheet */}
       <Sheet open={showInstamartSheet} onOpenChange={setShowInstamartSheet}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh]">
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl max-h-[70vh]"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <SheetHeader className="mb-3">
             <SheetTitle className="flex items-center gap-2">
               <Copy className="h-5 w-5" />
