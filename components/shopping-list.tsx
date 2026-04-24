@@ -920,7 +920,12 @@ export function ShoppingList() {
                   onChange={() => toggleInstamartItem(item.id)}
                   className="h-5 w-5 rounded border-2 border-muted-foreground accent-primary shrink-0"
                 />
-                <span className="text-sm">{buildSearchQuery(item)}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm">{buildSearchQuery(item)}</p>
+                  {item.orderedFrom?.toLowerCase().includes("swiggy") && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Previously from {item.orderedFrom}</p>
+                  )}
+                </div>
               </label>
             ))}
           </div>
