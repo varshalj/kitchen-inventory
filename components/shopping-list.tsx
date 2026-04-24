@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic, Package } from "lucide-react"
+import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic, Package, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -61,6 +61,8 @@ export function ShoppingList() {
   const [sortBy, setSortBy] = useState<SortBy>("recent")
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showInstamartSheet, setShowInstamartSheet] = useState(false)
+  const [selectedInstamartItems, setSelectedInstamartItems] = useState<Set<string>>(new Set())
   const suggestionsRef = useRef<HTMLDivElement>(null)
   const pendingDeletes = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
@@ -432,6 +434,40 @@ export function ShoppingList() {
 
   const displayedItems = applySearchAndSort(showCompleted ? items : activeItems)
 
+  const openInstamartSheet = () => {
+    setSelectedInstamartItems(new Set(activeItems.map((i) => i.id)))
+    setShowInstamartSheet(true)
+  }
+
+  const toggleInstamartItem = (id: string) => {
+    setSelectedInstamartItems((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleAllInstamartItems = () => {
+    if (selectedInstamartItems.size === activeItems.length) {
+      setSelectedInstamartItems(new Set())
+    } else {
+      setSelectedInstamartItems(new Set(activeItems.map((i) => i.id)))
+    }
+  }
+
+  const handleCopyForInstamart = async () => {
+    const selected = activeItems.filter((i) => selectedInstamartItems.has(i.id))
+    const text = selected.map((i) => i.name).join(", ")
+    await navigator.clipboard.writeText(text)
+    setShowInstamartSheet(false)
+    window.open("https://www.swiggy.com/instamart", "_blank", "noopener,noreferrer")
+    toast({
+      title: "List copied!",
+      description: "Tap 'Have a shopping list?' in Instamart and paste.",
+    })
+  }
+
   return (
     <MainLayout>
       <div className="flex items-center justify-between mb-6">
@@ -575,9 +611,22 @@ export function ShoppingList() {
       </div>
 
       <div className="mb-24">
-        <h2 className="text-lg font-medium mb-3">
-          {showCompleted ? "All Items" : "Items to Buy"} ({displayedItems.length})
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-medium">
+            {showCompleted ? "All Items" : "Items to Buy"} ({displayedItems.length})
+          </h2>
+          {!showCompleted && activeItems.length > 0 && !isLoading && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs"
+              onClick={openInstamartSheet}
+            >
+              <Copy className="h-3 w-3" />
+              Copy for Instamart
+            </Button>
+          )}
+        </div>
 
         {isLoading ? (
           <div className="space-y-3">
@@ -832,6 +881,61 @@ export function ShoppingList() {
               )}
             </div>
           )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Copy for Instamart sheet */}
+      <Sheet open={showInstamartSheet} onOpenChange={setShowInstamartSheet}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh]">
+          <SheetHeader className="mb-3">
+            <SheetTitle className="flex items-center gap-2">
+              <Copy className="h-5 w-5" />
+              Copy list for Instamart
+            </SheetTitle>
+          </SheetHeader>
+          <p className="text-sm text-muted-foreground mb-3 px-1">
+            Select items, copy, then paste into Swiggy&apos;s &ldquo;Have a shopping list?&rdquo; feature.
+          </p>
+          <div className="flex items-center justify-between mb-3 px-1">
+            <p className="text-sm text-muted-foreground">
+              {selectedInstamartItems.size} of {activeItems.length} selected
+            </p>
+            <button
+              onClick={toggleAllInstamartItems}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              {selectedInstamartItems.size === activeItems.length ? "Deselect all" : "Select all"}
+            </button>
+          </div>
+          <div className="overflow-y-auto max-h-[40vh] -mx-1 px-1 space-y-1">
+            {activeItems.map((item) => (
+              <label
+                key={item.id}
+                className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedInstamartItems.has(item.id)}
+                  onChange={() => toggleInstamartItem(item.id)}
+                  className="h-5 w-5 rounded border-2 border-muted-foreground accent-primary shrink-0"
+                />
+                <span className="text-sm">{item.name}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-3 mt-4 pb-2">
+            <Button variant="outline" className="flex-1" onClick={() => setShowInstamartSheet(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleCopyForInstamart}
+              disabled={selectedInstamartItems.size === 0}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy {selectedInstamartItems.size > 0 ? `${selectedInstamartItems.size} items` : ""}
+            </Button>
+          </div>
         </SheetContent>
       </Sheet>
 
