@@ -24,6 +24,7 @@ import { AnimatedItem } from "@/components/ui/animated-list"
 import { LoadingTip } from "@/components/loading-tip"
 import { QuantityWithUnits, formatQuantityUnit } from "@/components/quantity-with-units"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
+import { buildSearchQuery } from "@/lib/grocery-platforms"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import {
@@ -458,7 +459,7 @@ export function ShoppingList() {
 
   const handleCopyForInstamart = async () => {
     const selected = activeItems.filter((i) => selectedInstamartItems.has(i.id))
-    const text = selected.map((i) => i.name).join(", ")
+    const text = selected.map((i) => buildSearchQuery(i)).join(", ")
     await navigator.clipboard.writeText(text)
     setShowInstamartSheet(false)
     window.open("https://www.swiggy.com/instamart", "_blank", "noopener,noreferrer")
@@ -919,7 +920,7 @@ export function ShoppingList() {
                   onChange={() => toggleInstamartItem(item.id)}
                   className="h-5 w-5 rounded border-2 border-muted-foreground accent-primary shrink-0"
                 />
-                <span className="text-sm">{item.name}</span>
+                <span className="text-sm">{buildSearchQuery(item)}</span>
               </label>
             ))}
           </div>
