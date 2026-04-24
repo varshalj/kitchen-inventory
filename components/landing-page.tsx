@@ -244,6 +244,22 @@ export function LandingPage() {
       badge: null,
     },
     {
+      icon: <Camera className="h-10 w-10 text-primary mb-4" />,
+      title: "Scan groceries with your camera",
+      description:
+        "Point your camera at a receipt or a bag of groceries. AI extracts the items and adds them to your inventory instantly — review and confirm before saving.",
+      mockup: <ScanMockup />,
+      badge: null,
+    },
+    {
+      icon: <Mail className="h-10 w-10 text-primary mb-4" />,
+      title: "Auto-fill from delivery orders",
+      description:
+        "Forward your grocery order emails and items are automatically added to your inventory. Works with Swiggy, Blinkit, Zepto, BigBasket, Amazon, and more.",
+      mockup: <EmailMockup />,
+      badge: null,
+    },
+    {
       icon: <ChefHat className="h-10 w-10 text-primary mb-4" />,
       title: "Import recipes from anywhere",
       description:
@@ -255,16 +271,8 @@ export function LandingPage() {
       icon: <ShoppingCart className="h-10 w-10 text-primary mb-4" />,
       title: "Smart shopping list",
       description:
-        "Add items by voice, manually, or straight from a recipe. Tap Buy to order from Swiggy, Blinkit, Zepto, BigBasket, Flipkart Minutes and more — without leaving the app.",
+        "Add items by voice, manually, or straight from a recipe. Tap Buy to jump straight to Swiggy, Blinkit, Zepto, BigBasket, Flipkart Minutes or more — the right items, pre-searched.",
       mockup: <ShoppingMockup />,
-      badge: null,
-    },
-    {
-      icon: <Camera className="h-10 w-10 text-primary mb-4" />,
-      title: "Scan groceries with your camera",
-      description:
-        "Point your camera at a receipt or a bag of groceries. AI extracts the items and adds them to your inventory instantly — review and confirm before saving.",
-      mockup: <ScanMockup />,
       badge: null,
     },
     {
@@ -273,14 +281,6 @@ export function LandingPage() {
       description:
         "Connect ChatGPT, Claude, or Cursor to your kitchen data. Ask what's expiring, get meal suggestions, or check your shopping list — all from your favourite AI assistant.",
       mockup: <AIMockup />,
-      badge: null,
-    },
-    {
-      icon: <Mail className="h-10 w-10 text-primary mb-4" />,
-      title: "Auto-fill from delivery orders",
-      description:
-        "Forward your grocery order emails and items are automatically added to your inventory. Works with Swiggy, Blinkit, Zepto, BigBasket, Amazon, and more.",
-      mockup: <EmailMockup />,
       badge: null,
     },
   ]
@@ -312,10 +312,10 @@ export function LandingPage() {
               <div className="flex flex-col justify-center space-y-4">
                 <div className="space-y-3">
                   <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
-                    Never waste food again. Track, cook, and shop smarter.
+                    Your kitchen, organised. Cook what you have. Restock what you don&apos;t.
                   </h1>
                   <p className="text-muted-foreground md:text-xl leading-relaxed">
-                    Track your kitchen inventory, import recipes matched to what you have, and shop from your phone with one tap.
+                    Track expiry dates, match recipes from YouTube or blogs against your pantry, and turn what&apos;s running low into a one-tap grocery order.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 min-[400px]:flex-row">
@@ -438,7 +438,7 @@ export function LandingPage() {
                 Ready to take control of your kitchen?
               </h2>
               <p className="max-w-[85%] text-primary-foreground/80 md:text-xl/relaxed">
-                Join home cooks who've cut their food waste and cook more with what they already have.
+                Forward a Blinkit email — 12 items logged with expiry in seconds. Tonight&apos;s dinner? Already matched to what&apos;s on your shelf.
               </p>
               <Button
                 size="lg"
@@ -479,7 +479,7 @@ export function LandingPage() {
             © {new Date().getFullYear()} Kitchen Inventory. All rights reserved.
           </div>
           <div className="mt-2 text-center text-xs text-muted-foreground">
-            Vibe coded with AI tools and crafted with love by{" "}
+            Built by{" "}
             <a
               href="mailto:varshaljain@gmail.com"
               className="underline underline-offset-2 hover:text-foreground transition-colors"
