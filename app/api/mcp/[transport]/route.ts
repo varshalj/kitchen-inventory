@@ -5,6 +5,19 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 const PROTOCOL_VERSION = "2024-11-05"
 const RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource"
 
+// Reusable JSON-Schema fragments for outputSchema declarations.
+const SHOPPING_ITEM_OUTPUT = {
+  type: "object",
+  required: ["id", "name", "quantity"],
+  properties: {
+    id: { type: "string" },
+    name: { type: "string" },
+    quantity: { type: "number" },
+    unit: { type: "string" },
+    completed: { type: "boolean" },
+  },
+}
+
 // Plain JSON Schema tool definitions — no Zod anywhere, zero bundling risk.
 const TOOL_DEFINITIONS = [
   {
@@ -120,6 +133,48 @@ const TOOL_DEFINITIONS = [
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      description: "Either an executed result (ok:true) or a dry-run preview (dry_run:true). Errors are returned with isError:true and described in the content text.",
+      oneOf: [
+        {
+          title: "Executed",
+          required: ["ok", "merged", "item"],
+          properties: {
+            ok: { type: "boolean", enum: [true] },
+            merged: { type: "boolean", description: "True iff the call added quantity to a pre-existing pending row." },
+            previous_quantity: { type: "number", description: "Quantity before merge. Present only when merged:true." },
+            item: SHOPPING_ITEM_OUTPUT,
+          },
+        },
+        {
+          title: "DryRun",
+          required: ["dry_run", "tool", "would", "next_step"],
+          properties: {
+            dry_run: { type: "boolean", enum: [true] },
+            tool: { type: "string", enum: ["add_to_shopping_list"] },
+            would: {
+              type: "object",
+              required: ["action"],
+              properties: {
+                action: { type: "string", enum: ["merge_with_existing", "insert_new"] },
+                existing: SHOPPING_ITEM_OUTPUT,
+                new_quantity: { type: "number" },
+                item: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string" },
+                    quantity: { type: "number" },
+                    unit: { type: "string" },
+                  },
+                },
+              },
+            },
+            next_step: { type: "string" },
+          },
+        },
+      ],
+    },
   },
   {
     name: "mark_as_consumed",
@@ -141,6 +196,76 @@ const TOOL_DEFINITIONS = [
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      description: "Either an executed result or a dry-run preview. Errors (not_found, ambiguous) are returned with isError:true.",
+      oneOf: [
+        {
+          title: "Executed",
+          required: ["ok", "consumed", "restocked"],
+          properties: {
+            ok: { type: "boolean", enum: [true] },
+            consumed: {
+              type: "object",
+              required: ["id", "name"],
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                consumed_on: { type: "string", description: "ISO-8601 timestamp" },
+              },
+            },
+            restocked: {
+              type: "object",
+              required: ["id", "name", "quantity"],
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                quantity: { type: "number" },
+                unit: { type: "string" },
+                added_from: { type: "string", enum: ["consumed"] },
+              },
+            },
+          },
+        },
+        {
+          title: "DryRun",
+          required: ["dry_run", "tool", "would", "next_step"],
+          properties: {
+            dry_run: { type: "boolean", enum: [true] },
+            tool: { type: "string", enum: ["mark_as_consumed"] },
+            would: {
+              type: "object",
+              required: ["action", "consume", "restock"],
+              properties: {
+                action: { type: "string", enum: ["archive_and_restock"] },
+                consume: {
+                  type: "object",
+                  required: ["id", "name"],
+                  properties: {
+                    id: { type: "string" },
+                    name: { type: "string" },
+                    quantity: { type: "number" },
+                    unit: { type: "string" },
+                    brand: { type: "string" },
+                    expiry_date: { type: "string" },
+                  },
+                },
+                restock: {
+                  type: "object",
+                  required: ["quantity"],
+                  properties: {
+                    quantity: { type: "number" },
+                    unit: { type: "string" },
+                    added_from: { type: "string", enum: ["consumed"] },
+                  },
+                },
+              },
+            },
+            next_step: { type: "string" },
+          },
+        },
+      ],
+    },
   },
   {
     name: "remove_from_shopping_list",
@@ -157,6 +282,36 @@ const TOOL_DEFINITIONS = [
           description: "Must be true to execute. Default false returns a dry-run preview.",
         },
       },
+    },
+    outputSchema: {
+      type: "object",
+      oneOf: [
+        {
+          title: "Executed",
+          required: ["ok", "removed"],
+          properties: {
+            ok: { type: "boolean", enum: [true] },
+            removed: SHOPPING_ITEM_OUTPUT,
+          },
+        },
+        {
+          title: "DryRun",
+          required: ["dry_run", "tool", "would", "next_step"],
+          properties: {
+            dry_run: { type: "boolean", enum: [true] },
+            tool: { type: "string", enum: ["remove_from_shopping_list"] },
+            would: {
+              type: "object",
+              required: ["action", "item"],
+              properties: {
+                action: { type: "string", enum: ["delete"] },
+                item: SHOPPING_ITEM_OUTPUT,
+              },
+            },
+            next_step: { type: "string" },
+          },
+        },
+      ],
     },
   },
   {
@@ -178,6 +333,65 @@ const TOOL_DEFINITIONS = [
           description: "Must be true to execute. Default false returns a dry-run preview.",
         },
       },
+    },
+    outputSchema: {
+      type: "object",
+      oneOf: [
+        {
+          title: "Executed",
+          required: ["ok", "updated"],
+          properties: {
+            ok: { type: "boolean", enum: [true] },
+            updated: {
+              type: "object",
+              required: ["id", "name"],
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                quantity: { type: "number" },
+                unit: { type: "string" },
+                completed: { type: "boolean" },
+                notes: { type: "string" },
+              },
+            },
+          },
+        },
+        {
+          title: "DryRun",
+          required: ["dry_run", "tool", "would", "next_step"],
+          properties: {
+            dry_run: { type: "boolean", enum: [true] },
+            tool: { type: "string", enum: ["update_shopping_item"] },
+            would: {
+              type: "object",
+              required: ["action", "item", "changes"],
+              properties: {
+                action: { type: "string", enum: ["update"] },
+                item: {
+                  type: "object",
+                  required: ["id", "name"],
+                  properties: {
+                    id: { type: "string" },
+                    name: { type: "string" },
+                  },
+                },
+                changes: {
+                  type: "object",
+                  description: "Per-field diff. Keys are field names; values are {from, to} pairs.",
+                  additionalProperties: {
+                    type: "object",
+                    properties: {
+                      from: {},
+                      to: {},
+                    },
+                  },
+                },
+              },
+            },
+            next_step: { type: "string" },
+          },
+        },
+      ],
     },
   },
 ]

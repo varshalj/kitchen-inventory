@@ -4,13 +4,22 @@ import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
 import { recipeRepo } from "@/lib/server/repositories/recipe-repo"
 
-type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean }
+type ToolResult = {
+  content: Array<{ type: "text"; text: string }>
+  structuredContent?: unknown
+  isError?: boolean
+}
 
 function textResult(data: unknown): ToolResult {
-  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] }
+  return {
+    content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+    structuredContent: data,
+  }
 }
 
 function errorResult(data: unknown): ToolResult {
+  // Intentionally omit structuredContent on errors — outputSchema describes the
+  // success/dry-run shape, and errors shouldn't have to satisfy it.
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }], isError: true }
 }
 
