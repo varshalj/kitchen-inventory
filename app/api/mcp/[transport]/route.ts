@@ -106,14 +106,18 @@ const TOOL_DEFINITIONS = [
     name: "add_to_shopping_list",
     title: "Add To Shopping List",
     description:
-      "Add an item to the user's shopping list. If a non-completed item with the same name and unit already exists, quantities are merged; a different unit creates a separate row. Tagged with addedFrom='agent'.",
+      "Add an item to the user's shopping list. Names are matched with case- and plural-insensitive normalization (e.g. 'Almond' and 'almonds' collapse). If a non-completed item with the same normalized name AND same unit exists, the call merges quantities; a different unit creates a separate row. Tagged with addedFrom='agent'. SAFETY: defaults to dry-run (confirm:false) — first call returns a preview of what would change; the caller must repeat the call with confirm:true to execute.",
     inputSchema: {
       type: "object",
       required: ["item_name"],
       properties: {
-        item_name: { type: "string", description: "Name of the item to add" },
+        item_name: { type: "string", description: "Name of the item to add (case-insensitive, naive singular/plural collapse)" },
         quantity: { type: "number", description: "Quantity to add (default 1)" },
         unit: { type: "string", description: "Unit (e.g. 'cartons', 'lbs')" },
+        confirm: {
+          type: "boolean",
+          description: "Must be true to execute. Default false returns a dry-run preview; repeat with confirm:true after the user agrees.",
+        },
       },
     },
   },
@@ -121,15 +125,57 @@ const TOOL_DEFINITIONS = [
     name: "mark_as_consumed",
     title: "Mark As Consumed",
     description:
-      "Archive an active inventory item as consumed (full archive — no partial decrement in v1) and add it back to the shopping list. Matches by case-insensitive exact name; if 0 active matches returns isError 'not_found'; if 2+ active matches returns isError 'ambiguous' with candidates so the agent can disambiguate.",
+      "Archive an active inventory item as consumed (full archive — no partial decrement in v1) and add it back to the shopping list. Names are matched with case- and plural-insensitive normalization. 0 active matches → isError 'not_found'; 2+ active matches → isError 'ambiguous' with candidates so the agent can ask the user. SAFETY: defaults to dry-run (confirm:false) — first call returns a preview; repeat with confirm:true to execute.",
     inputSchema: {
       type: "object",
       required: ["item_name"],
       properties: {
-        item_name: { type: "string", description: "Name of the inventory item to mark consumed" },
+        item_name: { type: "string", description: "Name of the inventory item to mark consumed (normalized match)" },
         quantity: {
           type: "number",
           description: "Quantity to put on the shopping list (defaults to the item's current inventory quantity)",
+        },
+        confirm: {
+          type: "boolean",
+          description: "Must be true to execute. Default false returns a dry-run preview.",
+        },
+      },
+    },
+  },
+  {
+    name: "remove_from_shopping_list",
+    title: "Remove From Shopping List",
+    description:
+      "Delete an item from the shopping list. Pass item_id (preferred — get it from list_shopping or a prior add response) OR item_name (normalized lookup; refuses with isError 'ambiguous' if multiple active items match). SAFETY: defaults to dry-run; repeat with confirm:true to execute. Use this to undo agent overreach.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", description: "Exact shopping item id (preferred, from list_shopping)" },
+        item_name: { type: "string", description: "Name of the shopping item (normalized match). Ignored if item_id is provided." },
+        confirm: {
+          type: "boolean",
+          description: "Must be true to execute. Default false returns a dry-run preview.",
+        },
+      },
+    },
+  },
+  {
+    name: "update_shopping_item",
+    title: "Update Shopping Item",
+    description:
+      "Update a shopping list item's quantity, unit, completed status, or notes. Pass item_id (preferred) OR item_name. At least one of quantity/unit/completed/notes is required. SAFETY: defaults to dry-run, which returns a from→to diff; repeat with confirm:true to execute.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", description: "Exact shopping item id (preferred)" },
+        item_name: { type: "string", description: "Name of the shopping item (normalized match). Ignored if item_id is provided." },
+        quantity: { type: "number", description: "New quantity (>= 0)" },
+        unit: { type: "string", description: "New unit" },
+        completed: { type: "boolean", description: "Set to true to mark the item as bought / done" },
+        notes: { type: "string", description: "Replace the notes string" },
+        confirm: {
+          type: "boolean",
+          description: "Must be true to execute. Default false returns a dry-run preview.",
         },
       },
     },

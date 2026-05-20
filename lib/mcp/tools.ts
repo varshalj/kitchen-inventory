@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { ShoppingItem } from "@/lib/types"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
 import { recipeRepo } from "@/lib/server/repositories/recipe-repo"
@@ -11,6 +12,23 @@ function textResult(data: unknown): ToolResult {
 
 function errorResult(data: unknown): ToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }], isError: true }
+}
+
+function previewResult(payload: Record<string, unknown>): ToolResult {
+  return textResult({ dry_run: true, ...payload })
+}
+
+// Collapse trivial spelling variants so "Almond" / "almonds" / "Tomatoes" hash
+// the same. Idempotent. Intentionally naive — covers the common cases that
+// cause agent ambiguity-bypass without depending on a dictionary.
+function normalizeName(s: string): string {
+  const n = s.trim().toLowerCase().replace(/\s+/g, " ")
+  if (n.length > 3 && n.endsWith("ies")) return n.slice(0, -3) + "y"
+  if (n.length > 3 && n.endsWith("oes")) return n.slice(0, -2)
+  if (n.length > 3 && /(sh|ch|ss|x|z)es$/.test(n)) return n.slice(0, -2)
+  if (n.endsWith("ss")) return n
+  if (n.length > 1 && n.endsWith("s")) return n.slice(0, -1)
+  return n
 }
 
 // ─── Tool handlers ───────────────────────────────────────────────────────────
@@ -41,6 +59,10 @@ export async function handleToolCall(
       return handleAddToShoppingList(args, supabase)
     case "mark_as_consumed":
       return handleMarkAsConsumed(args, supabase)
+    case "remove_from_shopping_list":
+      return handleRemoveFromShoppingList(args, supabase)
+    case "update_shopping_item":
+      return handleUpdateShoppingItem(args, supabase)
     default:
       return textResult({ error: `Unknown tool: ${toolName}` })
   }
@@ -308,15 +330,58 @@ async function handleAddToShoppingList(
   const quantity =
     typeof args.quantity === "number" && args.quantity > 0 ? args.quantity : 1
   const unit = typeof args.unit === "string" && args.unit.length > 0 ? args.unit : undefined
+  const confirm = args.confirm === true
 
-  // Peek so we can report whether the create merged or inserted a new row.
-  const { data: existingRows } = await supabase
-    .from("shopping_items")
-    .select("id, quantity, unit")
-    .eq("name", itemName)
-    .eq("completed", false)
-    .limit(1)
-  const previous = existingRows?.[0]
+  const target = normalizeName(itemName)
+  const all = await shoppingRepo.list(supabase)
+  const candidate = all.find(
+    (i) =>
+      !i.completed &&
+      normalizeName(i.name) === target &&
+      (i.unit ?? null) === (unit ?? null),
+  )
+
+  if (!confirm) {
+    if (candidate) {
+      return previewResult({
+        tool: "add_to_shopping_list",
+        would: {
+          action: "merge_with_existing",
+          existing: {
+            id: candidate.id,
+            name: candidate.name,
+            quantity: candidate.quantity,
+            unit: candidate.unit,
+          },
+          new_quantity: candidate.quantity + quantity,
+        },
+        next_step: "Call again with the same arguments plus confirm: true to execute.",
+      })
+    }
+    return previewResult({
+      tool: "add_to_shopping_list",
+      would: { action: "insert_new", item: { name: itemName, quantity, unit } },
+      next_step: "Call again with the same arguments plus confirm: true to execute.",
+    })
+  }
+
+  if (candidate) {
+    const updated = await shoppingRepo.update(supabase, candidate.id, {
+      quantity: candidate.quantity + quantity,
+    })
+    return textResult({
+      ok: true,
+      merged: true,
+      previous_quantity: candidate.quantity,
+      item: {
+        id: updated.id,
+        name: updated.name,
+        quantity: updated.quantity,
+        unit: updated.unit,
+        completed: updated.completed,
+      },
+    })
+  }
 
   const created = await shoppingRepo.create(supabase, {
     id: crypto.randomUUID(),
@@ -327,13 +392,9 @@ async function handleAddToShoppingList(
     addedOn: new Date().toISOString(),
     addedFrom: "agent",
   })
-
-  const merged = !!previous && created.id === previous.id
-
   return textResult({
     ok: true,
-    merged,
-    previous_quantity: merged ? previous.quantity : undefined,
+    merged: false,
     item: {
       id: created.id,
       name: created.name,
@@ -353,16 +414,18 @@ async function handleMarkAsConsumed(
 
   const requestedQty =
     typeof args.quantity === "number" && args.quantity > 0 ? args.quantity : undefined
+  const confirm = args.confirm === true
 
   const items = await inventoryRepo.list(supabase, false)
-  const target = itemName.toLowerCase()
-  const matches = items.filter((i) => i.name.toLowerCase() === target)
+  const target = normalizeName(itemName)
+  const matches = items.filter((i) => normalizeName(i.name) === target)
 
   if (matches.length === 0) {
     return errorResult({
       error: "not_found",
       item_name: itemName,
-      message: `No active inventory item matches '${itemName}'. Suggest checking spelling, or call add_to_shopping_list if the user wants to restock it anyway.`,
+      normalized: target,
+      message: `No active inventory item matches '${itemName}' (normalized: '${target}'). Suggest checking spelling, or call add_to_shopping_list if the user wants to restock it anyway.`,
     })
   }
 
@@ -370,7 +433,8 @@ async function handleMarkAsConsumed(
     return errorResult({
       error: "ambiguous",
       item_name: itemName,
-      message: `${matches.length} active inventory items match '${itemName}'. Ask the user which one to mark consumed.`,
+      normalized: target,
+      message: `${matches.length} active inventory items match '${itemName}' (normalized: '${target}'). Ask the user which one to mark consumed and pass its id via item_id (not yet supported — for now disambiguate by passing the exact stored name).`,
       candidates: matches.map((m) => ({
         id: m.id,
         name: m.name,
@@ -386,6 +450,29 @@ async function handleMarkAsConsumed(
   const item = matches[0]
   const restockQuantity =
     requestedQty ?? (item.quantity && item.quantity > 0 ? item.quantity : 1)
+
+  if (!confirm) {
+    return previewResult({
+      tool: "mark_as_consumed",
+      would: {
+        action: "archive_and_restock",
+        consume: {
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          brand: item.brand,
+          expiry_date: item.expiryDate,
+        },
+        restock: {
+          quantity: restockQuantity,
+          unit: item.unit,
+          added_from: "consumed",
+        },
+      },
+      next_step: "Call again with the same arguments plus confirm: true to execute.",
+    })
+  }
 
   const updated = await inventoryRepo.update(supabase, item.id, {
     quantity: 0,
@@ -420,6 +507,164 @@ async function handleMarkAsConsumed(
       quantity: restocked.quantity,
       unit: restocked.unit,
       added_from: "consumed",
+    },
+  })
+}
+
+// ─── Shopping-list lifecycle: shared resolver + handlers ─────────────────────
+
+async function resolveShoppingItem(
+  supabase: SupabaseClient,
+  itemId: string | undefined,
+  itemName: string | undefined,
+): Promise<{ item: ShoppingItem } | { error: ToolResult }> {
+  if (itemId) {
+    const item = await shoppingRepo.getById(supabase, itemId)
+    if (!item) {
+      return {
+        error: errorResult({
+          error: "not_found",
+          item_id: itemId,
+          message: `No shopping item with id '${itemId}'.`,
+        }),
+      }
+    }
+    return { item }
+  }
+
+  if (!itemName) {
+    return {
+      error: errorResult({
+        error: "invalid_input",
+        message: "Either item_id or item_name is required.",
+      }),
+    }
+  }
+
+  const target = normalizeName(itemName)
+  const items = await shoppingRepo.list(supabase)
+  const matches = items.filter(
+    (i) => !i.completed && normalizeName(i.name) === target,
+  )
+
+  if (matches.length === 0) {
+    return {
+      error: errorResult({
+        error: "not_found",
+        item_name: itemName,
+        normalized: target,
+        message: `No active shopping item matches '${itemName}' (normalized: '${target}').`,
+      }),
+    }
+  }
+
+  if (matches.length > 1) {
+    return {
+      error: errorResult({
+        error: "ambiguous",
+        item_name: itemName,
+        normalized: target,
+        message: `${matches.length} active shopping items match '${itemName}'. Ask the user which one, or call again with item_id.`,
+        candidates: matches.map((m) => ({
+          id: m.id,
+          name: m.name,
+          quantity: m.quantity,
+          unit: m.unit,
+          brand: m.brand,
+        })),
+      }),
+    }
+  }
+
+  return { item: matches[0] }
+}
+
+async function handleRemoveFromShoppingList(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
+  const itemId = typeof args.item_id === "string" ? args.item_id : undefined
+  const itemName = typeof args.item_name === "string" ? args.item_name.trim() : undefined
+  const confirm = args.confirm === true
+
+  const resolved = await resolveShoppingItem(supabase, itemId, itemName)
+  if ("error" in resolved) return resolved.error
+  const { item } = resolved
+
+  if (!confirm) {
+    return previewResult({
+      tool: "remove_from_shopping_list",
+      would: {
+        action: "delete",
+        item: {
+          id: item.id,
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+        },
+      },
+      next_step: "Call again with the same arguments plus confirm: true to execute.",
+    })
+  }
+
+  await shoppingRepo.delete(supabase, item.id)
+  return textResult({
+    ok: true,
+    removed: { id: item.id, name: item.name, quantity: item.quantity, unit: item.unit },
+  })
+}
+
+async function handleUpdateShoppingItem(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
+  const itemId = typeof args.item_id === "string" ? args.item_id : undefined
+  const itemName = typeof args.item_name === "string" ? args.item_name.trim() : undefined
+  const confirm = args.confirm === true
+
+  const updates: Partial<ShoppingItem> = {}
+  if (typeof args.quantity === "number" && args.quantity >= 0) updates.quantity = args.quantity
+  if (typeof args.unit === "string") updates.unit = args.unit
+  if (typeof args.completed === "boolean") updates.completed = args.completed
+  if (typeof args.notes === "string") updates.notes = args.notes
+
+  if (Object.keys(updates).length === 0) {
+    return errorResult({
+      error: "invalid_input",
+      message: "At least one field to update is required (quantity, unit, completed, notes).",
+    })
+  }
+
+  const resolved = await resolveShoppingItem(supabase, itemId, itemName)
+  if ("error" in resolved) return resolved.error
+  const { item } = resolved
+
+  if (!confirm) {
+    const changes: Record<string, { from: unknown; to: unknown }> = {}
+    for (const key of Object.keys(updates) as Array<keyof typeof updates>) {
+      changes[key] = { from: item[key], to: updates[key] }
+    }
+    return previewResult({
+      tool: "update_shopping_item",
+      would: {
+        action: "update",
+        item: { id: item.id, name: item.name },
+        changes,
+      },
+      next_step: "Call again with the same arguments plus confirm: true to execute.",
+    })
+  }
+
+  const updated = await shoppingRepo.update(supabase, item.id, updates)
+  return textResult({
+    ok: true,
+    updated: {
+      id: updated.id,
+      name: updated.name,
+      quantity: updated.quantity,
+      unit: updated.unit,
+      completed: updated.completed,
+      notes: updated.notes,
     },
   })
 }
