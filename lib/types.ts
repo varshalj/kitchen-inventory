@@ -37,7 +37,7 @@ export interface ShoppingItem {
   notes?: string
   completed: boolean
   addedOn: string
-  addedFrom?: "consumed" | "manual" | "voice"
+  addedFrom?: "consumed" | "manual" | "voice" | "agent"
   brand?: string
   orderedFrom?: string
 }

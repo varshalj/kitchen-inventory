@@ -3,10 +3,14 @@ import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
 import { recipeRepo } from "@/lib/server/repositories/recipe-repo"
 
-type ToolResult = { content: Array<{ type: "text"; text: string }> }
+type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean }
 
 function textResult(data: unknown): ToolResult {
   return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] }
+}
+
+function errorResult(data: unknown): ToolResult {
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }], isError: true }
 }
 
 // ─── Tool handlers ───────────────────────────────────────────────────────────
@@ -33,6 +37,10 @@ export async function handleToolCall(
       return handleGetWasteStats(args, supabase)
     case "search_inventory":
       return handleSearchInventory(args, supabase)
+    case "add_to_shopping_list":
+      return handleAddToShoppingList(args, supabase)
+    case "mark_as_consumed":
+      return handleMarkAsConsumed(args, supabase)
     default:
       return textResult({ error: `Unknown tool: ${toolName}` })
   }
@@ -287,5 +295,131 @@ async function handleSearchInventory(
       archived: i.archived,
       archiveReason: i.archiveReason,
     })),
+  })
+}
+
+async function handleAddToShoppingList(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
+  const itemName = typeof args.item_name === "string" ? args.item_name.trim() : ""
+  if (!itemName) return errorResult({ error: "invalid_input", message: "item_name is required" })
+
+  const quantity =
+    typeof args.quantity === "number" && args.quantity > 0 ? args.quantity : 1
+  const unit = typeof args.unit === "string" && args.unit.length > 0 ? args.unit : undefined
+
+  // Peek so we can report whether the create merged or inserted a new row.
+  const { data: existingRows } = await supabase
+    .from("shopping_items")
+    .select("id, quantity, unit")
+    .eq("name", itemName)
+    .eq("completed", false)
+    .limit(1)
+  const previous = existingRows?.[0]
+
+  const created = await shoppingRepo.create(supabase, {
+    id: crypto.randomUUID(),
+    name: itemName,
+    quantity,
+    unit,
+    completed: false,
+    addedOn: new Date().toISOString(),
+    addedFrom: "agent",
+  })
+
+  const merged = !!previous && created.id === previous.id
+
+  return textResult({
+    ok: true,
+    merged,
+    previous_quantity: merged ? previous.quantity : undefined,
+    item: {
+      id: created.id,
+      name: created.name,
+      quantity: created.quantity,
+      unit: created.unit,
+      completed: created.completed,
+    },
+  })
+}
+
+async function handleMarkAsConsumed(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
+  const itemName = typeof args.item_name === "string" ? args.item_name.trim() : ""
+  if (!itemName) return errorResult({ error: "invalid_input", message: "item_name is required" })
+
+  const requestedQty =
+    typeof args.quantity === "number" && args.quantity > 0 ? args.quantity : undefined
+
+  const items = await inventoryRepo.list(supabase, false)
+  const target = itemName.toLowerCase()
+  const matches = items.filter((i) => i.name.toLowerCase() === target)
+
+  if (matches.length === 0) {
+    return errorResult({
+      error: "not_found",
+      item_name: itemName,
+      message: `No active inventory item matches '${itemName}'. Suggest checking spelling, or call add_to_shopping_list if the user wants to restock it anyway.`,
+    })
+  }
+
+  if (matches.length > 1) {
+    return errorResult({
+      error: "ambiguous",
+      item_name: itemName,
+      message: `${matches.length} active inventory items match '${itemName}'. Ask the user which one to mark consumed.`,
+      candidates: matches.map((m) => ({
+        id: m.id,
+        name: m.name,
+        brand: m.brand,
+        quantity: m.quantity,
+        unit: m.unit,
+        expiry_date: m.expiryDate,
+        location: m.location,
+      })),
+    })
+  }
+
+  const item = matches[0]
+  const restockQuantity =
+    requestedQty ?? (item.quantity && item.quantity > 0 ? item.quantity : 1)
+
+  const updated = await inventoryRepo.update(supabase, item.id, {
+    quantity: 0,
+    archived: true,
+    archiveReason: "consumed",
+    consumedOn: new Date().toISOString(),
+  })
+
+  const restocked = await shoppingRepo.create(supabase, {
+    id: crypto.randomUUID(),
+    name: item.name,
+    quantity: restockQuantity,
+    unit: item.unit,
+    category: item.category,
+    completed: false,
+    addedOn: new Date().toISOString(),
+    addedFrom: "consumed",
+    brand: item.brand,
+    orderedFrom: item.orderedFrom,
+  })
+
+  return textResult({
+    ok: true,
+    consumed: {
+      id: updated.id,
+      name: updated.name,
+      consumed_on: updated.consumedOn,
+    },
+    restocked: {
+      id: restocked.id,
+      name: restocked.name,
+      quantity: restocked.quantity,
+      unit: restocked.unit,
+      added_from: "consumed",
+    },
   })
 }

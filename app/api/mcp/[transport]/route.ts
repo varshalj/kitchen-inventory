@@ -102,6 +102,38 @@ const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    name: "add_to_shopping_list",
+    title: "Add To Shopping List",
+    description:
+      "Add an item to the user's shopping list. If a non-completed item with the same name and unit already exists, quantities are merged; a different unit creates a separate row. Tagged with addedFrom='agent'.",
+    inputSchema: {
+      type: "object",
+      required: ["item_name"],
+      properties: {
+        item_name: { type: "string", description: "Name of the item to add" },
+        quantity: { type: "number", description: "Quantity to add (default 1)" },
+        unit: { type: "string", description: "Unit (e.g. 'cartons', 'lbs')" },
+      },
+    },
+  },
+  {
+    name: "mark_as_consumed",
+    title: "Mark As Consumed",
+    description:
+      "Archive an active inventory item as consumed (full archive — no partial decrement in v1) and add it back to the shopping list. Matches by case-insensitive exact name; if 0 active matches returns isError 'not_found'; if 2+ active matches returns isError 'ambiguous' with candidates so the agent can disambiguate.",
+    inputSchema: {
+      type: "object",
+      required: ["item_name"],
+      properties: {
+        item_name: { type: "string", description: "Name of the inventory item to mark consumed" },
+        quantity: {
+          type: "number",
+          description: "Quantity to put on the shopping list (defaults to the item's current inventory quantity)",
+        },
+      },
+    },
+  },
 ]
 
 // ─── Minimal MCP JSON-RPC dispatcher ─────────────────────────────────────────
