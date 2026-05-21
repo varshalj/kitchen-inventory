@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { NextResponse } from "next/server"
 import { supabaseAsUser } from "@/lib/server/supabase-as-user"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
@@ -125,7 +125,11 @@ export async function POST(request: Request) {
   const expectedAppId = process.env.ALEXA_SKILL_ID
   const incomingAppId = body?.session?.application?.applicationId
   if (expectedAppId && incomingAppId !== expectedAppId) {
-    return new NextResponse("Forbidden", { status: 403 })
+    // Return valid Alexa JSON instead of plain 403 so Alexa can speak the
+    // error back instead of failing with INVALID_RESPONSE. Same security
+    // effect (we still refuse to act), better diagnostic.
+    console.warn("Alexa app-id mismatch", { incomingAppId, expectedAppId })
+    return speak("This skill is not authorized for this endpoint.")
   }
 
   const requestType = body?.request?.type as string | undefined
