@@ -36,10 +36,14 @@ import { useToast } from "@/hooks/use-toast"
 import Fuse from "fuse.js"
 import { MealPlanGenerator } from "@/components/meal-plan-generator"
 import { StarRating } from "@/components/star-rating"
-import { ReviewPrompt } from "@/components/review-prompt"
+// Review chip + sheet have moved to <ReviewProvider> in contexts/review-context.tsx
+// so they survive page navigation. The dashboard now only QUEUES items for
+// review via the hook below; the actual rendering happens app-level.
+import { useReview } from "@/contexts/review-context"
+import { useInventory } from "@/contexts/inventory-context"
 import { fetchWithAuth } from "@/lib/api-client"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
-import { cn } from "@/lib/utils"
+import { cn, normalizeName } from "@/lib/utils"
 import { ItemDetailSheet } from "@/components/item-detail-sheet"
 import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
@@ -58,6 +62,70 @@ const WASTE_REASONS = [
   { key: "unused", label: "Unused" },
   { key: "excess", label: "Too much" },
 ] as const
+
+/**
+ * Cluster same-name inventory rows into visual threads.
+ *
+ * Behaviour (per Step 3 design discussion):
+ *   - Cluster key  : `normalizeName(item.name)` — lowercase + trim + plural fold.
+ *                    "Milk" = "milk" = "Milks" but "Milk" ≠ "Whole Milk".
+ *   - List position: the cluster appears where its most-recently-added member
+ *                    sits in the input list. The caller passes items already
+ *                    sorted by added_on desc, so this is the FIRST occurrence
+ *                    of each cluster key as we iterate.
+ *   - Inner order  : earliest-expiring first, so the un-indented "leader" card
+ *                    is the most-urgent member (FIFO awareness).
+ *   - Singletons   : pass through with `isIndented: false`. No threading.
+ *
+ * Filter interaction is automatic: callers pass only `filteredItems`, so a
+ * partial match (1 of 3 milks survives a filter) renders as an unthreaded
+ * singleton — consistent with "filters narrow."
+ */
+function arrangeIntoClusters(
+  items: InventoryItem[],
+): Array<{ item: InventoryItem; isIndented: boolean }> {
+  if (items.length === 0) return []
+
+  // Group by normalized name. Preserve insertion order so the cluster position
+  // ends up at the first (most-recently-added) member of each group.
+  const groups = new Map<string, InventoryItem[]>()
+  for (const item of items) {
+    const key = normalizeName(item.name)
+    const bucket = groups.get(key)
+    if (bucket) bucket.push(item)
+    else groups.set(key, [item])
+  }
+
+  const result: Array<{ item: InventoryItem; isIndented: boolean }> = []
+  const emitted = new Set<string>()
+
+  for (const item of items) {
+    const key = normalizeName(item.name)
+    if (emitted.has(key)) continue
+    emitted.add(key)
+
+    const cluster = groups.get(key)!
+    if (cluster.length === 1) {
+      result.push({ item: cluster[0], isIndented: false })
+      continue
+    }
+
+    // Sort by earliest expiry first. Items missing an expiry date sink to the
+    // bottom of the cluster — they're the least "urgent" by FIFO logic.
+    const sorted = [...cluster].sort((a, b) => {
+      const aTime = a.expiryDate ? new Date(a.expiryDate).getTime() : Number.POSITIVE_INFINITY
+      const bTime = b.expiryDate ? new Date(b.expiryDate).getTime() : Number.POSITIVE_INFINITY
+      return aTime - bTime
+    })
+
+    result.push({ item: sorted[0], isIndented: false })
+    for (let i = 1; i < sorted.length; i++) {
+      result.push({ item: sorted[i], isIndented: true })
+    }
+  }
+
+  return result
+}
 
 function WasteReasonPicker({ itemId, progressBar }: { itemId: string; progressBar: React.ReactNode }) {
   const [selected, setSelected] = useState<string | null>(null)
@@ -93,7 +161,16 @@ function WasteReasonPicker({ itemId, progressBar }: { itemId: string; progressBa
 
 export function InventoryDashboard() {
   const router = useRouter()
-  const [items, setItems] = useState<InventoryItem[]>([])
+  // ── Inventory cache lives in <InventoryProvider> (app-level). The dashboard
+  // ── reads `items` from there and mutates via `applyOptimistic` so the cache
+  // ── survives navigation. `refresh` is called on mount for stale-while-
+  // ── revalidate semantics (cached items render instantly; background fetch
+  // ── reconciles within ~500ms if anything changed externally).
+  const { items, isLoading, refresh: refreshInventory, applyOptimistic: setItems } = useInventory()
+  // ── Review chip + sheet live in <ReviewProvider> (app-level). The dashboard
+  // ── only QUEUES items for review on consume/waste; the actual rendering
+  // ── happens globally so the chip survives navigation.
+  const { queueForReview, cancelPending: cancelPendingReview } = useReview()
   const [filteredItems, setFilteredItems] = useState<InventoryItem[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [activeFilter, setActiveFilter] = useState("all")
@@ -101,9 +178,6 @@ export function InventoryDashboard() {
   const [sortBy, setSortBy] = useState("expiryDate")
   const [showMealPlanModal, setShowMealPlanModal] = useState(false)
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null)
-  const [reviewQueue, setReviewQueue] = useState<Array<{ item: InventoryItem; type: "consumed" | "wasted" }>>([])
-  const reviewItem = reviewQueue[0] ?? null
-  const [isLoading, setIsLoading] = useState(true)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isBulkProcessing, setIsBulkProcessing] = useState(false)
@@ -155,50 +229,38 @@ export function InventoryDashboard() {
     previousShoppingQuantity?: number
     timer?: ReturnType<typeof setTimeout>
     cleanupTimer?: ReturnType<typeof setTimeout>
-    reviewTimer?: ReturnType<typeof setTimeout>
   }>>(new Map())
 
+// User initials for the avatar — independent of inventory data; stays
+// in the dashboard since no other surface needs it.
 useEffect(() => {
-  const load = async () => {
-    try {
-      // Fetch user initials for avatar
-      if (supabaseClient) {
-        const { data: { user } } = await supabaseClient.auth.getUser()
-        if (user) {
-          const email = user.email ?? ""
-          const name = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ""
-          if (name) {
-            const parts = name.trim().split(/\s+/)
-            setUserInitials(parts.length >= 2
-              ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-              : parts[0].slice(0, 2).toUpperCase()
-            )
-          } else if (email) {
-            setUserInitials(email.slice(0, 2).toUpperCase())
-          }
-        }
-      }
-
-      const response = await fetchWithAuth("/api/inventory?archived=false")
-      if (!response.ok) {
-        const body = await response.text()
-        throw new Error(body || `Failed to load inventory (${response.status})`)
-      }
-
-      const inventoryItems = await response.json()
-      const safeItems = Array.isArray(inventoryItems) ? inventoryItems : []
-
-      setItems(safeItems)
-    } catch (error) {
-      console.error("Failed to load inventory:", error)
-      setItems([])
-    } finally {
-      setIsLoading(false)
+  if (!supabaseClient) return
+  let active = true
+  supabaseClient.auth.getUser().then(({ data: { user } }: { data: { user: { email?: string; user_metadata?: Record<string, string> } | null } }) => {
+    if (!active || !user) return
+    const email = user.email ?? ""
+    const name = user.user_metadata?.full_name ?? user.user_metadata?.name ?? ""
+    if (name) {
+      const parts = name.trim().split(/\s+/)
+      setUserInitials(parts.length >= 2
+        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+        : parts[0].slice(0, 2).toUpperCase()
+      )
+    } else if (email) {
+      setUserInitials(email.slice(0, 2).toUpperCase())
     }
-  }
-
-  load()
+  })
+  return () => { active = false }
 }, [])
+
+// Stale-while-revalidate: trigger a background refetch every time the
+// dashboard mounts. If nothing changed externally, the result is identical
+// and React skips the re-render. If something changed (e.g., user added an
+// item via /add-item, or a write happened on another device), the cache
+// updates within ~500ms.
+useEffect(() => {
+  void refreshInventory()
+}, [refreshInventory])
 
   // Poll email ingestions on mount
   const loadEmailIngestions = useCallback(async () => {
@@ -479,10 +541,11 @@ useEffect(() => {
       const wasNewInsert: boolean = payload.wasNewInsert ?? true
       const previousShoppingQuantity: number | undefined = payload.previousShoppingQuantity
 
-      // Delay the review prompt until after the undo window closes
-      const reviewTimer = !item.rating
-        ? setTimeout(() => setReviewQueue((prev) => [...prev, { item, type: "consumed" }]), 5500)
-        : undefined
+      // Queue the rating chip via the app-level ReviewProvider — survives any
+      // page navigation the user does within the 5.5s undo window. The provider
+      // owns the timer; we just hand it the item. queueForReview no-ops if the
+      // item is already rated or previously dismissed.
+      queueForReview(item, "consumed")
 
       const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
       pendingActions.current.set(item.id, {
@@ -492,7 +555,6 @@ useEffect(() => {
         wasNewInsert,
         previousShoppingQuantity,
         cleanupTimer,
-        reviewTimer,
       })
 
       toast({
@@ -511,7 +573,9 @@ useEffect(() => {
               const pending = pendingActions.current.get(item.id)
               if (!pending) return
               clearTimeout(pending.cleanupTimer)
-              clearTimeout(pending.reviewTimer)
+              // Cancel the chip queue so undo doesn't surface a rating prompt
+              // for an action the user reversed.
+              cancelPendingReview(item.id)
               pendingActions.current.delete(item.id)
               try {
                 await fetchWithAuth(`/api/inventory/${item.id}`, {
@@ -572,13 +636,12 @@ useEffect(() => {
         throw new Error(payload.error || "Waste operation failed")
       }
 
-      // Delay the review prompt until after the undo window closes
-      const reviewTimer = !item.rating
-        ? setTimeout(() => setReviewQueue((prev) => [...prev, { item, type: "wasted" }]), 5500)
-        : undefined
+      // Queue the rating chip via the app-level ReviewProvider. See the
+      // matching block in handleConsumeItem for full rationale.
+      queueForReview(item, "wasted")
 
       const cleanupTimer = setTimeout(() => pendingActions.current.delete(item.id), 5500)
-      pendingActions.current.set(item.id, { type: "waste", item, cleanupTimer, reviewTimer })
+      pendingActions.current.set(item.id, { type: "waste", item, cleanupTimer })
 
       toast({
         title: "Item marked as wasted",
@@ -596,7 +659,7 @@ useEffect(() => {
               const pending = pendingActions.current.get(item.id)
               if (!pending) return
               clearTimeout(pending.cleanupTimer)
-              clearTimeout(pending.reviewTimer)
+              cancelPendingReview(item.id)
               pendingActions.current.delete(item.id)
               try {
                 await fetchWithAuth(`/api/inventory/${item.id}`, {
@@ -628,30 +691,7 @@ useEffect(() => {
     }
   }
 
-  const handleReviewSubmit = async (review: { rating: number; reviewTags: string[]; reviewNote: string }) => {
-    if (reviewItem) {
-      await fetchWithAuth(`/api/inventory/${reviewItem.item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rating: review.rating,
-          reviewTags: review.reviewTags,
-          reviewNote: review.reviewNote,
-          ratedAt: new Date().toISOString(),
-        }),
-      })
-      setReviewQueue((prev) => prev.slice(1))
-      toast({
-        title: "Review Saved",
-        duration: 3000,
-        description: "Your rating will help personalize future recommendations.",
-      })
-    }
-  }
-
-  const handleReviewSkip = () => {
-    setReviewQueue((prev) => prev.slice(1))
-  }
+  // (Review handlers moved to <ReviewProvider> in contexts/review-context.tsx.)
 
   const handleEditSave = async (updatedItem: InventoryItem) => {
     try {
@@ -668,7 +708,7 @@ useEffect(() => {
 
       const savedItem = (await response.json()) as InventoryItem
 
-      setItems(items.map((item) => (item.id === savedItem.id ? savedItem : item)))
+      setItems((prev) => prev.map((item) => (item.id === savedItem.id ? savedItem : item)))
       setEditItem(null)
       toast({
         title: "Item Updated",
@@ -843,13 +883,9 @@ useEffect(() => {
             ingestions={emailIngestions}
             onRefresh={() => {
               loadEmailIngestions()
-              // Re-fetch inventory in case items were added
-              fetchWithAuth("/api/inventory?archived=false")
-                .then((r) => r.json())
-                .then((data) => {
-                  if (Array.isArray(data)) setItems(data)
-                })
-                .catch(() => {})
+              // Re-fetch inventory via the provider so the cache reflects any
+              // items added during this flow.
+              void refreshInventory()
             }}
           />
         </div>
@@ -1090,7 +1126,7 @@ useEffect(() => {
             </Button>
           </div>
         ) : (
-          filteredItems.map((item, i) => {
+          arrangeIntoClusters(filteredItems).map(({ item, isIndented }, i) => {
             const isExpired = new Date(item.expiryDate) < new Date()
             const isMissingExpiry = !item.expiryDate || isNaN(new Date(item.expiryDate).getTime())
             const daysUntilExpiry = isMissingExpiry ? Infinity : Math.ceil((new Date(item.expiryDate).getTime() - Date.now()) / (1000 * 3600 * 24))
@@ -1098,7 +1134,14 @@ useEffect(() => {
             return (
               <AnimatedItem key={item.id} index={i}>
               <div
-                className="relative overflow-hidden rounded-lg"
+                className={cn(
+                  "relative overflow-hidden rounded-lg",
+                  // Threading: continuation cards of a same-name cluster are
+                  // indented to make the group visually obvious. See
+                  // arrangeIntoClusters() — leader card stays flush, only
+                  // 2nd+ members get this class.
+                  isIndented && "ml-4",
+                )}
                 style={{ touchAction: "pan-y" }}
                 onTouchStart={(e) => handleTouchStart(e, item.id)}
                 onTouchMove={(e) => handleTouchMove(e, item.id)}
@@ -1292,26 +1335,8 @@ useEffect(() => {
         </DialogContent>
       </Dialog>
 
-      {/* Review Prompt Dialog */}
-      <Dialog open={!!reviewItem} onOpenChange={(open) => !open && setReviewQueue((prev) => prev.slice(1))}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Rate This Product</DialogTitle>
-            <DialogDescription>
-              Help yourself remember what to reorder next time.
-            </DialogDescription>
-          </DialogHeader>
-          {reviewItem && (
-            <ReviewPrompt
-              key={reviewItem.item.id}
-              item={reviewItem.item}
-              type={reviewItem.type}
-              onSubmit={handleReviewSubmit}
-              onSkip={handleReviewSkip}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Review chip + full-review sheet now live in <ReviewProvider> (app-level)
+          so they survive navigation. See contexts/review-context.tsx. */}
 
       {/* Item Detail Sheet */}
       <ItemDetailSheet

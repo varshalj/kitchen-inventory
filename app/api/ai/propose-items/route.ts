@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { getUserConfidenceThreshold, logAIInteraction } from "@/lib/server/ai-store"
 import { requireUser } from "@/lib/server/require-user"
+import { getSupabaseAdmin } from "@/lib/server/supabase-admin"
 import OpenAI from "openai"
+
+// Bump this any time the system prompt is meaningfully edited so we can filter
+// training data by prompt era. See migration 202605270001.
+const PROMPT_VERSION = "propose-items-v3-categories-expanded"
+const MODEL_VERSION = "gpt-4o-mini"
+const STORAGE_BUCKET = "ai-scan-images"
 
 const requestSchema = z.object({
   userInput: z.string().min(1),
@@ -15,9 +22,17 @@ const proposalSchema = z.object({
   brand: z.string().optional(),
   category: z.string().min(1),
   expiryDate: z.string().min(1),
-  quantity: z.number().min(0.001),  // normalizeModelOutput guarantees > 0 before this runs
-  unit: z.string().optional(),
+  quantity: z.number().min(0.001),
+  // Required: normalizeModelOutput coerces missing units to 'pcs' before validation,
+  // matching the DB-level NOT NULL constraint (migration 202605270002).
+  unit: z.string().min(1),
   price: z.string().optional(),
+  // SLM-readiness — captured silently. All optional so the API stays
+  // backward-compatible if the model omits them.
+  name_raw: z.string().nullable().optional(),
+  brand_raw: z.string().nullable().optional(),
+  quantity_raw: z.string().nullable().optional(),
+  price_source: z.enum(["receipt_line", "mrp", "order_total", "unknown"]).nullable().optional(),
 })
 
 const modelOutputSchema = z.object({
@@ -51,22 +66,31 @@ You MUST return a JSON object with exactly these keys:
 - "proposals": an array of item objects, each with:
   - "name" (string): generic product type only — no brand (e.g. "Butter", not "Amul Butter")
   - "brand" (string, optional): brand name if identifiable (e.g. "Amul")
-  - "category" (string): one of Fruits, Vegetables, Dairy, Meat, Grains, Canned, Frozen, Snacks, Beverages, Condiments, Other
+  - "category" (string): one of Fruits, Vegetables, Dairy, Meat, Grains, Canned, Frozen, Snacks, Beverages, Condiments, Spices, Dry Fruits, Supplement, Medicine, Other
+    Category tiebreakers:
+    - Dry Fruits vs Snacks: whole or sliced nuts and dried fruits as pantry ingredients (almonds, cashews, raisins, dates, walnuts, figs, pista) — even if roasted or salted — go to Dry Fruits. Packaged ready-to-eat with added flavorings or coatings (chocolate-covered almonds, namkeen, trail mix with seasoning) go to Snacks.
+    - Supplement vs Medicine: vitamins, multivitamins, protein powder, mass gainer, omega-3, ashwagandha, herbal capsules go to Supplement. OTC and prescription drugs (paracetamol, ibuprofen, antacids, cough syrup, antibiotics, ointments) go to Medicine.
+    - Condiments vs Spices: bottled/jarred sauces, ketchup, mayo, pickles go to Condiments. Whole or ground spices (turmeric, jeera, garam masala, salt, pepper) go to Spices.
   - "expiryDate" (string): estimated expiry date in YYYY-MM-DD format, calculated from today (${today})
   - "quantity" (number): numeric quantity value, can be decimal (e.g. 0.5, 2.5). Default 1.
   - "unit" (string): the unit for quantity. Valid units: pcs, g, kg, oz, lb, ml, L, fl oz, cup. Use "pcs" for countable items (e.g. eggs, apples). Use weight/volume units for bulk items (e.g. 500g flour, 1L milk). Default "pcs".
   - "price" (string, optional): price if visible
+  - Provenance fields (REQUIRED — preserved verbatim for training data):
+    - "name_raw" (string): the literal product text you read from the package, shelf label, or receipt line for THIS item (e.g. "Amul Butter Salted 500g", "AASHIRVAAD ATTA"). Preserve original casing. If from a text description, copy the substring the user wrote for this item.
+    - "brand_raw" (string|null): the literal brand text exactly as printed on the package (e.g. "AMUL", "Aashirvaad"). Null if no brand visible.
+    - "quantity_raw" (string|null): the literal quantity text as printed (e.g. "500g", "1L", "200 ml", "6 nos"). Null if no quantity visible.
+    - "price_source" (string|null): one of "receipt_line" (printed/digital receipt), "mrp" (printed on packaging), "order_total" (delivery-order screenshot total), "unknown" (uncertain). Null if no price was extracted.
 - "confidence" (number): a number between 0 and 1
 - "reasoning" (string): a brief explanation of what was detected
 
 Examples:
-- 500g flour → {"quantity": 500, "unit": "g"}
-- 1 litre milk → {"quantity": 1, "unit": "L"}
-- 6 eggs → {"quantity": 6, "unit": "pcs"}
-- 250ml juice → {"quantity": 250, "unit": "ml"}
+- 500g flour → {"quantity": 500, "unit": "g", "quantity_raw": "500g"}
+- 1 litre milk → {"quantity": 1, "unit": "L", "quantity_raw": "1 litre"}
+- 6 eggs → {"quantity": 6, "unit": "pcs", "quantity_raw": "6"}
+- 250ml juice → {"quantity": 250, "unit": "ml", "quantity_raw": "250ml"}
 
 Example response:
-{"proposals":[{"name":"Butter","brand":"Amul","category":"Dairy","expiryDate":"${new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0]}","quantity":1,"unit":"pcs"}],"confidence":0.9,"reasoning":"Detected Amul Butter on shelf"}`
+{"proposals":[{"name":"Butter","brand":"Amul","category":"Dairy","expiryDate":"${new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0]}","quantity":1,"unit":"pcs","name_raw":"Amul Butter Salted","brand_raw":"AMUL","quantity_raw":"500g","price_source":null}],"confidence":0.9,"reasoning":"Detected Amul Butter on shelf"}`
 }
 
 function getOpenAIClient(): OpenAI | null {
@@ -83,7 +107,6 @@ function getOpenAIClient(): OpenAI | null {
 function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...raw }
 
-  // Coerce alternative key names for proposals array
   if (!Array.isArray(normalized.proposals)) {
     for (const key of ["items", "results", "extracted_items"]) {
       if (Array.isArray(normalized[key])) {
@@ -93,7 +116,6 @@ function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unkn
       }
     }
   }
-  // Ensure proposals is always an array
   if (!Array.isArray(normalized.proposals)) {
     normalized.proposals = []
   }
@@ -107,11 +129,9 @@ function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unkn
     .map((item) => {
       const out = { ...item }
 
-      // Normalise alternative expiry field names
       if (!out.expiryDate && out.expiry_date) { out.expiryDate = out.expiry_date; delete out.expiry_date }
       if (!out.expiryDate && out.expiration_date) { out.expiryDate = out.expiration_date; delete out.expiration_date }
 
-      // Guarantee required string fields are non-empty
       if (!out.name || typeof out.name !== "string" || !(out.name as string).trim()) {
         out.name = "Unknown Item"
       }
@@ -122,26 +142,19 @@ function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unkn
         out.expiryDate = defaultExpiry
       }
 
-      // Guarantee quantity is a positive number
-      if (out.quantity === undefined || out.quantity === null) {
-        out.quantity = 1
-      }
-      if (typeof out.quantity === "string") {
-        out.quantity = parseFloat(out.quantity as string) || 1
-      }
-      if (typeof out.quantity !== "number" || (out.quantity as number) <= 0) {
-        out.quantity = 1
-      }
+      if (out.quantity === undefined || out.quantity === null) out.quantity = 1
+      if (typeof out.quantity === "string") out.quantity = parseFloat(out.quantity as string) || 1
+      if (typeof out.quantity !== "number" || (out.quantity as number) <= 0) out.quantity = 1
 
-      // Guarantee unit is a non-empty string
-      if (!out.unit || typeof out.unit !== "string" || !(out.unit as string).trim()) {
-        out.unit = "pcs"
-      }
+      if (!out.unit || typeof out.unit !== "string" || !(out.unit as string).trim()) out.unit = "pcs"
 
-      // Price must be a string if present
-      if (typeof out.price === "number") {
-        out.price = String(out.price)
-      }
+      if (typeof out.price === "number") out.price = String(out.price)
+
+      // Normalise provenance keys — model might emit snake_case OR camelCase.
+      if (out.nameRaw && !out.name_raw) { out.name_raw = out.nameRaw; delete out.nameRaw }
+      if (out.brandRaw && !out.brand_raw) { out.brand_raw = out.brandRaw; delete out.brandRaw }
+      if (out.quantityRaw && !out.quantity_raw) { out.quantity_raw = out.quantityRaw; delete out.quantityRaw }
+      if (out.priceSource && !out.price_source) { out.price_source = out.priceSource; delete out.priceSource }
 
       return out
     })
@@ -156,22 +169,17 @@ function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unkn
   return normalized
 }
 
-async function getModelResponse(userInput: string, imageBase64?: string, imagesBase64?: string[]): Promise<unknown> {
-  const client = getOpenAIClient()
-
-  if (!client) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("OPENAI_API_KEY is not configured")
-    }
-    return fallbackModelOutput(userInput)
-  }
-
+async function callModel(
+  client: OpenAI,
+  userInput: string,
+  imageBase64?: string,
+  imagesBase64?: string[],
+): Promise<{ rawText: string; normalized: unknown }> {
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: buildSystemPrompt() },
   ]
 
   if (imagesBase64 && imagesBase64.length > 0) {
-    // Multi-image path: build a user message with all image_url blocks
     const imageBlocks: OpenAI.Chat.Completions.ChatCompletionContentPart[] = imagesBase64.map((img) => ({
       type: "image_url" as const,
       image_url: {
@@ -184,7 +192,6 @@ async function getModelResponse(userInput: string, imageBase64?: string, imagesB
       content: [{ type: "text", text: userInput }, ...imageBlocks],
     })
   } else if (imageBase64) {
-    // Single-image path (camera capture)
     messages.push({
       role: "user",
       content: [
@@ -203,18 +210,18 @@ async function getModelResponse(userInput: string, imageBase64?: string, imagesB
   }
 
   const completion = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: MODEL_VERSION,
     messages,
     response_format: { type: "json_object" },
     max_tokens: imagesBase64 && imagesBase64.length > 1 ? 4096 : 2048,
     temperature: 0.3,
   })
 
-  const content = completion.choices[0]?.message?.content
-  if (!content) throw new Error("Empty response from OpenAI")
+  const rawText = completion.choices[0]?.message?.content ?? ""
+  if (!rawText) throw new Error("Empty response from OpenAI")
 
-  const parsed = JSON.parse(content)
-  return normalizeModelOutput(parsed)
+  const parsed = JSON.parse(rawText)
+  return { rawText, normalized: normalizeModelOutput(parsed) }
 }
 
 function fallbackModelOutput(userInput: string) {
@@ -227,6 +234,10 @@ function fallbackModelOutput(userInput: string) {
         expiryDate: new Date(today.getTime() + 7 * 86400000).toISOString().split("T")[0],
         quantity: 1,
         price: "65",
+        name_raw: "Organic Milk",
+        brand_raw: null,
+        quantity_raw: "1L",
+        price_source: "unknown",
       },
       {
         name: "Eggs",
@@ -234,10 +245,46 @@ function fallbackModelOutput(userInput: string) {
         expiryDate: new Date(today.getTime() + 14 * 86400000).toISOString().split("T")[0],
         quantity: 12,
         price: "89",
+        name_raw: "Eggs",
+        brand_raw: null,
+        quantity_raw: "12",
+        price_source: "unknown",
       },
     ],
     confidence: 0.86,
     reasoning: `Fallback proposals generated for input: ${userInput.slice(0, 120)}`,
+  }
+}
+
+/**
+ * Upload a base64-encoded image (with or without data: prefix) to Supabase Storage
+ * at the canonical path. Returns the storage key on success, null on failure.
+ * Failures are non-fatal — we'd rather lose the image than the whole interaction.
+ */
+async function uploadScanImage(
+  userId: string,
+  interactionId: string,
+  index: number,
+  imageBase64: string,
+): Promise<string | null> {
+  try {
+    const dataPart = imageBase64.startsWith("data:") ? imageBase64.split(",", 2)[1] : imageBase64
+    if (!dataPart) return null
+    const buffer = Buffer.from(dataPart, "base64")
+    const path = `${userId}/${interactionId}/${index}.jpg`
+    const admin = getSupabaseAdmin()
+    const { error } = await admin.storage.from(STORAGE_BUCKET).upload(path, buffer, {
+      contentType: "image/jpeg",
+      upsert: false,
+    })
+    if (error) {
+      console.error("scan image upload failed:", error.message)
+      return null
+    }
+    return path
+  } catch (err) {
+    console.error("scan image upload threw:", err)
+    return null
   }
 }
 
@@ -261,21 +308,58 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = user.id
+  // Pre-generate id so we can use it for the image storage path; the row is
+  // inserted via logAIInteraction at the end with the same id.
+  const interactionId = crypto.randomUUID()
 
   try {
-    const rawModelResponse = await getModelResponse(userInput, imageBase64, imagesBase64)
-    const parsedOutput = modelOutputSchema.safeParse(rawModelResponse)
+    const client = getOpenAIClient()
+
+    // ── Dev fallback: no OPENAI_API_KEY. Skip image upload + logging. ──
+    if (!client) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("OPENAI_API_KEY is not configured")
+      }
+      const fallback = fallbackModelOutput(userInput)
+      return NextResponse.json({
+        ...fallback,
+        confidenceThreshold: getUserConfidenceThreshold(userId),
+        canBulkApply: fallback.confidence >= getUserConfidenceThreshold(userId),
+      })
+    }
+
+    // ── Upload images first so we can log image_paths atomically with the row. ──
+    const imagesToUpload: string[] = imagesBase64 && imagesBase64.length > 0
+      ? imagesBase64
+      : imageBase64
+        ? [imageBase64]
+        : []
+    const imagePaths: string[] = []
+    for (let i = 0; i < imagesToUpload.length; i++) {
+      const path = await uploadScanImage(userId, interactionId, i, imagesToUpload[i])
+      if (path) imagePaths.push(path)
+    }
+
+    // ── Call the model and capture the LITERAL string before any parsing. ──
+    const { rawText, normalized } = await callModel(client, userInput, imageBase64, imagesBase64)
+    const parsedOutput = modelOutputSchema.safeParse(normalized)
 
     if (!parsedOutput.success) {
-      console.error("Zod validation failed:", JSON.stringify(parsedOutput.error.flatten()), "Raw:", JSON.stringify(rawModelResponse))
+      console.error("Zod validation failed:", JSON.stringify(parsedOutput.error.flatten()), "Raw:", rawText.slice(0, 500))
 
       await logAIInteraction({
+        interactionId,
         userId,
         userInput,
-        modelRawResponse: rawModelResponse,
+        modelRawText: rawText,
+        modelNormalizedResponse: normalized,
         parsedResponse: null,
         status: "error",
         errorMessage: parsedOutput.error.message,
+        modelVersion: MODEL_VERSION,
+        promptVersion: PROMPT_VERSION,
+        surface: "photo",
+        imagePaths: imagePaths.length > 0 ? imagePaths : null,
       })
 
       return NextResponse.json(
@@ -285,11 +369,17 @@ export async function POST(req: NextRequest) {
     }
 
     await logAIInteraction({
+      interactionId,
       userId,
       userInput,
-      modelRawResponse: rawModelResponse,
+      modelRawText: rawText,
+      modelNormalizedResponse: normalized,
       parsedResponse: parsedOutput.data,
       status: "success",
+      modelVersion: MODEL_VERSION,
+      promptVersion: PROMPT_VERSION,
+      surface: "photo",
+      imagePaths: imagePaths.length > 0 ? imagePaths : null,
     })
 
     const threshold = getUserConfidenceThreshold(userId)
@@ -298,17 +388,24 @@ export async function POST(req: NextRequest) {
       ...parsedOutput.data,
       confidenceThreshold: threshold,
       canBulkApply: parsedOutput.data.confidence >= threshold,
+      aiInteractionId: interactionId,
+      imagePaths,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown model error"
 
     await logAIInteraction({
+      interactionId,
       userId,
       userInput,
-      modelRawResponse: null,
+      modelRawText: null,
+      modelNormalizedResponse: null,
       parsedResponse: null,
       status: "error",
       errorMessage: message,
+      modelVersion: MODEL_VERSION,
+      promptVersion: PROMPT_VERSION,
+      surface: "photo",
     })
 
     const status = message.includes("not configured") ? 503 : 500

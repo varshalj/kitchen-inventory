@@ -1,6 +1,12 @@
 export const CATEGORIES = [
   "Fruits", "Vegetables", "Dairy", "Meat", "Grains",
-  "Canned", "Frozen", "Snacks", "Beverages", "Condiments", "Spices", "Other",
+  "Canned", "Frozen", "Snacks", "Beverages", "Condiments", "Spices",
+  // Appended (not reshuffled) so existing UI iteration order stays stable.
+  // The AI prompts in app/api/ai/{parse-voice,propose-items}/route.ts include
+  // tiebreaker rules to disambiguate these from neighbours (Dry Fruits vs
+  // Snacks, Supplement vs Medicine). Bump prompt_version when changing here.
+  "Dry Fruits", "Supplement", "Medicine",
+  "Other",
 ] as const
 
 export type Category = (typeof CATEGORIES)[number]
@@ -17,6 +23,14 @@ export const DEFAULT_EXPIRY_DAYS: Record<string, number> = {
   Spices: 365,
   Snacks: 30,
   Beverages: 30,
+  // Long shelf life when sealed. Real-world expiry stamped on the packaging
+  // overrides this heuristic — the default just gives the date input a value.
+  "Dry Fruits": 180,
+  Supplement: 365,
+  // Heuristic intentionally generous. Medicines have hard printed expiry dates
+  // that the user should set explicitly; the default exists to avoid a blank
+  // field, not to be an authoritative estimate.
+  Medicine: 365,
   Other: 30,
 }
 

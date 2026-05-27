@@ -46,3 +46,25 @@ export function findFuzzyMatch(name: string, existingNames: string[]): string | 
   }
   return null
 }
+
+/**
+ * Collapse trivial spelling variants so "Almond" / "almonds" / "Tomatoes" hash
+ * to the same key. Idempotent. Intentionally naive — covers the common cases
+ * (case, whitespace, simple plural folding) without depending on a dictionary.
+ *
+ * Used for:
+ *   1. MCP agent ambiguity resolution (lib/mcp/tools.ts)
+ *   2. Dashboard thread-clustering of same-name inventory rows
+ *
+ * Distinct from `isFuzzyMatch` — this is for hashable equality (`a === b`),
+ * not edit-distance similarity. "Milk" and "Whole Milk" do NOT collapse here.
+ */
+export function normalizeName(s: string): string {
+  const n = s.trim().toLowerCase().replace(/\s+/g, " ")
+  if (n.length > 3 && n.endsWith("ies")) return n.slice(0, -3) + "y"
+  if (n.length > 3 && n.endsWith("oes")) return n.slice(0, -2)
+  if (n.length > 3 && /(sh|ch|ss|x|z)es$/.test(n)) return n.slice(0, -2)
+  if (n.endsWith("ss")) return n
+  if (n.length > 1 && n.endsWith("s")) return n.slice(0, -1)
+  return n
+}

@@ -14,6 +14,8 @@ import { PwaInstallPrompt } from "@/components/pwa-install-prompt"
 import { ShoppingCountProvider } from "@/contexts/shopping-count-context"
 import { RecipeImportProvider } from "@/contexts/recipe-import-context"
 import { EmailIngestionProvider } from "@/contexts/email-ingestion-context"
+import { InventoryProvider } from "@/contexts/inventory-context"
+import { ReviewProvider } from "@/contexts/review-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -27,12 +29,22 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <ShoppingCountProvider>
             <RecipeImportProvider>
               <EmailIngestionProvider>
-                {children}
-                <Toaster />
-                <ScreenshotBugNudge />
-                <OnboardingTour />
-                <PwaUpdateBanner />
-                <PwaInstallPrompt />
+                {/*
+                  Inventory cache + Review queue are both app-level so they
+                  survive page navigation. Inventory wraps Review so the
+                  rating chip (if needed) can later read item context from
+                  the cache without an extra fetch.
+                */}
+                <InventoryProvider>
+                  <ReviewProvider>
+                    {children}
+                    <Toaster />
+                    <ScreenshotBugNudge />
+                    <OnboardingTour />
+                    <PwaUpdateBanner />
+                    <PwaInstallPrompt />
+                  </ReviewProvider>
+                </InventoryProvider>
               </EmailIngestionProvider>
             </RecipeImportProvider>
           </ShoppingCountProvider>

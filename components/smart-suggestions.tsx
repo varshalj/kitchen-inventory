@@ -99,6 +99,9 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
         expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         location: "Refrigerator",
         quantity: 1,
+        // Explicit unit — suggestion-based adds previously omitted this, which
+        // landed null in the DB and produced misleading "pcs" displays elsewhere.
+        unit: "pcs",
         addedOn: new Date().toISOString(),
       } as unknown as InventoryItem)
 

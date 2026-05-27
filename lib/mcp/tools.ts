@@ -3,6 +3,7 @@ import type { ShoppingItem } from "@/lib/types"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { shoppingRepo } from "@/lib/server/repositories/shopping-repo"
 import { recipeRepo } from "@/lib/server/repositories/recipe-repo"
+import { normalizeName } from "@/lib/utils"
 
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>
@@ -27,18 +28,8 @@ function previewResult(payload: Record<string, unknown>): ToolResult {
   return textResult({ dry_run: true, ...payload })
 }
 
-// Collapse trivial spelling variants so "Almond" / "almonds" / "Tomatoes" hash
-// the same. Idempotent. Intentionally naive — covers the common cases that
-// cause agent ambiguity-bypass without depending on a dictionary.
-function normalizeName(s: string): string {
-  const n = s.trim().toLowerCase().replace(/\s+/g, " ")
-  if (n.length > 3 && n.endsWith("ies")) return n.slice(0, -3) + "y"
-  if (n.length > 3 && n.endsWith("oes")) return n.slice(0, -2)
-  if (n.length > 3 && /(sh|ch|ss|x|z)es$/.test(n)) return n.slice(0, -2)
-  if (n.endsWith("ss")) return n
-  if (n.length > 1 && n.endsWith("s")) return n.slice(0, -1)
-  return n
-}
+// normalizeName moved to lib/utils.ts so it can be shared with the dashboard's
+// thread-clustering logic. Imported above.
 
 // ─── Tool handlers ───────────────────────────────────────────────────────────
 
@@ -338,7 +329,10 @@ async function handleAddToShoppingList(
 
   const quantity =
     typeof args.quantity === "number" && args.quantity > 0 ? args.quantity : 1
-  const unit = typeof args.unit === "string" && args.unit.length > 0 ? args.unit : undefined
+  // Default to 'pcs' rather than undefined — shopping_items.unit is NOT NULL
+  // at the DB level (migration 202605270002), and undefined would also be a
+  // bug if it slipped past validation.
+  const unit = typeof args.unit === "string" && args.unit.length > 0 ? args.unit : "pcs"
   const confirm = args.confirm === true
 
   const target = normalizeName(itemName)

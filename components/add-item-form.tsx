@@ -38,20 +38,60 @@ function normaliseQuantity(qty: number, unit: string): { quantity: number; unit:
   return { quantity: parseFloat(qty.toFixed(2)), unit }
 }
 
+/**
+ * Returns true if the final review state diverges from the model's original
+ * proposals. Used to set `had_corrections` on the ai_interactions row, which
+ * lets us cheaply filter the training dataset later (e.g. "show me only
+ * sessions where the user corrected the model").
+ */
+function computePhotoHadCorrections(
+  finalItems: Array<{ included: boolean; source: "model" | "user_added"; name: string; quantity: number; unit: string; category: string; brand?: string; expiryDate: string }>,
+  originalProposals: Array<{ name: string; quantity: number; unit?: string; category: string; brand?: string; expiryDate: string }>,
+): boolean {
+  if (finalItems.some((p) => p.source === "user_added")) return true
+  if (finalItems.some((p) => !p.included)) return true
+  if (finalItems.length !== originalProposals.length) return true
+  for (let i = 0; i < finalItems.length; i++) {
+    const item = finalItems[i]
+    const original = originalProposals[i]
+    if (!original) return true
+    if (item.name !== original.name) return true
+    if ((item.brand || "") !== (original.brand || "")) return true
+    if (item.category !== original.category) return true
+    if (item.expiryDate !== original.expiryDate) return true
+    if (Math.abs((item.quantity ?? 0) - (original.quantity ?? 0)) > 1e-6) {
+      // Quantity-unit normalisation (kg<1→g) is expected — only flag if both
+      // diverge in a way that isn't a pure unit conversion.
+      const origUnit = (original.unit || "pcs").toLowerCase()
+      if (origUnit !== "kg" && origUnit !== "l") return true
+    }
+  }
+  return false
+}
+
 type DetectedType = "receipt" | "food" | "package" | null
+type ApiProposal = {
+  name: string
+  brand?: string
+  category: string
+  expiryDate: string
+  quantity: number
+  unit?: string
+  price?: string
+  // SLM-readiness provenance fields emitted by the model (see migration 202605270001).
+  name_raw?: string | null
+  brand_raw?: string | null
+  quantity_raw?: string | null
+  price_source?: "receipt_line" | "mrp" | "order_total" | "unknown" | null
+}
 type ProposalResponse = {
-  proposals: Array<{
-    name: string
-    brand?: string
-    category: string
-    expiryDate: string
-    quantity: number
-    price?: string
-  }>
+  proposals: ApiProposal[]
   confidence: number
   reasoning: string
   confidenceThreshold: number
   canBulkApply: boolean
+  aiInteractionId?: string | null
+  imagePaths?: string[]
 }
 import { fetchWithAuth } from "@/lib/api-client"
 
@@ -149,10 +189,22 @@ export function AddItemForm() {
       price?: string
       location?: string
       included: boolean
+      // SLM-readiness provenance (see migration 202605270001) ---
+      nameRaw?: string | null
+      brandRaw?: string | null
+      quantityRaw?: string | null
+      expirySource?: "model" | "client_default" | "user_edit"
+      priceSource?: "receipt_line" | "mrp" | "order_total" | "unknown" | null
+      /** Whether this item came from the model or was manually added at review. */
+      source: "model" | "user_added"
     }>
   >([])
   const [reviewSummary, setReviewSummary] = useState<{ confidence: number; threshold: number; reasoning: string } | null>(null)
   const [scanError, setScanError] = useState<string | null>(null)
+  // ── SLM-readiness: track the ai_interactions row id + an immutable copy of the
+  // ── model's pre-edit proposals so we can compute had_corrections at save time.
+  const [aiInteractionId, setAiInteractionId] = useState<string | null>(null)
+  const [originalProposals, setOriginalProposals] = useState<ApiProposal[]>([])
 
   const [formData, setFormData] = useState({
     name: "",
@@ -263,12 +315,15 @@ export function AddItemForm() {
           }
 
           const payload = (await response.json()) as ProposalResponse
+          // Freeze the model's pre-edit proposals for had_corrections diff.
+          setOriginalProposals(payload.proposals)
+          setAiInteractionId(payload.aiInteractionId ?? null)
           setExtractedItems(
             payload.proposals.map((proposal) => {
-              const rawPrice = (proposal as any).price ?? ""
+              const rawPrice = proposal.price ?? ""
               const cleanPrice = typeof rawPrice === "string" ? rawPrice.replace(/^[^\d.]+/, "") : String(rawPrice)
-              const rawUnit = (proposal as any).unit || "pcs"
-              const rawQty = typeof (proposal as any).quantity === "number" ? (proposal as any).quantity : 1
+              const rawUnit = proposal.unit || "pcs"
+              const rawQty = typeof proposal.quantity === "number" ? proposal.quantity : 1
               const { quantity, unit } = normaliseQuantity(rawQty, rawUnit)
               return {
                 ...proposal,
@@ -277,6 +332,13 @@ export function AddItemForm() {
                 unit,
                 confidence: payload.confidence,
                 included: true,
+                // SLM-readiness provenance — silently captured from the model output.
+                nameRaw: proposal.name_raw ?? null,
+                brandRaw: proposal.brand_raw ?? null,
+                quantityRaw: proposal.quantity_raw ?? null,
+                expirySource: "model" as const,
+                priceSource: proposal.price_source ?? null,
+                source: "model" as const,
               }
             })
           )
@@ -365,12 +427,14 @@ export function AddItemForm() {
         }
 
         const payload = (await response.json()) as ProposalResponse
+        setOriginalProposals(payload.proposals)
+        setAiInteractionId(payload.aiInteractionId ?? null)
         setExtractedItems(
           payload.proposals.map((proposal) => {
-            const rawPrice = (proposal as any).price ?? ""
+            const rawPrice = proposal.price ?? ""
             const cleanPrice = typeof rawPrice === "string" ? rawPrice.replace(/^[^\d.]+/, "") : String(rawPrice)
-            const rawUnit = (proposal as any).unit || "pcs"
-            const rawQty = typeof (proposal as any).quantity === "number" ? (proposal as any).quantity : 1
+            const rawUnit = proposal.unit || "pcs"
+            const rawQty = typeof proposal.quantity === "number" ? proposal.quantity : 1
             const { quantity, unit } = normaliseQuantity(rawQty, rawUnit)
             return {
               ...proposal,
@@ -379,6 +443,13 @@ export function AddItemForm() {
               unit,
               confidence: payload.confidence,
               included: true,
+              // SLM-readiness provenance — silently captured from the model output.
+              nameRaw: proposal.name_raw ?? null,
+              brandRaw: proposal.brand_raw ?? null,
+              quantityRaw: proposal.quantity_raw ?? null,
+              expirySource: "model" as const,
+              priceSource: proposal.price_source ?? null,
+              source: "model" as const,
             }
           })
         )
@@ -462,6 +533,14 @@ export function AddItemForm() {
             price: item.price || formData.price,
             brand: item.brand || formData.brand || undefined,
             orderedFrom: formData.orderedFrom || undefined,
+            // SLM-readiness provenance — links the saved row to the ai_interactions
+            // row, and preserves the model's literal output for future training.
+            aiInteractionId: item.source === "model" ? aiInteractionId : null,
+            nameRaw: item.nameRaw ?? null,
+            brandRaw: item.brandRaw ?? null,
+            quantityRaw: item.quantityRaw ?? null,
+            expirySource: item.expirySource ?? null,
+            priceSource: item.priceSource ?? null,
           } as unknown as InventoryItem)
           allCompleted.push(...completedShoppingItems)
         }
@@ -470,6 +549,42 @@ export function AddItemForm() {
           description: `${approved.length} item${approved.length !== 1 ? "s" : ""} added to your inventory.`,
         })
         showShoppingMatchToast(allCompleted)
+
+        // ── Finalise the ai_interactions row with leg (c) — the approved
+        // ── payload and whether the user corrected anything. Best-effort:
+        // ── a failure here doesn't roll back the items that were saved.
+        if (aiInteractionId) {
+          const approvedPayload = {
+            target: "inventory",
+            items: extractedItems.map((p) => ({
+              name: p.name,
+              brand: p.brand,
+              category: p.category,
+              expiryDate: p.expiryDate,
+              quantity: p.quantity,
+              unit: p.unit,
+              price: p.price,
+              location: p.location,
+              included: p.included,
+              source: p.source,
+              nameRaw: p.nameRaw,
+              brandRaw: p.brandRaw,
+              quantityRaw: p.quantityRaw,
+              expirySource: p.expirySource,
+              priceSource: p.priceSource,
+            })),
+          }
+          const hadCorrections = computePhotoHadCorrections(extractedItems, originalProposals)
+          try {
+            await fetchWithAuth(`/api/ai/interactions/${aiInteractionId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ approvedPayload, hadCorrections }),
+            })
+          } catch {
+            // Non-fatal — items are already saved.
+          }
+        }
       }
 
       router.push("/dashboard")
@@ -481,8 +596,12 @@ export function AddItemForm() {
     }
   }
 
-  const handleVoiceConfirm = async (items: VoiceParsedItem[], globals?: { location?: string; notes?: string }) => {
+  const handleVoiceConfirm = async (
+    items: VoiceParsedItem[],
+    globals?: { location?: string; notes?: string; aiInteractionId?: string | null },
+  ) => {
     const allCompleted: Array<{ id: string; name: string }> = []
+    const voiceInteractionId = globals?.aiInteractionId ?? null
     for (const item of items) {
       const { completedShoppingItems } = await addInventoryItem({
         name: item.name,
@@ -495,6 +614,13 @@ export function AddItemForm() {
         price: item.price || "",
         notes: globals?.notes || "",
         addedOn: new Date().toISOString(),
+        // SLM-readiness provenance — VoiceCapture finalises the ai_interactions
+        // row itself (approved_payload + had_corrections), so we only forward
+        // the FK + per-item raws here.
+        aiInteractionId: item.source === "model" ? voiceInteractionId : null,
+        nameRaw: item.nameRaw ?? null,
+        quantityRaw: item.quantityRaw ?? null,
+        expirySource: item.expirySource ?? null,
       } as unknown as InventoryItem)
       allCompleted.push(...completedShoppingItems)
     }
@@ -514,9 +640,16 @@ export function AddItemForm() {
 
   const updateExtractedItem = (index: number, field: string, value: string | number) => {
     setExtractedItems((items) =>
-      items.map((item, i) =>
-        i === index ? { ...item, [field]: value, included: true } : item
-      )
+      items.map((item, i) => {
+        if (i !== index) return item
+        const updated = { ...item, [field]: value, included: true }
+        // Track expiry provenance honestly — user-typed date wins over the
+        // model's estimate or the app's default.
+        if (field === "expiryDate") {
+          updated.expirySource = "user_edit"
+        }
+        return updated
+      })
     )
   }
 
@@ -541,6 +674,8 @@ export function AddItemForm() {
     setAnalyzeStep(0)
     setReviewSummary(null)
     setScanError(null)
+    setAiInteractionId(null)
+    setOriginalProposals([])
     if (fileInputRef.current) fileInputRef.current.value = ""
     if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
@@ -582,6 +717,14 @@ export function AddItemForm() {
           confidence: 0,
           price: "",
           brand: "",
+          // Manually added — never came from the model. Useful negative signal
+          // ("the model missed this item") for future training filters.
+          nameRaw: null,
+          brandRaw: null,
+          quantityRaw: null,
+          expirySource: "client_default",
+          priceSource: null,
+          source: "user_added",
         },
       ])
     }
@@ -1015,17 +1158,9 @@ export function AddItemForm() {
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="Fruits">Fruits</SelectItem>
-                                          <SelectItem value="Vegetables">Vegetables</SelectItem>
-                                          <SelectItem value="Dairy">Dairy</SelectItem>
-                                          <SelectItem value="Meat">Meat</SelectItem>
-                                          <SelectItem value="Grains">Grains</SelectItem>
-                                          <SelectItem value="Canned">Canned</SelectItem>
-                                          <SelectItem value="Frozen">Frozen</SelectItem>
-                                          <SelectItem value="Snacks">Snacks</SelectItem>
-                                          <SelectItem value="Beverages">Beverages</SelectItem>
-                                          <SelectItem value="Condiments">Condiments</SelectItem>
-                                          <SelectItem value="Other">Other</SelectItem>
+                                          {CATEGORIES.map((cat) => (
+                                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                          ))}
                                         </SelectContent>
                                       </Select>
 

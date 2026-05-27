@@ -5,6 +5,7 @@ type ParseResult<T> = ParseSuccess<T> | ParseFailure
 type Parser<T> = {
   safeParse: (value: unknown) => ParseResult<T>
   optional: () => Parser<T | undefined>
+  nullable: () => Parser<T | null>
 }
 
 function failure(message: string): ParseFailure {
@@ -17,6 +18,12 @@ function withOptional<T>(parse: (value: unknown) => ParseResult<T>): Parser<T> {
     optional() {
       return withOptional<T | undefined>((value) => {
         if (value === undefined) return { success: true, data: undefined }
+        return parse(value)
+      })
+    },
+    nullable() {
+      return withOptional<T | null>((value) => {
+        if (value === null) return { success: true, data: null }
         return parse(value)
       })
     },
@@ -111,9 +118,33 @@ function array<T>(itemParser: Parser<T>) {
   })
 }
 
+function boolean() {
+  return withOptional<boolean>((value) => {
+    if (typeof value !== "boolean") return failure("Expected boolean")
+    return { success: true, data: value }
+  })
+}
+
+function unknown() {
+  return withOptional<unknown>((value) => ({ success: true, data: value }))
+}
+
+function enumOf<T extends readonly [string, ...string[]]>(values: T) {
+  return withOptional<T[number]>((value) => {
+    if (typeof value !== "string") return failure("Expected string")
+    if (!values.includes(value as T[number])) {
+      return failure(`Expected one of: ${values.join(", ")}`)
+    }
+    return { success: true, data: value as T[number] }
+  })
+}
+
 export const z = {
   object,
   string,
   number,
   array,
+  boolean,
+  unknown,
+  enum: enumOf,
 }

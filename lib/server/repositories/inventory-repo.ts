@@ -31,6 +31,15 @@ function toDb(item: Partial<InventoryItem>) {
   if (item.reviewTags !== undefined) payload.review_tags = item.reviewTags
   if (item.reviewNote !== undefined) payload.review_note = item.reviewNote
   if (item.ratedAt !== undefined) payload.rated_at = item.ratedAt
+  if (item.reviewDismissedAt !== undefined) payload.review_dismissed_at = item.reviewDismissedAt
+  // SLM-readiness provenance — see migration 202605270001.
+  if (item.aiInteractionId !== undefined) payload.ai_interaction_id = item.aiInteractionId
+  if (item.nameRaw !== undefined) payload.name_raw = item.nameRaw
+  if (item.brandRaw !== undefined) payload.brand_raw = item.brandRaw
+  if (item.quantityRaw !== undefined) payload.quantity_raw = item.quantityRaw
+  if (item.expirySource !== undefined) payload.expiry_source = item.expirySource
+  if (item.priceSource !== undefined) payload.price_source = item.priceSource
+  if (item.extractedExtras !== undefined) payload.extracted_extras = item.extractedExtras
 
   return payload
 }
@@ -64,6 +73,14 @@ function toDomain(row: any): InventoryItem {
     reviewTags: row.review_tags,
     reviewNote: row.review_note,
     ratedAt: row.rated_at,
+    reviewDismissedAt: row.review_dismissed_at ?? null,
+    aiInteractionId: row.ai_interaction_id ?? null,
+    nameRaw: row.name_raw ?? null,
+    brandRaw: row.brand_raw ?? null,
+    quantityRaw: row.quantity_raw ?? null,
+    expirySource: row.expiry_source ?? null,
+    priceSource: row.price_source ?? null,
+    extractedExtras: row.extracted_extras ?? null,
   }
 }
 

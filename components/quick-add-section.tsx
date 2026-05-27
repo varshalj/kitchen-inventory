@@ -14,6 +14,9 @@ interface QuickAddSectionProps {
 
 export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
   // Predefined quick add items
+  // Predefined quick-add items. Units chosen to match the typical purchase form
+  // (e.g. milk is sold by the litre, eggs by the piece) so the SLM-readiness
+  // training data sees plausible defaults.
   const quickAddItems = [
     {
       name: "Milk",
@@ -21,6 +24,7 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
       expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       location: "Refrigerator",
       quantity: 1,
+      unit: "L",
     },
     {
       name: "Bread",
@@ -28,6 +32,7 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
       expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
       location: "Pantry",
       quantity: 1,
+      unit: "pcs",
     },
     {
       name: "Eggs",
@@ -35,6 +40,7 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
       expiryDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       location: "Refrigerator",
       quantity: 12,
+      unit: "pcs",
     },
     {
       name: "Bananas",
@@ -42,6 +48,7 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
       expiryDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
       location: "Counter",
       quantity: 5,
+      unit: "pcs",
     },
     {
       name: "Chicken Breast",
@@ -49,6 +56,7 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
       expiryDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
       location: "Freezer",
       quantity: 2,
+      unit: "pcs",
     },
     {
       name: "Spinach",
@@ -56,6 +64,7 @@ export function QuickAddSection({ onAddItem, onClose }: QuickAddSectionProps) {
       expiryDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
       location: "Refrigerator",
       quantity: 1,
+      unit: "pcs",
     },
   ]
 

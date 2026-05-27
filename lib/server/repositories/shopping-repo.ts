@@ -20,6 +20,11 @@ function toDb(item: Partial<ShoppingItem>) {
   if (item.addedFrom !== undefined) payload.added_from = item.addedFrom
   if (item.brand !== undefined) payload.brand = item.brand
   if (item.orderedFrom !== undefined) payload.ordered_from = item.orderedFrom
+  // SLM-readiness provenance — see migration 202605270001.
+  if (item.aiInteractionId !== undefined) payload.ai_interaction_id = item.aiInteractionId
+  if (item.nameRaw !== undefined) payload.name_raw = item.nameRaw
+  if (item.quantityRaw !== undefined) payload.quantity_raw = item.quantityRaw
+  if (item.extractedExtras !== undefined) payload.extracted_extras = item.extractedExtras
 
   return payload
 }
@@ -41,6 +46,10 @@ function toDomain(row: any): ShoppingItem {
     addedFrom: row.added_from,
     brand: row.brand ?? undefined,
     orderedFrom: row.ordered_from ?? undefined,
+    aiInteractionId: row.ai_interaction_id ?? null,
+    nameRaw: row.name_raw ?? null,
+    quantityRaw: row.quantity_raw ?? null,
+    extractedExtras: row.extracted_extras ?? null,
   }
 }
 

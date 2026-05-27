@@ -54,6 +54,9 @@ async function handleAddShoppingItem(intent: any, supabase: SupabaseClient) {
     id: crypto.randomUUID(),
     name: item,
     quantity: 1,
+    // Alexa intent provides no unit; default explicitly rather than relying on
+    // the DB default — keeps the type system honest.
+    unit: "pcs",
     completed: false,
     addedOn: new Date().toISOString(),
     addedFrom: "voice",

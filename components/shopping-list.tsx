@@ -208,9 +208,13 @@ export function ShoppingList() {
     }
   }
 
-  const handleVoiceConfirm = async (voiceItems: VoiceParsedItem[]) => {
+  const handleVoiceConfirm = async (
+    voiceItems: VoiceParsedItem[],
+    globals?: { aiInteractionId?: string | null },
+  ) => {
     let addedCount = 0
     const activeNames = items.filter((i) => !i.completed).map((i) => i.name)
+    const aiInteractionId = globals?.aiInteractionId ?? null
 
     for (const vi of voiceItems) {
       // Safety net: if a fuzzy duplicate slipped through the review screen, skip it
@@ -224,6 +228,11 @@ export function ShoppingList() {
         completed: false,
         addedOn: new Date().toISOString(),
         addedFrom: "voice" as const,
+        // SLM-readiness provenance — links this row back to the model interaction
+        // and preserves the literal as-spoken text for future training.
+        aiInteractionId: vi.source === "model" ? aiInteractionId : null,
+        nameRaw: vi.nameRaw ?? null,
+        quantityRaw: vi.quantityRaw ?? null,
       }
       try {
         const addedItem = await addToShoppingList(payload as unknown as ShoppingItem)
@@ -276,6 +285,7 @@ export function ShoppingList() {
           expiryDate: "", // intentionally blank — shows in SET EXPIRY filter
           location: settings?.storageLocations?.[0] ?? "Pantry",
           quantity: item.quantity,
+          unit: item.unit,
           brand: item.brand,
           orderedFrom: item.orderedFrom,
           archived: false,

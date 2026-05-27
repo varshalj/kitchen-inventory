@@ -55,21 +55,58 @@ export interface VoiceParsedItem {
   location?: string
   included: boolean
   fuzzyMatchedName?: string
+  // --- SLM-readiness provenance (see migration 202605270001) ---
+  /** Literal as-spoken substring from the transcript (model-supplied). */
+  nameRaw?: string | null
+  /** Literal quantity phrase as spoken (model-supplied). */
+  quantityRaw?: string | null
+  /** Which source produced the saved expiry date. */
+  expirySource?: "model" | "client_default" | "user_edit"
+  /** Whether this item came from the model or was manually added at review. */
+  source: "model" | "user_added"
+}
+
+export interface VoiceConfirmGlobals {
+  location?: string
+  notes?: string
+  /** FK to the ai_interactions row that produced these items. */
+  aiInteractionId?: string | null
+  /** The full pre-save snapshot of items (included + excluded + user_added). */
+  approvedPayload?: unknown
+  /** Whether the user changed/excluded/added items vs. the model's original output. */
+  hadCorrections?: boolean
 }
 
 interface VoiceCaptureProps {
   target: "shopping" | "inventory"
-  onConfirm: (items: VoiceParsedItem[], globals?: { location?: string; notes?: string }) => Promise<void>
+  onConfirm: (items: VoiceParsedItem[], globals?: VoiceConfirmGlobals) => Promise<void>
   existingNames?: string[]
   fullWidth?: boolean
 }
 
 type Phase = "idle" | "listening" | "parsing" | "review"
 
+type ApiVoiceItem = {
+  name: string
+  quantity: number
+  unit?: string
+  category?: string
+  name_raw?: string | null
+  quantity_raw?: string | null
+}
+
+/**
+ * Snapshot of the model's pre-edit proposal for one item. Kept alongside the
+ * editable `parsedItems` state so we can compute `hadCorrections` at save time.
+ */
+type OriginalProposal = ApiVoiceItem
+
 export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth }: VoiceCaptureProps) {
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>("idle")
   const [parsedItems, setParsedItems] = useState<VoiceParsedItem[]>([])
+  const [originalProposals, setOriginalProposals] = useState<OriginalProposal[]>([])
+  const [aiInteractionId, setAiInteractionId] = useState<string | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [elapsed, setElapsed] = useState(0)
@@ -116,6 +153,8 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
     setOpen(true)
     setPhase("idle")
     setParsedItems([])
+    setOriginalProposals([])
+    setAiInteractionId(null)
     setParseError(null)
     setGlobalLocation("Refrigerator")
     setGlobalNotes("")
@@ -159,7 +198,12 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
       }
 
       const data = await response.json()
-      const items: VoiceParsedItem[] = (data.items || []).map((item: any) => {
+      const apiItems: ApiVoiceItem[] = data.items || []
+      // ── Keep a frozen copy of the raw model output for hadCorrections diff. ──
+      setOriginalProposals(apiItems)
+      setAiInteractionId(data.aiInteractionId ?? null)
+
+      const items: VoiceParsedItem[] = apiItems.map((item) => {
         const name = item.name || "Unknown"
         const fuzzyMatch = findFuzzyMatch(name, existingNamesRef.current)
         const category = item.category || "Other"
@@ -175,6 +219,12 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
           location: globalLocation,
           included: fuzzyMatch === null,
           fuzzyMatchedName: fuzzyMatch ?? undefined,
+          nameRaw: item.name_raw ?? null,
+          quantityRaw: item.quantity_raw ?? null,
+          // Voice route doesn't extract expiry — client always applies the default.
+          // (We capture this honestly here rather than mislabelling as 'model'.)
+          expirySource: target === "inventory" ? "client_default" : undefined,
+          source: "model",
         }
       })
 
@@ -192,7 +242,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
       setPhase("idle")
       isParsingRef.current = false
     }
-  }, [stopListening, target])
+  }, [stopListening, target, globalLocation])
 
   useEffect(() => {
     if (speechState === "idle" && phase === "listening") {
@@ -210,9 +260,18 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
     setParsedItems((prev) =>
       prev.map((item, i) => {
         if (i !== index) return item
-        const updated = { ...item, [field]: value, included: true }
+        const updated: VoiceParsedItem = { ...item, [field]: value, included: true }
+        // ── Track expiry provenance honestly: user-typed date wins over auto-default ──
+        if (field === "expiryDate") {
+          updated.expirySource = "user_edit"
+        }
         if (field === "category" && isInventory) {
           updated.expiryDate = defaultExpiryDate(value as string)
+          // Category change auto-applies a default; don't downgrade if user
+          // already hand-edited the date.
+          if (updated.expirySource !== "user_edit") {
+            updated.expirySource = "client_default"
+          }
         }
         return updated
       })
@@ -249,6 +308,11 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
           brand: "",
           price: "",
           included: true,
+          // Manually added — never came from the model.
+          nameRaw: null,
+          quantityRaw: null,
+          expirySource: isInventory ? "client_default" : undefined,
+          source: "user_added",
         },
       ])
     }
@@ -259,14 +323,90 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
 
   const includedCount = parsedItems.filter((i) => i.included).length
 
+  /**
+   * Compare the final review state to the original model proposals.
+   * Returns true if anything is different — excluded items, edited fields,
+   * or user-added items all count.
+   */
+  const computeHadCorrections = (): boolean => {
+    if (parsedItems.some((p) => p.source === "user_added")) return true
+    if (parsedItems.some((p) => !p.included)) return true
+    if (parsedItems.length !== originalProposals.length) return true
+    for (let i = 0; i < parsedItems.length; i++) {
+      const item = parsedItems[i]
+      const original = originalProposals[i]
+      if (!original) return true
+      if (item.name !== original.name) return true
+      if (Math.abs((item.quantity ?? 0) - (original.quantity ?? 0)) > 1e-6) return true
+      const origUnit = (original.unit || "pcs").toLowerCase()
+      const itemUnit = (item.unit || "pcs").toLowerCase()
+      // Quantity-unit normalisation (kg<1→g, l<1→ml) is expected — only flag
+      // if both quantity AND unit diverge in a way that isn't pure unit conversion.
+      if (origUnit !== itemUnit && origUnit !== "kg" && origUnit !== "l") return true
+      if (isInventory && item.category !== (original.category ?? "Other")) return true
+    }
+    return false
+  }
+
   const handleConfirm = async () => {
     setSaving(true)
     try {
-      const globals = isInventory ? { location: globalLocation, notes: globalNotes } : undefined
-      await onConfirm(parsedItems.filter((i) => i.included), globals)
+      const includedItems = parsedItems.filter((i) => i.included)
+      const hadCorrections = computeHadCorrections()
+      const approvedPayload = {
+        target,
+        items: parsedItems.map((p) => ({
+          name: p.name,
+          quantity: p.quantity,
+          unit: p.unit,
+          category: p.category,
+          expiryDate: p.expiryDate,
+          brand: p.brand,
+          price: p.price,
+          location: p.location,
+          included: p.included,
+          source: p.source,
+          nameRaw: p.nameRaw,
+          quantityRaw: p.quantityRaw,
+          expirySource: p.expirySource,
+        })),
+      }
+
+      const globals: VoiceConfirmGlobals = isInventory
+        ? {
+            location: globalLocation,
+            notes: globalNotes,
+            aiInteractionId,
+            approvedPayload,
+            hadCorrections,
+          }
+        : {
+            aiInteractionId,
+            approvedPayload,
+            hadCorrections,
+          }
+
+      await onConfirm(includedItems, globals)
+
+      // ── Finalise the ai_interactions row with leg (c) data. Best-effort ──
+      // ── — a failure here doesn't roll back the items that were saved. ──
+      if (aiInteractionId) {
+        try {
+          await fetchWithAuth(`/api/ai/interactions/${aiInteractionId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ approvedPayload, hadCorrections }),
+          })
+        } catch {
+          // Non-fatal — items are already saved.
+        }
+      }
+
       setOpen(false)
       setPhase("idle")
       setParsedItems([])
+      setOriginalProposals([])
+      setAiInteractionId(null)
     } catch {
       setParseError("Failed to save items. Please try again.")
     } finally {

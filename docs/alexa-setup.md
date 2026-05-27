@@ -104,7 +104,7 @@ In the left sidebar: **Interaction Model → JSON Editor**. Replace whatever's t
 
 Click **Save Model**, then **Build Model**. Build takes 1–2 minutes.
 
-> **Note on `AMAZON.SearchQuery`:** Alexa requires `SearchQuery` slots to be surrounded by anchor words — that's why every sample has *"add … to my list"* rather than bare *"add eggs"*. If you find yourself wanting bare-verb utterances, switch to a custom slot type seeded with common groceries.
+> **Why a custom `GroceryItem` slot type and not `AMAZON.SearchQuery`:** `AMAZON.SearchQuery` has severe restrictions in one-shot invocations (the *"Alexa, ask pantry bro to add eggs to my list"* pattern), and Alexa silently routes to `AMAZON.FallbackIntent` instead of matching your intent. Custom slot types don't have this problem and let Alexa actually extract the item name. The slot is extensible — items not in the seed list still get matched, just with weaker confidence. Add more values as you discover your household's vocabulary.
 
 > **Note on invocation name:** *"kitchen mate"* works because it's two words and not a brand. Avoid anything that overlaps with Alexa's built-in commands. Test by saying it out loud — if it doesn't trip Alexa reliably, pick a different one.
 

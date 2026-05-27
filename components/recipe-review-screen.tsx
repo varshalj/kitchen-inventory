@@ -229,7 +229,7 @@ export function RecipeReviewScreen({
           id: "",
           name: ing.canonicalName || ing.name,
           quantity: ing.quantity ?? 1,
-          unit: ing.unit,
+          unit: ing.unit ?? "pcs",
           category: "",
           completed: false,
           addedOn: new Date().toISOString(),

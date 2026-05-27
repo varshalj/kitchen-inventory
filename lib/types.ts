@@ -5,7 +5,8 @@ export interface InventoryItem {
   expiryDate: string
   location: string
   quantity?: number
-  unit?: string
+  /** Unit of measure. Always set at the DB level (NOT NULL with default 'pcs') as of migration 202605270002. */
+  unit: string
   archived?: boolean
   addedOn?: string
   consumedOn?: string | null
@@ -26,13 +27,31 @@ export interface InventoryItem {
   reviewTags?: string[]
   reviewNote?: string
   ratedAt?: string
+  /** Set when the user explicitly X-dismissed the review chip without rating. NULL = never dismissed. */
+  reviewDismissedAt?: string | null
+  // --- SLM-readiness provenance fields (see migration 202605270001) ---
+  /** FK to ai_interactions.id when the item originated from a voice or photo capture. */
+  aiInteractionId?: string | null
+  /** Literal as-spoken (voice) or as-seen on package (photo). Captured silently from model output. */
+  nameRaw?: string | null
+  /** Literal brand text as printed on the package. `brand` holds the cleaned version. */
+  brandRaw?: string | null
+  /** Literal quantity string from the model before client-side normalisation, e.g. "0.5 kg", "half kg". */
+  quantityRaw?: string | null
+  /** Which source produced the saved expiry date. */
+  expirySource?: "model" | "client_default" | "user_edit" | null
+  /** Where the price was read from on the source artifact. */
+  priceSource?: "receipt_line" | "mrp" | "order_total" | "unknown" | null
+  /** Bucket for fields the model emits that haven't been promoted to real columns. */
+  extractedExtras?: Record<string, unknown> | null
 }
 
 export interface ShoppingItem {
   id: string
   name: string
   quantity: number
-  unit?: string
+  /** Unit of measure. Always set at the DB level (NOT NULL with default 'pcs') as of migration 202605270002. */
+  unit: string
   category?: string
   notes?: string
   completed: boolean
@@ -40,6 +59,11 @@ export interface ShoppingItem {
   addedFrom?: "consumed" | "manual" | "voice" | "agent"
   brand?: string
   orderedFrom?: string
+  // --- SLM-readiness provenance fields (see migration 202605270001) ---
+  aiInteractionId?: string | null
+  nameRaw?: string | null
+  quantityRaw?: string | null
+  extractedExtras?: Record<string, unknown> | null
 }
 
 export type RecipeImportStatus = "pending" | "extracting" | "parsing" | "ready" | "saved" | "failed" | "deleted"
