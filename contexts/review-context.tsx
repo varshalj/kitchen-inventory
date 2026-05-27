@@ -111,6 +111,16 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
         ratedAt: new Date().toISOString(),
       }),
     })
+    // Mirror the optimistic rating into the queue entry's item so a
+    // subsequent "Share more feedback" tap opens the sheet with the right
+    // rating already filled in. Without this, ReviewPrompt's
+    // `useState(item.rating || 0)` initialises to 0 and the user thinks
+    // their rating was lost.
+    setReviewQueue((prev) =>
+      prev.map((entry, idx) =>
+        idx === 0 ? { ...entry, item: { ...entry.item, rating } } : entry,
+      ),
+    )
   }, [reviewItem])
 
   const handleChipDismiss = useCallback(async () => {
@@ -184,26 +194,32 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
         onAdvance={handleChipAdvance}
       />
 
-      {/* Full review sheet — opens via the chip's "Share more feedback" link. */}
+      {/* Full review sheet — opens via the chip's "Share more feedback" link.
+          The sheet's built-in close button (X) sits half-above SheetContent's
+          top edge via `-translate-y-1/2`. If we put overflow-y-auto on
+          SheetContent itself, the X gets clipped. So the scroll container is
+          an inner div — SheetContent stays unclipped, content scrolls inside. */}
       <Sheet open={reviewSheetOpen} onOpenChange={(open) => !open && setReviewSheetOpen(false)}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Add more detail</SheetTitle>
-            <SheetDescription>
-              Help yourself remember what to reorder next time.
-            </SheetDescription>
-          </SheetHeader>
-          {reviewItem && (
-            <div className="px-4 pb-4">
-              <ReviewPrompt
-                key={reviewItem.item.id}
-                item={reviewItem.item}
-                type={reviewItem.type}
-                onSubmit={handleReviewSubmit}
-                onSkip={handleReviewSkip}
-              />
-            </div>
-          )}
+        <SheetContent side="bottom" className="max-h-[85vh] p-0">
+          <div className="overflow-y-auto max-h-[85vh]">
+            <SheetHeader>
+              <SheetTitle>Add more detail</SheetTitle>
+              <SheetDescription>
+                Help yourself remember what to reorder next time.
+              </SheetDescription>
+            </SheetHeader>
+            {reviewItem && (
+              <div className="px-4 pb-4">
+                <ReviewPrompt
+                  key={reviewItem.item.id}
+                  item={reviewItem.item}
+                  type={reviewItem.type}
+                  onSubmit={handleReviewSubmit}
+                  onSkip={handleReviewSkip}
+                />
+              </div>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
     </ReviewContext.Provider>
