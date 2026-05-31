@@ -1,0 +1,765 @@
+# Kitchen Inventory — feature catalog
+#
+# Single source of truth for what the app can do, used by:
+#   - the voice agent (compiled to JSON, injected into system prompt)
+#   - user-facing documentation (generated from this file)
+#   - the tool registry exposed to MCP + Pipecat
+#   - onboarding tours
+#
+# When adding a feature, update this file *first* — the consumers above derive
+# from it. Don't duplicate descriptions in code.
+#
+# Schema:
+#   id:               snake_case unique identifier, stable forever (don't rename)
+#   name:             short human-readable label
+#   category:         inventory | shopping | recipes | analytics | account | ingest | meta
+#   description:      2–4 sentences. Will be read aloud by the voice agent when the
+#                     user asks "what can this app do?" — write in prose, not bullets.
+#   ui_path:          deep link the agent can navigate the user to. Use "" if none.
+#   voice:
+#     can_describe:   true if the agent can talk about this feature (almost always true)
+#     can_navigate:   true if the agent can `navigate_to(ui_path)` to send the user here
+#     can_execute:    true if there's a tool the agent can call to *do* this feature
+#     tool:           name of the tool (must match MCP or Pipecat tool registry); null if can_execute=false
+#     confirmation_required: true for any destructive / write action. The agent must
+#                            preview via dry-run and get verbal "yes" before executing.
+#   sample_utterances: 3–5 phrasings users might say to invoke this feature. The
+#                      agent's LLM uses these as anchors during intent reasoning.
+#   notes:            optional caveats, known issues, planned changes
+#   status:           shipped | beta | planned
+
+version: 1
+
+# ──────────────────────────────────────────────────────────────────────
+# INVENTORY — adding, editing, removing, searching items
+# ──────────────────────────────────────────────────────────────────────
+
+features:
+
+  - id: list_inventory
+    name: List inventory items
+    category: inventory
+    description: |
+      Show the current items in your kitchen (non-archived). Can be filtered
+      by category (dairy, vegetables, etc.) or storage location (fridge,
+      pantry, freezer).
+    ui_path: /dashboard
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: list_inventory
+      confirmation_required: false
+    sample_utterances:
+      - "what's in my kitchen"
+      - "what do I have in the fridge"
+      - "show me my pantry items"
+      - "what's in my inventory"
+    status: shipped
+
+  - id: add_inventory_item
+    name: Add an item to inventory
+    category: inventory
+    description: |
+      Add a new item to your kitchen inventory. Required field is the item
+      name. Optional fields include expiry date, category, location (fridge,
+      pantry, freezer), quantity, unit, brand, price, and notes.
+    ui_path: /add-item
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false  # planned for slice 2 — needs confirm-by-default pattern
+      tool: null
+      confirmation_required: true
+    sample_utterances:
+      - "I bought milk"
+      - "add eggs to my inventory"
+      - "I just got groceries"
+      - "add half a kilo of paneer to the fridge"
+    notes: |
+      Voice agent will *navigate* to the add-item form in Slice 1, *execute*
+      in Slice 2 once dry-run-confirm pattern is wired through Pipecat.
+    status: shipped
+
+  - id: edit_inventory_item
+    name: Edit an existing inventory item
+    category: inventory
+    description: |
+      Change any field of an existing inventory item — name, expiry, quantity,
+      location, brand, notes, etc. Each item has a detail view where edits are
+      made.
+    ui_path: ""  # opens as a sheet over /dashboard; needs item id
+    voice:
+      can_describe: true
+      can_navigate: false  # can't deep-link to an item without context
+      can_execute: false
+      tool: null
+      confirmation_required: true
+    sample_utterances:
+      - "change the expiry date of the milk"
+      - "the yogurt is in the fridge not the pantry"
+      - "update the eggs to a dozen"
+    notes: Disambiguating *which* item (multiple yogurts, etc.) is the same problem the MCP `mark_as_consumed` tool solved with normalized name matching.
+    status: shipped
+
+  - id: search_inventory
+    name: Search across inventory
+    category: inventory
+    description: |
+      Fuzzy search across both current and archived items by name. Useful for
+      "do I have X" questions and for finding past purchases.
+    ui_path: /search
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: search_inventory
+      confirmation_required: false
+    sample_utterances:
+      - "do I have any almonds"
+      - "search for tomato"
+      - "is there any paneer in the fridge"
+    status: shipped
+
+  - id: filter_inventory
+    name: Filter and sort inventory
+    category: inventory
+    description: |
+      Apply filters to the inventory list — by category, storage location,
+      expiry window, or archive state — and sort by expiry, added date, or
+      name.
+    ui_path: /dashboard
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false  # filter state lives in URL params; agent could set them but not in slice 0/1
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "show only dairy items"
+      - "what's in the freezer"
+      - "show items expiring this week"
+    status: shipped
+
+  - id: view_archived
+    name: View archived items
+    category: inventory
+    description: |
+      Items that were marked consumed, wasted, or otherwise removed from
+      active inventory. Used for history, analytics, and to revive items that
+      were archived by mistake.
+    ui_path: /archived
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "show me what I've used recently"
+      - "what items have I thrown away"
+      - "show my consumed items"
+    status: shipped
+
+  # ────────────────────────────────────────────────────────────────
+  # EXPIRY & FRESHNESS
+  # ────────────────────────────────────────────────────────────────
+
+  - id: get_expiring_soon
+    name: List items expiring soon
+    category: inventory
+    description: |
+      Show items whose expiry date is within the next N days (default 3).
+      Sorted by closest expiry first. Useful for "what do I need to use up?"
+      questions.
+    ui_path: /dashboard?filter=expiring
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: get_expiring_soon
+      confirmation_required: false
+    sample_utterances:
+      - "what's expiring soon"
+      - "what do I need to use up"
+      - "anything going bad this week"
+      - "what's expiring in the next three days"
+    status: shipped
+
+  # ────────────────────────────────────────────────────────────────
+  # CONSUMPTION TRACKING
+  # ────────────────────────────────────────────────────────────────
+
+  - id: mark_consumed
+    name: Mark an item as consumed
+    category: inventory
+    description: |
+      Archive an inventory item as "consumed" (used up). By default also adds
+      the item back to the shopping list so you remember to buy more. Currently
+      treats consumption as all-or-nothing — partial decrement is on the
+      backlog.
+    ui_path: ""  # action from item detail sheet
+    voice:
+      can_describe: true
+      can_navigate: false
+      can_execute: true  # already supported via MCP mark_as_consumed
+      tool: mark_as_consumed
+      confirmation_required: true
+    sample_utterances:
+      - "I finished the milk"
+      - "we used up the eggs"
+      - "the yogurt is done"
+      - "mark the paneer as consumed"
+    notes: |
+      See MCP `mark_as_consumed` for ambiguity handling (multiple items with
+      same name → refuses with candidates list). Voice agent should narrate
+      candidates verbally and let user pick.
+    status: shipped
+
+  - id: mark_wasted
+    name: Mark an item as wasted
+    category: inventory
+    description: |
+      Archive an item as wasted (expired, spoiled, unused, or excess). Captures
+      the reason for waste analytics later. Does NOT auto-restock — wasted
+      items aren't usually wanted again.
+    ui_path: ""
+    voice:
+      can_describe: true
+      can_navigate: false
+      can_execute: false  # planned for slice 2
+      tool: null
+      confirmation_required: true
+    sample_utterances:
+      - "the spinach went bad"
+      - "I had to throw away the leftovers"
+      - "the milk expired"
+    status: shipped
+
+  - id: rate_item
+    name: Rate an item after consuming
+    category: inventory
+    description: |
+      Add a 1–5 star rating, optional review tags, and an optional note to an
+      item you've finished. The web UI prompts for ratings after marking an
+      item consumed; the voice assistant can capture ratings the same way as
+      a follow-up turn after a mark_as_consumed call, or accept a free-standing
+      "rate the milk four stars" command later.
+    ui_path: /archived
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false  # planned; needs item disambiguation logic similar to mark_as_consumed
+      tool: null
+      confirmation_required: true
+    sample_utterances:
+      - "rate the milk five stars"
+      - "the paneer was great"
+      - "rate the bread two stars"
+      - "leave a review on the yogurt"
+    notes: |
+      Underlying action is a single DB write (set rating, review_tags,
+      review_note, rated_at on the inventory row). Complexity is *finding the
+      right item*: multiple historical entries with the same name need
+      disambiguation. Use the normalized-name + most-recently-archived
+      heuristic from mark_as_consumed. Default: "most recently consumed item
+      with this name"; if multiple within last 24h, ask the user which.
+      Not multi-action — single update.
+    status: planned
+
+  # ────────────────────────────────────────────────────────────────
+  # SHOPPING LIST
+  # ────────────────────────────────────────────────────────────────
+
+  - id: add_to_shopping_list
+    name: Add to shopping list
+    category: shopping
+    description: |
+      Add an item to your shopping list. If the item already exists on the
+      list with the same unit, quantities are merged automatically. Different
+      unit creates a separate row. Names are normalized (case + plural) so
+      "almond" and "almonds" collapse.
+    ui_path: /shopping-list
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: add_to_shopping_list
+      confirmation_required: true
+    sample_utterances:
+      - "add eggs to my shopping list"
+      - "we need to buy bread"
+      - "put paneer on the list"
+      - "I need to buy tomatoes"
+    status: shipped
+
+  - id: list_shopping
+    name: List shopping list items
+    category: shopping
+    description: |
+      Show items on the shopping list. Can filter by pending (not yet bought,
+      default), completed (already bought), or all.
+    ui_path: /shopping-list
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: list_shopping
+      confirmation_required: false
+    sample_utterances:
+      - "what's on my shopping list"
+      - "what do I need to buy"
+      - "read my shopping list"
+    status: shipped
+
+  - id: remove_from_shopping_list
+    name: Remove from shopping list
+    category: shopping
+    description: |
+      Delete an item from the shopping list. Useful for undoing accidental
+      adds. The agent will preview which item before removing.
+    ui_path: /shopping-list
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: remove_from_shopping_list
+      confirmation_required: true
+    sample_utterances:
+      - "remove milk from my shopping list"
+      - "take eggs off the list"
+      - "I don't need to buy bread anymore"
+    status: shipped
+
+  - id: update_shopping_item
+    name: Update a shopping list item
+    category: shopping
+    description: |
+      Change the quantity, unit, completed status, or notes of an existing
+      shopping list item. Useful for "actually make that two dozen eggs."
+    ui_path: /shopping-list
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: update_shopping_item
+      confirmation_required: true
+    sample_utterances:
+      - "change eggs to a dozen"
+      - "make that two cartons of milk"
+      - "mark eggs as bought"
+    status: shipped
+
+  # ────────────────────────────────────────────────────────────────
+  # RECIPES
+  # ────────────────────────────────────────────────────────────────
+
+  - id: list_recipes
+    name: List saved recipes
+    category: recipes
+    description: |
+      Show recipes you've saved, with title, source, servings, prep/cook
+      time, and a pantry-compatibility score (how many ingredients you
+      already have). Sorted with highest pantry match first by default.
+    ui_path: /recipes
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: list_recipes
+      confirmation_required: false
+    sample_utterances:
+      - "what recipes do I have"
+      - "show me my recipes"
+      - "what can I cook"
+    status: shipped
+
+  - id: get_recipe
+    name: View a recipe in detail
+    category: recipes
+    description: |
+      Get the full ingredient list and step-by-step instructions for a
+      specific recipe.
+    ui_path: /recipes/[id]
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: get_recipe
+      confirmation_required: false
+    sample_utterances:
+      - "show me the paneer recipe"
+      - "what's in the dosa recipe"
+      - "read me the recipe for biryani"
+    status: shipped
+
+  - id: import_recipe
+    name: Import a recipe from a URL
+    category: recipes
+    description: |
+      Save a recipe from a website by pasting its URL. The app extracts
+      ingredients, steps, time, and image. Asynchronous — takes a few seconds
+      to parse.
+    ui_path: /recipes
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false  # voice + paste-URL doesn't compose well; user should use UI for this
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "save this recipe"
+      - "import a recipe"
+      - "I want to save a recipe from the internet"
+    notes: Voice agent should describe how to do this in the UI rather than executing.
+    status: shipped
+
+  - id: web_share_target
+    name: Share recipes into the app from other apps
+    category: recipes
+    description: |
+      On Android, Kitchen Inventory registers as a system share target — so
+      when you find a recipe in your browser or another app, you can hit the
+      Share button and pick Kitchen Inventory to send the URL straight to
+      the recipe importer. iOS does not support web-app share targets at
+      all (a platform limitation, not a bug); iPhone users need to copy the
+      URL and paste it into the import dialog.
+    ui_path: /recipes
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false  # share-target is OS-level; not voice-actionable
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "can I share recipes from my browser"
+      - "how do I save a recipe I found"
+      - "can I send recipes from Chrome to this app"
+    notes: |
+      Feature is untested on Android — needs verification. Tracked separately
+      as a follow-up task. iOS limitation is platform-level and explained in
+      the description, not a bug.
+    status: beta
+
+  - id: suggest_meals
+    name: Suggest meals based on pantry
+    category: recipes
+    description: |
+      Recommend recipes ranked by how well they match what you currently have
+      in your pantry. Higher pantry-compatibility score = fewer missing
+      ingredients.
+    ui_path: /recipes?sort=pantry
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: suggest_meals
+      confirmation_required: false
+    sample_utterances:
+      - "what can I make for dinner"
+      - "suggest a meal"
+      - "what should I cook tonight"
+      - "give me recipe ideas"
+    status: shipped
+
+  - id: meal_plan_ai
+    name: Generate an AI meal plan
+    category: recipes
+    description: |
+      Have AI generate a meal plan based on your pantry, preferences, and
+      constraints. Multi-day plans with shopping list deltas.
+    ui_path: /recipes
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false  # complex multi-step interaction; better as guided UI for slice 0–2
+      tool: null
+      confirmation_required: true
+    sample_utterances:
+      - "plan my meals for the week"
+      - "generate a meal plan"
+      - "what should we eat this week"
+    status: beta
+
+  # ────────────────────────────────────────────────────────────────
+  # ANALYTICS
+  # ────────────────────────────────────────────────────────────────
+
+  - id: get_waste_stats
+    name: View food waste analytics
+    category: analytics
+    description: |
+      See how much food you've wasted, broken down by category (which foods
+      go bad most), reason (expired, spoiled, unused, excess), and time
+      period. Useful for noticing patterns and reducing waste.
+    ui_path: /analytics
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: get_waste_stats
+      confirmation_required: false
+    sample_utterances:
+      - "how much food did I waste this month"
+      - "show me my waste stats"
+      - "what do I waste the most"
+    status: shipped
+
+  # ────────────────────────────────────────────────────────────────
+  # EMAIL INGESTION
+  # ────────────────────────────────────────────────────────────────
+
+  - id: email_ingestion
+    name: Auto-import groceries from email receipts
+    category: ingest
+    description: |
+      Forward order confirmation emails from grocery delivery services
+      (BigBasket, Zepto, Blinkit, etc.) to a personal email address. The app
+      parses them automatically and proposes the items for review before
+      adding to inventory.
+    ui_path: /profile
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false  # setup is one-time configuration; not voice-natural
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "how do I auto-import my grocery orders"
+      - "what's email ingestion"
+      - "can the app read my receipts"
+    notes: Voice agent should explain the feature and navigate to /profile for setup.
+    status: shipped
+
+  - id: review_pending_imports
+    name: Review pending email-imported items
+    category: ingest
+    description: |
+      Approve or reject items that the email ingestion system parsed and
+      queued. Lets you fix mismatches before they hit your inventory.
+    ui_path: /dashboard  # banner appears when pending items exist
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "are there any pending items to review"
+      - "did my last order get parsed"
+    status: shipped
+
+  # ────────────────────────────────────────────────────────────────
+  # ACCOUNT & SETTINGS
+  # ────────────────────────────────────────────────────────────────
+
+  - id: view_profile
+    name: View profile settings
+    category: account
+    description: |
+      Manage your account — display name, email, AI provider keys,
+      notification preferences, and connected integrations (email ingestion,
+      Alexa, MCP-connected agents).
+    ui_path: /profile
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "open my settings"
+      - "go to my profile"
+    status: shipped
+
+  - id: manage_ai_keys
+    name: Manage AI provider keys
+    category: account
+    description: |
+      Bring your own OpenAI / Anthropic API key for AI features like meal
+      planning and voice parsing. Keys are encrypted at rest and revocable.
+    ui_path: /profile
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: false
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "where do I add my OpenAI key"
+      - "manage my AI keys"
+    status: shipped
+
+  # ────────────────────────────────────────────────────────────────
+  # META — features about the assistant itself
+  # ────────────────────────────────────────────────────────────────
+
+  - id: what_can_you_do
+    name: Describe assistant capabilities
+    category: meta
+    description: |
+      Kitchen Inventory is a household pantry app that helps track what's in
+      your kitchen, what's expiring soon, what to buy next, and what to cook
+      with what you have. The voice assistant can:
+        - Tell you what's in your inventory, what's expiring, what to use up
+        - Add things to your shopping list, check what's on it, remove items
+        - Mark items as consumed (and auto-restock to the shopping list)
+        - Suggest meals ranked by how much of the recipe is already in your
+          pantry
+        - Show food waste analytics — what you waste most, and why
+        - Walk you through any app feature and navigate you to the right
+          screen
+        - Capture a bug report or feedback by voice
+      Common workflows the assistant supports:
+        - "Grocery just arrived" → review pending email-imported items, fix
+          mismatches, mark anything you finished
+        - "What's for dinner?" → ask for meal suggestions or recipes that fit
+          what you already have
+        - "Running low" → check expiring-soon items, add staples to the
+          shopping list
+        - "Did this taste good?" → rate a recently-finished item for future
+          reference
+      The assistant is read-mostly in early versions: list, search, navigate.
+      Writes (add, consume, update, rate) are added incrementally as
+      dry-run-confirm safety patterns get wired in.
+    ui_path: ""
+    voice:
+      can_describe: true
+      can_navigate: false
+      can_execute: true  # the agent answering verbally IS the execution
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "what can you do"
+      - "what can you help me with"
+      - "what features do you have"
+      - "how does this work"
+    status: shipped
+
+  - id: household_account_model
+    name: How households share pantry access
+    category: meta
+    description: |
+      Multiple household members share one Kitchen Inventory account by
+      signing in with the same credentials on each device. There's no
+      per-user separation within a household — inventory, shopping list,
+      and recipes are shared by everyone who signs in. Per-user accounts
+      within a household are on the backlog; today it's one login = one
+      pantry, regardless of how many people are using it.
+    ui_path: /profile
+    voice:
+      can_describe: true
+      can_navigate: false
+      can_execute: false
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "can my wife use this too"
+      - "how do I share my pantry"
+      - "can multiple people use one account"
+      - "how do household members get access"
+    status: shipped
+
+  - id: pwa_install
+    name: Install the app on your phone
+    category: meta
+    description: |
+      Kitchen Inventory is a Progressive Web App — installable to your home
+      screen for an app-like experience, including offline access to cached
+      pages. Install steps differ by device:
+        - Android Chrome: tap the "Install App" prompt when it appears, or
+          open the browser menu → "Install app" / "Add to Home Screen".
+        - iOS Safari: tap the Share icon at the bottom → "Add to Home
+          Screen". (You cannot install via Chrome on iOS — Apple restricts
+          PWA install to Safari.)
+        - Desktop: an install icon appears in the browser address bar in
+          Chrome/Edge. Works but the app is mobile-first by design.
+      Once installed it stays online-aware for sync but works offline for
+      cached pages — useful in basement pantries with bad signal.
+    ui_path: ""
+    voice:
+      can_describe: true
+      can_navigate: false
+      can_execute: false  # install is a system-level action only the user can confirm
+      tool: null
+      confirmation_required: false
+    sample_utterances:
+      - "how do I install the app"
+      - "can I add this to my home screen"
+      - "does this work offline"
+      - "how do I get the app on my phone"
+    notes: |
+      Agent should infer device platform from page-context (user-agent passed
+      from browser to the voice service) and give the relevant instructions
+      without asking. On desktop, briefly note install is possible but the
+      app is mobile-first.
+    status: shipped
+
+  - id: report_bug
+    name: Report a bug or send feedback
+    category: meta
+    description: |
+      Send a bug report or feedback note directly to the developer without
+      leaving the app. The voice assistant can capture your verbal
+      description, read it back for confirmation, and submit it for you —
+      no form filling needed.
+    ui_path: /profile
+    voice:
+      can_describe: true
+      can_navigate: true
+      can_execute: true
+      tool: report_bug
+      confirmation_required: true  # always read the captured text back before submitting
+    sample_utterances:
+      - "report a bug"
+      - "I want to send feedback"
+      - "the app crashed when I tried to add an item"
+      - "something is broken"
+      - "tell the developer that …"
+    notes: |
+      Flow: user says "report a bug" → agent prompts for description → user
+      describes it → agent reads it back verbatim → on verbal yes, calls
+      report_bug tool which maps to existing POST /api/bug-report. Include
+      page-context (current URL, recent activity) automatically.
+    status: shipped
+
+  - id: where_am_i
+    name: Tell the user what page they're on
+    category: meta
+    description: |
+      The agent uses page context (which screen the user is currently viewing
+      in the app) to anchor responses. When asked, it can describe what page
+      the user is on and what's possible there.
+    ui_path: ""
+    voice:
+      can_describe: true
+      can_navigate: false
+      can_execute: true
+      tool: get_current_view
+      confirmation_required: false
+    sample_utterances:
+      - "where am I"
+      - "what page is this"
+      - "what can I do on this screen"
+    status: planned  # needs get_current_view tool + browser → Pipecat context plumbing
+
+# ──────────────────────────────────────────────────────────────────────
+# Notes on what's intentionally NOT in here
+# ──────────────────────────────────────────────────────────────────────
+#
+#   - Onboarding tour: existing first-run UX, not a feature the voice
+#     assistant needs to describe separately — covered by `what_can_you_do`,
+#     which the LLM can use to answer generic "what does this app do" /
+#     "how do I get started" questions adequately.
+#
+#   - Authentication / signup flows: not catalogued. The voice assistant
+#     only runs for authenticated users, so it never needs to describe
+#     login. /auth and /authorize stay out of the catalog by design.
+#
+#   - Bug reporting flow internals (/api/bug-report payload shape, etc.):
+#     catalogued as user-facing `report_bug` feature only. Tool registry
+#     will expose the implementation detail separately.
+#
+# Add new features here as they ship. Mark experimental ones with
+# `status: beta`. Mark anything planned-but-not-built with `status: planned`
+# and a note about what's blocking.

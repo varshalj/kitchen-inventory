@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kitchen Inventory voice — Slice 0 test client</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 720px;
+      margin: 2em auto;
+      padding: 1em;
+      line-height: 1.5;
+      color: #222;
+    }
+    h1 { font-size: 1.4em; margin-bottom: 0.3em; }
+    .subtitle { color: #666; margin-top: 0; }
+    .controls { display: flex; gap: 0.8em; margin: 1.5em 0; }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      cursor: pointer;
+      border: 1px solid #999;
+      background: white;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.primary { background: #2563eb; color: white; border-color: #2563eb; }
+    .status {
+      padding: 12px 16px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      margin: 1em 0;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .status.connected { background: #dcfce7; color: #166534; }
+    .status.error { background: #fee2e2; color: #991b1b; }
+    .endpoint {
+      font-family: monospace;
+      font-size: 12px;
+      color: #666;
+      word-break: break-all;
+    }
+    .log {
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 360px;
+      overflow-y: auto;
+      background: #fafafa;
+      padding: 0.8em 1em;
+      border-radius: 6px;
+      border: 1px solid #e5e5e5;
+      margin-top: 1em;
+    }
+    .log-entry { padding: 2px 0; white-space: pre-wrap; }
+    .log-entry .ts { color: #999; margin-right: 6px; }
+    .log-entry.error { color: #c00; }
+    .log-entry.success { color: #060; }
+    .log-entry.transcript { color: #1e40af; font-weight: 600; }
+    .log-entry.bot { color: #7c2d12; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Kitchen Inventory voice — Slice 0 test client</h1>
+  <p class="subtitle">
+    Click <strong>Connect</strong>, allow microphone access, then speak.
+    Agent should echo back: <em>"You said: &lt;your text&gt;"</em>
+  </p>
+  <p class="endpoint">
+    Endpoint:
+    <code id="endpoint">wss://varshaljain--kitchen-inventory-voice-fastapi-app.modal.run/ws</code>
+  </p>
+
+  <div class="controls">
+    <button id="connect" class="primary">Connect</button>
+    <button id="disconnect" disabled>Disconnect</button>
+  </div>
+
+  <div class="status" id="status">Disconnected</div>
+  <div class="log" id="log"></div>
+
+  <script type="module">
+    // Pipecat JS client + WebSocket transport via esm.sh CDN.
+    // Package names below reflect Pipecat's current convention. If imports
+    // fail, check https://github.com/pipecat-ai/pipecat-client-web for the
+    // current package layout — same drift risk as the Python side had.
+    import { PipecatClient } from "https://esm.sh/@pipecat-ai/client-web";
+    import { WebSocketTransport, ProtobufFrameSerializer } from "https://esm.sh/@pipecat-ai/websocket-transport";
+
+    const ENDPOINT = "wss://varshaljain--kitchen-inventory-voice-fastapi-app.modal.run/ws";
+
+    const $status = document.getElementById("status");
+    const $log = document.getElementById("log");
+    const $connect = document.getElementById("connect");
+    const $disconnect = document.getElementById("disconnect");
+
+    function log(msg, type = "info") {
+      const div = document.createElement("div");
+      div.className = `log-entry ${type}`;
+      const t = new Date().toLocaleTimeString();
+      div.innerHTML = `<span class="ts">${t}</span>${msg}`;
+      $log.appendChild(div);
+      $log.scrollTop = $log.scrollHeight;
+      // Also mirror to browser console for deeper debugging.
+      const fn = type === "error" ? console.error : console.log;
+      fn(`[voice-test] ${msg}`);
+    }
+
+    function setStatus(text, klass = "") {
+      $status.textContent = text;
+      $status.className = `status ${klass}`;
+    }
+
+    let client = null;
+
+    async function connect() {
+      $connect.disabled = true;
+      setStatus("Connecting…");
+      log("Building Pipecat client…", "info");
+
+      try {
+        const transport = new WebSocketTransport({
+          wsUrl: ENDPOINT,
+          serializer: new ProtobufFrameSerializer(),
+          // Audio I/O config — 16kHz mono is Pipecat's default; STT/TTS may
+          // expect specific rates. Adjust if Sarvam rejects audio frames.
+          sampleRate: 16000,
+        });
+
+        client = new PipecatClient({
+          transport,
+          enableMic: true,
+          enableCam: false,
+          callbacks: {
+            onConnected: () => {
+              log("Connected to voice agent", "success");
+              setStatus("Connected — speak now", "connected");
+              $disconnect.disabled = false;
+            },
+            onDisconnected: () => {
+              log("Disconnected", "info");
+              setStatus("Disconnected");
+              $connect.disabled = false;
+              $disconnect.disabled = true;
+              client = null;
+            },
+            onError: (err) => {
+              const msg = err?.message || JSON.stringify(err);
+              log(`Error: ${msg}`, "error");
+              setStatus(`Error: ${msg}`, "error");
+            },
+            onUserTranscript: (data) => {
+              if (data?.final) {
+                log(`You said: ${data.text}`, "transcript");
+              }
+            },
+            onBotTranscript: (data) => {
+              log(`Agent said: ${data.text}`, "bot");
+            },
+            onBotStartedSpeaking: () => log("Agent speaking…", "info"),
+            onBotStoppedSpeaking: () => log("Agent finished", "info"),
+          },
+        });
+
+        await client.connect();
+      } catch (e) {
+        log(`Connect failed: ${e.message || e}`, "error");
+        log(`Stack: ${e.stack || "(none)"}`, "error");
+        setStatus(`Failed: ${e.message || e}`, "error");
+        $connect.disabled = false;
+        client = null;
+      }
+    }
+
+    async function disconnect() {
+      if (client) {
+        try {
+          await client.disconnect();
+        } catch (e) {
+          log(`Disconnect error: ${e.message || e}`, "error");
+        }
+      }
+    }
+
+    $connect.addEventListener("click", connect);
+    $disconnect.addEventListener("click", disconnect);
+
+    log("Test client loaded. Click Connect to begin.", "info");
+    log("If you see import errors above this line, the Pipecat client package paths may have changed — see the note in test_client.html source.", "info");
+  </script>
+</body>
+</html>

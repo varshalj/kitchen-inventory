@@ -1,0 +1,37 @@
+[project]
+name = "kitchen-inventory-voice"
+version = "0.1.0"
+description = "Voice agent for Kitchen Inventory — Pipecat on Modal (see ../docs/decisions.md)"
+requires-python = ">=3.11"
+
+# Versions intentionally use lower bounds rather than pins so Modal's image
+# build pulls compatible upgrades automatically. If a future Pipecat release
+# breaks something, pin here and revisit.
+dependencies = [
+    # Modal serverless runtime for deployment
+    "modal>=0.64",
+
+    # Pipecat agent framework. Extras pull provider-specific plugins.
+    # If a specific extra name has changed, check `pip show pipecat-ai` or
+    # https://github.com/pipecat-ai/pipecat for the current extras list.
+    "pipecat-ai[sarvam,openai,silero,websockets]>=0.0.40",
+
+    # Local-dev secret loading. Modal Secrets handle production env.
+    "python-dotenv>=1.0",
+
+    # HTTP client for calling the MCP server (write tools per ADR 006).
+    # Will be used in session 3+; included now to avoid a second deploy cycle
+    # when writes get wired in.
+    "httpx>=0.27",
+
+    # JWT signing for the supabaseAsUser pattern (Python mirror of
+    # lib/server/supabase-as-user.ts). PyJWT is widely used and standard.
+    "PyJWT>=2.8",
+
+    # Supabase Python client for direct reads (per ADR 006).
+    "supabase>=2.5",
+
+    # FastAPI is the ASGI framework Pipecat's WebSocket transport sits on.
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
