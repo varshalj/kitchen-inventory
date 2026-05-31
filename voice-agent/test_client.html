@@ -64,8 +64,18 @@
 <body>
   <h1>Kitchen Inventory voice — Slice 0 test client</h1>
   <p class="subtitle">
+    <strong>⚠️ WIP — audio doesn't flow yet (2026-06-01).</strong>
+    Connection works, mic captures, Pipecat client + server both load.
+    But the JS client SDK speaks the RTVI protocol while our server uses
+    the raw Pipecat frame protocol — audio frames arrive at the server
+    but are silently dropped because they're in the wrong wire format.
+    Fix: add an RTVI wrapper to the server pipeline. See voice-agent
+    session notes / README "Known limitations" for next steps.
+  </p>
+  <p class="subtitle">
     Click <strong>Connect</strong>, allow microphone access, then speak.
     Agent should echo back: <em>"You said: &lt;your text&gt;"</em>
+    (Not currently working — see warning above.)
   </p>
   <p class="endpoint">
     Endpoint:
@@ -81,12 +91,22 @@
   <div class="log" id="log"></div>
 
   <script type="module">
-    // Pipecat JS client + WebSocket transport via esm.sh CDN.
-    // Package names below reflect Pipecat's current convention. If imports
-    // fail, check https://github.com/pipecat-ai/pipecat-client-web for the
-    // current package layout — same drift risk as the Python side had.
-    import { PipecatClient } from "https://esm.sh/@pipecat-ai/client-web";
-    import { WebSocketTransport, ProtobufFrameSerializer } from "https://esm.sh/@pipecat-ai/websocket-transport";
+    // Pipecat JS client + WebSocket transport.
+    // Using jsDelivr's +esm bundler — esm.sh mistranspiles the transport's
+    // class hierarchy (gives "Class constructor E cannot be invoked without
+    // 'new'" inside _connect). jsDelivr handles class inheritance correctly.
+    // Package names verified against https://www.npmjs.com/~pipecat-ai 2026-06-01.
+    import * as PipecatCore from "https://cdn.jsdelivr.net/npm/@pipecat-ai/client-js@1.10.0/+esm";
+    import * as PipecatWS from "https://cdn.jsdelivr.net/npm/@pipecat-ai/websocket-transport@1.6.5/+esm";
+
+    // Log what each module exports — extremely useful for diagnosing
+    // when class names change between Pipecat versions. Open DevTools
+    // console to inspect.
+    console.log("[voice-test] @pipecat-ai/client-js exports:", Object.keys(PipecatCore));
+    console.log("[voice-test] @pipecat-ai/websocket-transport exports:", Object.keys(PipecatWS));
+
+    const { PipecatClient } = PipecatCore;
+    const { WebSocketTransport } = PipecatWS;
 
     const ENDPOINT = "wss://varshaljain--kitchen-inventory-voice-fastapi-app.modal.run/ws";
 
@@ -122,7 +142,6 @@
       try {
         const transport = new WebSocketTransport({
           wsUrl: ENDPOINT,
-          serializer: new ProtobufFrameSerializer(),
           // Audio I/O config — 16kHz mono is Pipecat's default; STT/TTS may
           // expect specific rates. Adjust if Sarvam rejects audio frames.
           sampleRate: 16000,

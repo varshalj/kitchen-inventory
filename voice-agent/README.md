@@ -20,7 +20,36 @@ The deployment foundation and pipeline assembly are confirmed:
 - ✅ Full pipeline assembles without error
 - ✅ `/health` returns 200 with all three secrets present
 - ✅ `/ws` accepts WebSocket upgrade, stays open waiting for audio
-- ⏳ Audio actually flowing through STT → echo → TTS (next: test with `test_client.html`)
+- ✅ Sarvam STT + TTS connect from inside Modal to Sarvam's APIs at session start
+- ⏳ **Audio doesn't flow end-to-end yet.** The browser test client connects
+  cleanly, mic captures, but no audio frames reach Sarvam STT inside the
+  pipeline. Root cause: protocol mismatch.
+
+## Known limitation: client/server protocol mismatch
+
+`@pipecat-ai/websocket-transport` (the JS client SDK we use in
+`test_client.html`) speaks the **RTVI protocol** — handshake, structured
+client/server messages, etc.
+
+`pipecat.transports.websocket.fastapi.FastAPIWebsocketTransport` (our
+server transport) speaks **raw Pipecat frames** without the RTVI envelope.
+
+At the WebSocket level they connect fine. At the application layer they
+talk different languages — RTVI-formatted frames from the browser are
+silently dropped server-side because they're not the protobuf-encoded raw
+frames the transport expects. Modal logs confirm this: pipeline starts,
+Sarvam STT/TTS connect to their APIs, then nothing for the session
+duration until disconnect.
+
+**Fix (next session):** wrap the server pipeline with an RTVI-compatible
+session manager. Pipecat exposes `RTVIObserver` / `RTVIProcessor` / an
+RTVI session helper. Server-side change, no client changes needed.
+~1 hour of focused work in a fresh context.
+
+Alternative (more JS code): write a raw browser client that encodes
+audio as protobuf frames matching the server's expected format. ~150
+lines, but bypasses the SDK. Use this only if RTVI on the server proves
+infeasible.
 
 ## Prerequisites
 
