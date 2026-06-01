@@ -233,6 +233,8 @@ Don't iterate prompts in isolation from real conversations — it leads to over-
 
 - **User self-disable for voice agent.** Currently `feature_grants.voice_agent_enabled` is admin-only (RLS denies user writes). Once we invite users outside the household, users should be able to opt out themselves without bothering admin. Cleanest pattern: add a `voice_opt_out` boolean to `user_settings` (user-writable) and gate access on `feature_grants.voice_agent_enabled && !user_settings.voice_opt_out`. Profile page UI for the toggle. Re-enable still requires admin (asymmetric — easy to opt out, deliberate to opt in). Estimated half-day of work. Not blocking household use.
 
+- **Smart pause/resume on overlay (Policy D).** Stage 1 ships Policy A: voice session auto-disconnects when any sheet/dialog opens (clean intent, predictable, cheap). The dream UX is Policy D: pause mic + TTS, keep the session technically alive, resume on overlay close — voice as a continuous companion rather than an on/off switch. Requires verifying Pipecat JS client's mute/pause API supports this cleanly, designing a "minimized voice indicator" affordance that doesn't conflict with bottom sheets, and handling edge cases (sheet opens mid-tool-call, mid-confirmation, etc.). Estimated 1-2 days. Pick up when real usage shows the auto-disconnect feels too aggressive — particularly the "agent just gave a preview, I tapped to peek at something, now I have to start over" scenario.
+
 ## Backlog: prompt iterations deferred from Slice 2 testing
 
 Things observed in voice testing that aren't shipped yet. Will batch with the next round of session observations.

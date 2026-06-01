@@ -26,22 +26,47 @@ import {
   X,
   AlertCircle,
 } from "lucide-react"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
   useVoiceSession,
   type VoiceStatus,
   type VoiceTurn,
 } from "@/hooks/use-voice-session"
+import { useOverlayActive } from "@/hooks/use-overlay-active"
 
 export function VoiceMicButton() {
   const { status, transcript, error, connect, disconnect } = useVoiceSession()
   const [expanded, setExpanded] = useState(false)
+  const overlayActive = useOverlayActive()
 
   // Auto-collapse the transcript whenever the session ends so re-connecting
   // starts in the clean compact state.
   useEffect(() => {
     if (status === "idle" || status === "error") setExpanded(false)
   }, [status])
+
+  // Policy A from ADR 010: auto-disconnect the voice session when any
+  // sheet/dialog opens. Sheets are focused UI tasks — voice running in
+  // background would capture typing audio and the strip overlaps the
+  // sheet anyway. Cleaner intent: voice pauses, user resumes after.
+  // Trade-off: a pending dry-run preview is lost. Acceptable for now;
+  // Policy D (smart pause/resume) is in LEARNINGS.md backlog.
+  const isSessionAlive =
+    status === "connecting" || status === "connected" || status === "speaking"
+  useEffect(() => {
+    if (overlayActive && isSessionAlive) {
+      disconnect()
+      toast.info("Voice paused", {
+        description: "Resume by tapping the mic after you close this.",
+      })
+    }
+  }, [overlayActive, isSessionAlive, disconnect])
+
+  // Hide the entire widget while any overlay is open. The auto-disconnect
+  // above guarantees the session is terminated; the visual hide ensures
+  // the strip doesn't try to render over a sheet (it'd be obscured anyway).
+  if (overlayActive) return null
 
   // Idle: just the floating mic button.
   if (status === "idle") {

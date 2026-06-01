@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Providers } from "./providers"
+import { VoiceMicGated } from "@/components/voice-mic-gated"
 import "./globals.css"
 
 // (CSS width, CSS height, DPR, portrait pixel width, portrait pixel height)
@@ -84,7 +85,13 @@ export default function RootLayout({
         <style>{`html,body{background-color:#f97316}`}</style>
       </head>
       <body className="font-sans">
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          {/* Voice mic button — gated server-side by feature_grants.voice_agent_enabled.
+              Renders null for unauthenticated / non-granted users so no client bundle
+              cost. Auto-hides when any overlay/sheet is open (Policy A, ADR 010). */}
+          <VoiceMicGated />
+        </Providers>
       </body>
     </html>
   )
