@@ -253,9 +253,118 @@ Writes:  Modal (Pipecat) ─── Vercel (MCP server) ─── Supabase
 
 ---
 
+## ADR 007 — Voice agent persona & system prompt construction
+
+**Date:** 2026-06-01
+**Status:** Accepted
+
+### Context
+
+Slice 1 replaces the loopback `EchoProcessor` with `OpenAILLMService` (GPT-4o-mini). For the agent to be useful (not just functional), we need explicit choices about identity, response style, language handling, and refusal behavior. These choices outlive Slice 1 — they govern every future agent surface and shape user expectations.
+
+### Decision
+
+**Identity**
+- Name: **Kitchen Mate** (consistent with the Alexa skill's `pantry bro` precedent, but distinct — voice agent ≠ Alexa skill, so they can have different personalities).
+- Role: a household kitchen inventory assistant. Scoped to Kitchen Inventory app features only.
+
+**Response style**
+- 1–2 sentences default. Never more than 4. Voice fatigue is real — terse beats thorough.
+- Friendly, conversational, not corporate. Avoid "Certainly! I'd be delighted to..."
+- When uncertain, say so explicitly ("I'm not sure" / "I can't tell from here") rather than hallucinate.
+
+**Languages**
+- Reply in whatever language the user spoke. Sarvam STT/TTS handle multilingual; GPT-4o-mini understands code-mixed Indian English / Hindi / Marathi.
+- No explicit language detection — let the model handle it from transcript context.
+
+**Scope refusal**
+- Politely refuse off-topic requests ("I can only help with your kitchen inventory — try asking what's expiring or what's on your list").
+- Don't speculate about features that aren't in the catalog. If a user asks about something unsupported, say so.
+
+**System prompt construction**
+- Full feature catalog YAML injected into system prompt verbatim. Prompt caching makes this cheap after turn 1 (~5KB → ~150 effective tokens).
+- Catalog is the *source of truth* for what the agent knows about. If a feature isn't in `docs/feature-catalog.yaml`, the agent shouldn't claim it exists.
+- Prefer tool calls over free-form answers when a tool can satisfy the request. "What's expiring?" → call `get_expiring_soon`, don't make up an answer.
+
+**Greeting on session start**
+- On client-ready, agent says: *"Hi, what can I help you with?"* (or equivalent in detected user-preference language)
+- Removes the "is it listening?" ambiguity, the single highest-friction UX issue in early voice apps.
+
+### Rationale
+
+- Short responses = better voice UX. Long monologues kill engagement.
+- Catalog-anchored knowledge keeps the agent from hallucinating features. Refusing gracefully when out of scope is more trustworthy than confidently wrong answers (see Slice 0 chat-agent transcript where ChatGPT auto-confirmed without asking — the lesson generalizes).
+- Multilingual handling is already free from our stack choice (Sarvam + GPT). Forcing English-only would lose a real advantage for our household.
+- Greeting is cheap. The UX win is disproportionate to the cost.
+
+### Alternatives considered
+
+- **No catalog in system prompt, full RAG instead.** Deferred — premature optimization at ~28 features. ADR 005 already addresses this.
+- **Page-context-aware system prompt** (agent knows what page the user is on). Deferred to Slice 3 per the catalog's `where_am_i` entry — needs browser → Pipecat plumbing not built yet.
+- **Pre-canned responses for common questions** (less LLM-dependent, faster, cheaper). Rejected — defeats the point of using GPT-4o-mini; we'd be reimplementing Alexa's intent matcher.
+
+### Revisit when
+
+- A real user (your wife) reports that responses are too short/long/curt/wordy → tune system prompt
+- Cost of GPT-4o-mini per session starts mattering (~₹100+/day) → consider Sarvam-1 LLM or system-prompt trimming
+- Page context becomes obviously missing in conversations → ship Slice 3 sooner
+
+---
+
+## ADR 008 — Voice session logging: transcripts only, no audio (initially)
+
+**Date:** 2026-06-01
+**Status:** Accepted
+
+### Context
+
+Slice 1 needs some form of session observability — to debug when the agent misbehaves, build intuition for what users actually say, and eventually inform fine-tuning. Three logging tiers were considered earlier in design (ADR-008-precursor discussion):
+
+- A: no logging
+- B: transcripts + tool calls + timings (text only)
+- C: audio + transcripts + tool calls + timings
+
+### Decision
+
+**Ship B for Slice 1.** Defer audio capture (C) to a later slice with deliberate consent + retention design.
+
+Concretely:
+- New table `public.voice_session_logs` storing one row per turn (user transcript, agent response, tool call, or system message) with timestamps, latency, and model used.
+- Gate logging behind a new column on `public.feature_grants`: `voice_logs_enabled boolean default false`. Same admin-controlled pattern as `voice_agent_enabled` — user can read their own logs but only service-role can flip the toggle.
+- RLS: users can SELECT their own logs (so we can later build a "voice history" UI if useful), but only Modal's service-role inserts.
+- No audio storage at any stage of Slice 1.
+
+### Rationale
+
+- **Transcripts cover ~95% of debugging value.** Most "did the agent misbehave?" investigations need to read what was said, not hear it.
+- **Audio is meaningfully more sensitive than transcripts.** Voice biometrics, emotional state, identification — all derivable from raw audio. Storing transcripts only is one risk category lower.
+- **Storage cost scales.** Audio at 16kHz Opus ≈ 3–5 MB / 10 min. Across a household, ~30 GB/year. Supabase Storage free tier is 1 GB; beyond is paid. Transcripts are bytes per turn, effectively free.
+- **Reversibility is asymmetric.** Adding audio capture later is cheap (new migration + flag + recording code). Removing audio after you've collected it requires actual data purges, backup handling, etc. Always easier to under-collect than over-collect.
+- **Slice 1 doesn't need audio for any current goal** (Q&A + 2 read tools).
+
+### Alternatives considered
+
+- **A — no logging.** Cleaner privacy posture but blind debugging. Rejected for the first voice slice where bugs are guaranteed.
+- **C — log audio too.** Right answer eventually if we need to investigate "did Sarvam hear it correctly?" mysteries. Premature now.
+- **Log to disk/Modal local storage instead of Supabase.** Avoids RLS work but logs vanish on container recycle. Wrong tradeoff.
+
+### Revisit (add audio capture) when
+
+- First debugging session where the transcript is clearly wrong and you need to verify what was actually said
+- Voice training data becomes a planned product (fine-tuning Sarvam STT to better recognize household-specific vocabulary like "atta", "mishri", etc.)
+- We invite users outside the household — at that point, redesign consent copy + retention policy first
+
+When audio capture is added, requirements include:
+1. Explicit user-facing consent copy ("we record voice audio for X duration to debug Y")
+2. Retention policy (90 days default, deletable on request)
+3. Encrypted at rest (Supabase Storage handles)
+4. Separate toggle from transcript logging — opt-in to each independently
+
+---
+
 ## How to add a new decision
 
-1. Increment the ADR number (next one is ADR 007).
+1. Increment the ADR number (next one is ADR 009).
 2. Use the template above: Date, Status, Context, Decision, Rationale, Alternatives, Revisit triggers.
 3. Don't edit historical entries to "fix" the rationale in hindsight. Add a new ADR that supersedes the old one — keeps the reasoning history honest.
 4. Update the entry's Status if it's later superseded: `Status: Superseded by ADR 0XX`.

@@ -27,6 +27,12 @@ image = (
     # Install Python deps. `add_local_dir` brings our source into the image.
     .pip_install_from_pyproject("pyproject.toml")
     .add_local_python_source("pipeline")
+    # Include the feature catalog so the LLM system prompt can reference it.
+    # Catalog lives in the parent docs/ directory (single source of truth);
+    # we mount it into the container at a fixed path that pipeline.py reads.
+    # If this errors with "file outside the project root", we'd copy the
+    # catalog into voice-agent/ at deploy time instead.
+    .add_local_file("../docs/feature-catalog.yaml", "/root/feature-catalog.yaml")
 )
 
 # ─── Secrets ──────────────────────────────────────────────────────────────────

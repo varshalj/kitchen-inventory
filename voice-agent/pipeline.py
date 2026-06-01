@@ -20,6 +20,75 @@ import os
 from fastapi import FastAPI, WebSocket
 
 
+# ─── Feature catalog → system prompt ──────────────────────────────────────────
+
+# Catalog path inside the Modal container. modal_app.py mounts the YAML
+# from ../docs/feature-catalog.yaml at this path via add_local_file.
+_CATALOG_PATH = "/root/feature-catalog.yaml"
+
+_SYSTEM_PROMPT_TEMPLATE = """\
+You are Kitchen Mate, a friendly voice assistant for Kitchen Inventory — \
+a household pantry and shopping management app.
+
+# Your role
+You help users manage their kitchen: track what they have, what's expiring, \
+what they need to buy, what they can cook. You are scoped to this app's \
+features only.
+
+# Response style
+- Keep responses to 1–2 sentences. Never more than 4. This is voice — terse \
+beats thorough.
+- Be friendly and conversational, not corporate or stiff.
+- When uncertain, say "I'm not sure" or "I can't tell from here". Don't make \
+things up.
+- Reply in whatever language the user spoke — English, Hindi, Marathi, or \
+code-mixed all work.
+
+# Current capabilities (Slice 1)
+You are in early development. Right now you can:
+- Describe what Kitchen Inventory does
+- Explain how to use any feature (the catalog below has UI paths and \
+descriptions)
+- Answer questions about features in the catalog
+
+You CANNOT yet:
+- Read the user's actual inventory or shopping list data
+- Add, modify, or delete items
+- Look up specific recipes
+
+For data requests ("what's in my fridge", "what's on my shopping list"), say: \
+"I can't read your inventory yet, but you can see it in the app." Don't \
+pretend to know.
+
+# Scope refusal
+If asked about anything outside this app's scope (general questions, news, \
+other apps), say: "I can only help with your Kitchen Inventory — try asking \
+what features I support or how to do something in the app."
+
+# Feature catalog (single source of truth)
+Below is the complete list of features. Use this to answer questions about \
+what the app does and how to use it. If a feature is not here, do not claim \
+it exists.
+
+```yaml
+{catalog}
+```
+"""
+
+
+def _build_system_prompt() -> str:
+    """Read the feature catalog from disk and format it into the system prompt."""
+    try:
+        with open(_CATALOG_PATH, "r") as f:
+            catalog = f.read()
+    except FileNotFoundError:
+        catalog = (
+            "(feature catalog not loaded — /root/feature-catalog.yaml not "
+            "found in container. Check modal_app.py add_local_file path.)"
+        )
+    return _SYSTEM_PROMPT_TEMPLATE.format(catalog=catalog)
+
+
 # ─── Public entrypoint ────────────────────────────────────────────────────────
 
 
@@ -162,13 +231,17 @@ def build_app() -> FastAPI:
 
 async def _run_voice_pipeline(websocket: WebSocket) -> None:
     """
-    Build and run a Pipecat pipeline:
-        Audio in → Sarvam Saarika STT → Echo processor → Sarvam Bulbul TTS → Audio out
+    Build and run a Pipecat pipeline (Slice 1):
 
-    NOTE: The Pipecat imports + class names below are best-effort and may
-    need adjustment against the current pipecat-ai version. The shape is
-    correct (Pipeline of FrameProcessors, run via PipelineTask), but the
-    exact class symbols evolve.
+        Audio in → RTVI → Sarvam Saaras v3 STT → user-context aggregator →
+        OpenAI GPT-4o-mini LLM → Sarvam Bulbul v3 TTS → Audio out → assistant-context aggregator
+
+    The agent is Kitchen Mate — a kitchen inventory assistant scoped to the
+    Kitchen Inventory app. System prompt embeds the feature catalog so the
+    LLM can answer "what can you do" / "how do I X" questions without
+    hallucinating features. Tools (real data reads) come in Slice 2.
+
+    See docs/decisions.md ADRs 001–008 for full architectural rationale.
     """
 
     # Imports kept inside the function so the /health endpoint works even if
@@ -178,31 +251,23 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
     from pipecat.pipeline.runner import PipelineRunner
     from pipecat.services.sarvam.stt import SarvamSTTService
     from pipecat.services.sarvam.tts import SarvamTTSService
-    # Pipecat 1.3.0 reorganized transports — was pipecat.transports.network.*
-    # in older versions; now lives under pipecat.transports.websocket.fastapi.
+    from pipecat.services.openai.llm import OpenAILLMService
+    # Universal LLM context — OpenAILLMContext was removed in recent Pipecat
+    # versions in favor of a provider-agnostic LLMContext + LLMContextAggregatorPair.
+    # Source: Pipecat GitHub examples + 2026 changelog.
+    from pipecat.processors.aggregators.llm_context import LLMContext
+    from pipecat.processors.aggregators.llm_response_universal import (
+        LLMContextAggregatorPair,
+    )
     from pipecat.transports.websocket.fastapi import (
         FastAPIWebsocketTransport,
         FastAPIWebsocketParams,
     )
-    from pipecat.frames.frames import TranscriptionFrame, TextFrame, TTSSpeakFrame
-    from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
-    # RTVI bridge so the @pipecat-ai/client-js browser SDK can talk to us.
-    # Without this, FastAPIWebsocketTransport speaks raw Pipecat frames while
-    # the client SDK speaks RTVI — websocket connects but audio is silently
-    # dropped. Adding RTVIProcessor (in the pipeline) + RTVIObserver (on the
-    # PipelineTask) translates between the two protocols.
-    # NOTE: RTVIConfig was removed in Pipecat 1.3.0; RTVIProcessor now takes
-    # no config arg (or takes individual kwargs). See /diagnostics
-    # rtvi_inspection for confirmation.
-    from pipecat.processors.frameworks.rtvi import (
-        RTVIObserver,
-        RTVIProcessor,
-    )
-    # Voice Activity Detection — STT needs this to know when an utterance
-    # ends so it can commit a transcript. Without VAD, Sarvam STT may never
-    # emit a TranscriptionFrame even with audio flowing in.
+    from pipecat.frames.frames import TTSSpeakFrame
+    # RTVI bridge for the @pipecat-ai/client-js browser SDK. See Slice 0
+    # implementation notes in voice-agent/README.md.
+    from pipecat.processors.frameworks.rtvi import RTVIObserver, RTVIProcessor
     from pipecat.audio.vad.silero import SileroVADAnalyzer
-    # Wire serializer — RTVI client expects protobuf-encoded frames.
     from pipecat.serializers.protobuf import ProtobufFrameSerializer
 
     # ── Transport (browser ↔ Pipecat over the WebSocket FastAPI accepted) ──
@@ -217,57 +282,68 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
         ),
     )
 
-    # ── STT ──
-    # Allowed STT models (per Sarvam error msg on 2026-05-31): saaras:v2.5,
-    # saaras:v3, saarika:v2.5. We use saarika (pure STT, no translation);
-    # saaras is their translation-aware model.
+    # ── STT: Saaras v3 in transcribe mode ──
+    # Sarvam's current state-of-the-art STT (Saarika v2.5 is now legacy).
+    # mode="transcribe" gives pure transcription in the original language —
+    # no translation. Handles English / Hindi / Marathi / code-mixed input
+    # without explicit language config.
     stt = SarvamSTTService(
         api_key=os.environ["SARVAM_API_KEY"],
-        model="saarika:v2.5",
-        language="en-IN",  # tweak / detect later
+        model="saaras:v3",
+        mode="transcribe",
     )
 
-    # ── Loopback "LLM" — turns the transcript into an echo statement. ──
-    # Replace with OpenAILLMService in session 2.
-    #
-    # Uses TTSSpeakFrame (direct "speak this now") rather than plain
-    # TextFrame — Pipecat TTS services don't synthesize raw TextFrames;
-    # they expect either TTSSpeakFrame or text wrapped in LLM aggregation
-    # markers (LLMResponseStart → LLMTextFrame → LLMResponseEnd).
-    class EchoProcessor(FrameProcessor):
-        async def process_frame(self, frame, direction: FrameDirection):
-            await super().process_frame(frame, direction)
-            if isinstance(frame, TranscriptionFrame) and frame.text:
-                await self.push_frame(
-                    TTSSpeakFrame(f"You said: {frame.text}"),
-                    direction,
-                )
-            else:
-                await self.push_frame(frame, direction)
-
-    echo = EchoProcessor()
-
-    # ── TTS ──
+    # ── TTS: Bulbul v3 ──
+    # Default voice "shubh" for v3 (was "anushka" for v2). Other v3 voices
+    # available per Sarvam dashboard.
     tts = SarvamTTSService(
         api_key=os.environ["SARVAM_API_KEY"],
-        voice_id="anushka",   # check Sarvam docs; "Priya"/"Neha" are common picks
-        model="bulbul:v2",     # check Sarvam docs for current model identifier
+        model="bulbul:v3",
+        voice_id="shubh",
     )
 
-    # ── RTVI processor — handles client/server protocol messages ──
+    # ── LLM: GPT-4o-mini ──
+    # Cheap + fast + robust function calling (per ADR 003). System prompt
+    # embeds the full feature catalog so the agent can describe app
+    # capabilities accurately without hallucinating.
+    llm = OpenAILLMService(
+        api_key=os.environ["OPENAI_API_KEY"],
+        model="gpt-4o-mini",
+    )
+
+    # ── Context: system prompt with catalog ──
+    # LLMContext is the universal context (provider-agnostic). The aggregator
+    # pair has .user() and .assistant() methods that wrap the pipeline's
+    # input/output sides to maintain conversation state.
+    messages = [
+        {"role": "system", "content": _build_system_prompt()},
+    ]
+    context = LLMContext(messages)
+    context_aggregator = LLMContextAggregatorPair(context)
+
+    # ── RTVI processor — client/server protocol bridge ──
     rtvi = RTVIProcessor()
 
     # ── Wire the pipeline ──
-    # RTVI processor goes immediately after transport.input() so it can
-    # intercept and handle RTVI client messages before they reach STT.
+    # Order matters:
+    #   transport.input() → audio frames arrive
+    #   rtvi              → handles client protocol messages
+    #   stt               → audio → TranscriptionFrame
+    #   user aggregator   → collects transcripts into user-turn messages
+    #   llm               → reads context, generates response
+    #   tts               → response text → audio frames
+    #   transport.output()→ sends audio to client
+    #   assistant aggregator → records assistant turn in context
     pipeline = Pipeline(
         [
             transport.input(),
             rtvi,
             stt,
-            echo,
+            context_aggregator.user(),
+            llm,
             tts,
             transport.output(),
+            context_aggregator.assistant(),
         ]
     )
 
@@ -277,11 +353,15 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
         observers=[RTVIObserver(rtvi)],
     )
 
-    # Tell the client we're ready as soon as it signals it is. Without this,
-    # the client SDK waits forever for the bot-ready ack.
+    # Greet the user on session start. Removes the "is it listening?"
+    # ambiguity that plagues early voice UX. Direct TTSSpeakFrame bypasses
+    # the LLM — cheaper and deterministic for a fixed greeting.
     @rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi_processor):
         await rtvi_processor.set_bot_ready()
+        await task.queue_frames([
+            TTSSpeakFrame("Hi! I'm Kitchen Mate. What can I help you with?"),
+        ])
 
     runner = PipelineRunner()
     await runner.run(task)
