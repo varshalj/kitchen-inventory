@@ -229,6 +229,10 @@ None of these would've been predicted from architecture; all of them came from r
 
 Don't iterate prompts in isolation from real conversations — it leads to over-engineering for imagined edge cases and under-engineering for the ones that actually bite. The conversation log is the ground truth.
 
+## Backlog: design items deferred from Slice 3 planning
+
+- **User self-disable for voice agent.** Currently `feature_grants.voice_agent_enabled` is admin-only (RLS denies user writes). Once we invite users outside the household, users should be able to opt out themselves without bothering admin. Cleanest pattern: add a `voice_opt_out` boolean to `user_settings` (user-writable) and gate access on `feature_grants.voice_agent_enabled && !user_settings.voice_opt_out`. Profile page UI for the toggle. Re-enable still requires admin (asymmetric — easy to opt out, deliberate to opt in). Estimated half-day of work. Not blocking household use.
+
 ## Backlog: prompt iterations deferred from Slice 2 testing
 
 Things observed in voice testing that aren't shipped yet. Will batch with the next round of session observations.

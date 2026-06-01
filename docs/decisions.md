@@ -411,9 +411,87 @@ GPT-4o-mini natively understands "haan", "ji", "ji haan", "kar do", "bilkul", "o
 
 ---
 
+## ADR 010 — Slice 3: embedded voice widget, page context, navigation
+
+**Date:** 2026-06-01
+**Status:** Accepted (Stage 1 in progress)
+
+### Context
+
+Slices 0–2 shipped a working voice agent reachable via a throwaway `test_client.html` served by `python3 -m http.server`. To make voice useful day-to-day, the widget needs to live INSIDE the Kitchen Inventory Next.js app — initiated by an authenticated user from any page, with the agent able to (eventually) navigate and apply filters in the app's UI on the user's behalf. This ADR captures the design decisions for that integration.
+
+### Decision
+
+**Widget placement: floating mic button, bottom-right, hidden on overlays.**
+- One global `<VoiceMicButton />` component rendered in the root layout (next to existing `<BottomNavigation />`)
+- Visible on main pages (`/dashboard`, `/shopping-list`, `/recipes`, `/analytics`, etc.)
+- Hidden whenever any modal / bottom sheet / edit form is open (tracked via a global "overlay-active" context the existing sheet components register with)
+- Only renders if `feature_grants.voice_agent_enabled = true` for the current user (server-side check on initial page load; component itself returns null otherwise)
+
+**Active-session UI: lightweight strip + expandable transcript.**
+- Collapsed state: thin bar at the bottom showing mic icon, status text ("Listening…" / "Thinking…" / "Kitchen Mate: <last reply truncated>"), and an expand chevron
+- Expanded state: scrollable list of turn-by-turn transcript above the strip (same shape as `test_client.html`'s log area)
+- Transcript is session-local — not persisted client-side, fresh on each connect
+- Close (X) button explicitly disconnects + dismisses the strip; widget returns to mic-button-only state
+
+**Auth: reuse the user's existing Supabase session.**
+- Component calls `supabase.auth.getSession()` from the client-side singleton already used elsewhere in the app
+- Access token is appended as `?token=<jwt>` on the WebSocket URL — same path the test client's manual paste creates, but inline and refreshing
+- Same security boundary as anywhere else in the app: the user's own JWT, their own data, RLS-scoped
+
+**Permission UX: native mic prompt + privacy copy.**
+- First-tap triggers `getUserMedia()` which surfaces the browser's mic permission dialog
+- A small "About voice" link on the widget opens a short modal explaining: audio goes to Modal, transcripts to Sarvam, OpenAI generates responses, conversations may be logged for debugging if logging is enabled
+- No custom permission UI on top of the browser's
+
+**Outbound agent→browser communication: RTVI custom messages over the existing WebSocket.**
+- Pipecat's RTVI protocol supports app-level messages alongside the audio stream
+- The voice agent emits typed messages for `navigate_to`, `apply_filter`, `toast` (success/error feedback for write tools)
+- Browser-side handler listens via the Pipecat JS client SDK's event emitter, dispatches to Next.js router / toast system / URL state
+- Latency: ~10-30ms (network round-trip, no separate channel) — perceptually instant
+
+**Tool surface for page awareness:**
+- `get_current_view()` returns `{path, search_params}` only — no rendered-state introspection (scroll position, currently-visible items, etc.). Future-tighter if it becomes useful.
+- `navigate_to(ui_path)` — no allowlist; agent can navigate anywhere user can
+- `apply_filter(name, value)` and `clear_filters()` for the URL-params filter manipulation pattern
+
+**Staging:**
+- **Stage 1:** Embedded widget replicating `test_client.html` functionality inside the Next.js app. Floating mic button, voice session, transcript UI, auth from existing Supabase session. No navigation tools yet.
+- **Stage 2:** Page-context inbound — browser sends current URL on connect + on route changes (Next.js `usePathname` + `useSearchParams`). Agent can answer "what page am I on?" from real data.
+- **Stage 3:** Outbound — `navigate_to(path)` tool + RTVI custom messages + browser router-push handler. `toast` messages for write-tool feedback also land in this stage (same infrastructure).
+- **Stage 4:** `apply_filter` / `clear_filters` for URL-params manipulation.
+
+Each stage shippable independently — Stage 1 alone is already a major UX upgrade over the throwaway test client.
+
+### Rationale
+
+- **Embedded > standalone.** The throwaway test client was scaffolding. Real usage requires voice to be accessible from the app's normal pages, not a separate localhost URL.
+- **Floating button (not bottom-nav item).** Bottom-nav slots are valuable real estate; voice is an ambient capability, not a destination.
+- **Hidden on overlays.** Two affordances competing on the same screen confuses users. Focused tasks (add/edit) own the screen.
+- **RTVI for outbound, not polling/SSE.** Pipecat's protocol is designed for this; using anything else would be choosing the wrong tool. Latency is essentially network round-trip.
+- **No allowlist on navigation.** The agent is acting under the user's identity — the user can already navigate anywhere; the agent doing so on their behalf is the same trust level.
+- **No rendered-state introspection in `get_current_view`.** Tempting but bottomless rabbit hole (scroll position? visible items? open dropdowns?). Path + URL params cover ~95% of useful agent context without compounding fragility.
+
+### Alternatives considered
+
+- **iframe-embedded test_client inside the Next.js app.** Considered for migration; rejected. Cross-origin auth would be painful, the iframe pattern fights React lifecycle. A native React component is the right shape.
+- **Bottom-nav slot for voice (vs. floating button).** Rejected — bottom nav is for navigational destinations (Inventory, Shopping List, Recipes). Voice is an ambient assistive layer, not a destination. Different category.
+- **Server-side proxy for the WebSocket auth.** Considered for B1; rejected. The user's JWT is already in their browser session; proxying through Next.js adds latency + complexity without changing the security boundary.
+- **Polling endpoint or SSE channel for outbound agent→browser commands.** Rejected per C1 — RTVI is purpose-built for this, no reason to invent something else.
+- **Allowlist of "safe" navigation paths.** Considered as a defense-in-depth measure. Rejected: the user can already navigate freely in their own app; an agent acting on their behalf is the same trust level. If an LLM goes wild and starts navigating randomly, the bigger fix is prompt-side, not URL-side.
+
+### Revisit when
+
+- Multiple users start using voice and we discover the floating button conflicts with their normal usage patterns → reconsider placement (could become a slide-up panel, settings-page-only mode, etc.)
+- Page-context introspection beyond URL turns out to be necessary (e.g. agent needs to know which row the user is hovering on) → add scoped getters to specific page components rather than a generic "read DOM state" tool
+- The Pipecat JS client's bundle weight becomes a perf issue → code-split aggressively or write a thinner wrapper around raw WebSocket + Web Audio API
+- We invite real users (outside the household) → re-examine the no-allowlist nav decision, add a per-user voice opt-out toggle (see LEARNINGS.md backlog)
+
+---
+
 ## How to add a new decision
 
-1. Increment the ADR number (next one is ADR 010).
+1. Increment the ADR number (next one is ADR 011).
 2. Use the template above: Date, Status, Context, Decision, Rationale, Alternatives, Revisit triggers.
 3. Don't edit historical entries to "fix" the rationale in hindsight. Add a new ADR that supersedes the old one — keeps the reasoning history honest.
 4. Update the entry's Status if it's later superseded: `Status: Superseded by ADR 0XX`.
