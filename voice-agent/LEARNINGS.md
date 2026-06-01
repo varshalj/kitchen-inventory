@@ -206,6 +206,41 @@ We have separate commits for Slice 0 scaffold, Slice 0 WIP, Slice 0 working, Sli
 - **Sarvam Saaras v3 mode="transcribe" vs default behavior** — we set mode explicitly, but if default is also transcribe for saaras:v3 we could simplify. Verify against current Sarvam docs.
 - **Pipecat function-calling API stability** — we verified `register_function()` + `FunctionSchema` + `ToolsSchema` work in 1.3.0. These are highly likely to drift; pin or re-verify on each Pipecat bump.
 
+## The iterate-from-logs workflow
+
+Pattern that emerged across slices 1 and 2: each real voice session surfaces 2-5 small prompt issues that are easy to fix in isolation but expensive to imagine without seeing them in conversation. Examples we've already shipped:
+
+- "Mickey" / unusual-item guard
+- Correction-tracking across turns
+- Multi-item ambiguity
+- Don't hallucinate "archived" status on disambiguation candidates
+- Re-verify when user expresses doubt
+- One language per reply, even when the user code-switches
+
+None of these would've been predicted from architecture; all of them came from reading actual session logs in `voice_session_logs`.
+
+**The workflow that works:**
+
+1. **Use the agent for a real task.** Burn 10-15 minutes letting your wife (or yourself) actually try to do something. Stay close enough to see what the agent does, but don't help.
+2. **Read the session in `voice_session_logs`** soon after. Note moments where the agent confused you, doubled down on something wrong, or required more than 2 turns to do something simple.
+3. **Batch the observations.** Don't patch one-off; wait until you have 3-5 patterns from 2-3 sessions.
+4. **Single prompt edit, single redeploy.** Keep prompt changes batched so behavior changes are clearly attributable to specific iterations.
+5. **Test the same scenarios again** to confirm fixes hold.
+
+Don't iterate prompts in isolation from real conversations — it leads to over-engineering for imagined edge cases and under-engineering for the ones that actually bite. The conversation log is the ground truth.
+
+## Backlog: prompt iterations deferred from Slice 2 testing
+
+Things observed in voice testing that aren't shipped yet. Will batch with the next round of session observations.
+
+- **Single-word numeric referent ambiguity.** When candidates are listed by quantity ("one with 0 kg, another with 400 grams") and the user replies with just a number ("zero", "four hundred"), the LLM may treat it as a refusal rather than identifying the candidate. Two possible fixes:
+  - Prompt rule: interpret single-word quantity responses as candidate references when they match a candidate's quantity field
+  - UX rephrase: label candidates with ordinals ("the first is 0 kg, the second is 400 grams") so user can say "the first" unambiguously
+- **Agent under-claims language support in meta-questions.** When asked "what languages can you speak?", agent answers "Hindi and English" even though it can clearly handle Marathi, Kannada, Malayalam (used in the same session). Conservative-by-default LLM behavior on capability questions. Fix: prompt rule to claim broader language support when asked directly.
+- **Default restock quantity when consuming a quantity-0 item.** When the inventory item being consumed has `quantity=0` (a data hygiene quirk), server defaults restock to 1. That's a sensible default but the agent could verbalize the inference ("the item had 0 kg, so I'll restock 1 kg by default — does that sound right?") rather than silently defaulting.
+
+When session count grows (~5-10 more sessions of real use) and these patterns recur, batch and patch.
+
 ---
 
 ## Quick-reference: who-renamed-what cheat sheet
