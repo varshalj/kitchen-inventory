@@ -44,20 +44,29 @@ things up.
 - Reply in whatever language the user spoke — English, Hindi, Marathi, or \
 code-mixed all work.
 
-# Current capabilities (Slice 1 Stage 2)
+# Current capabilities (Slice 1 Stages 2 & 2.5)
 You can:
 - Describe what Kitchen Inventory does and explain how to use any feature
 - Call `list_inventory` to read the user's current inventory (optionally \
 filtered by category like 'dairy' or location like 'fridge')
 - Call `get_expiring_soon` to find items expiring within N days (default 3)
+- Call `list_shopping` to read the shopping list (status: pending / completed / all)
+- Call `search_inventory(query)` to look up items by name across current and \
+archived inventory — use for "do I have X?" / "did I ever buy X?"
+- Call `suggest_meals(limit)` to recommend recipes ranked by how well they \
+match what's in the pantry right now
+- Call `get_waste_stats(days)` for waste analytics (default 30 days lookback)
+- Call `list_recipes` for the list of saved recipes (returns ids + titles)
+- Call `get_recipe(recipe_id)` for ingredients + instructions of a specific \
+recipe — typically after list_recipes or suggest_meals returned an id
 
 You CANNOT yet:
-- Read the user's shopping list or recipes
 - Add, edit, or delete any items
 - Mark anything as consumed / wasted / rated
+- Modify the shopping list (add/remove/check off)
 
-For requests outside the supported tools (shopping list, recipes, writes), \
-say so plainly: "I can't do that yet — try the app directly."
+For write requests, say so plainly: "I can't add or change items yet — try \
+the app directly."
 
 # Using tools well
 - Prefer calling a tool over guessing. If the user asks "what's expiring?", \
@@ -315,8 +324,13 @@ async def _run_voice_pipeline(
     # the actual locations.
     from pipecat.adapters.schemas.function_schema import FunctionSchema
     from pipecat.adapters.schemas.tools_schema import ToolsSchema
-    # Local tool implementations — sibling modules in the Modal image.
+    from pipecat.frames.frames import TranscriptionFrame
+    from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
+    # Local tool implementations + logger — sibling modules in the Modal image.
     from tools import reads as tool_reads
+    import logger as voice_logger
+    import time
+    import uuid
     from pipecat.transports.websocket.fastapi import (
         FastAPIWebsocketTransport,
         FastAPIWebsocketParams,
@@ -369,6 +383,17 @@ async def _run_voice_pipeline(
         model="gpt-4o-mini",
     )
 
+    # ── Session identity for logging ──
+    # Fresh UUID per WebSocket connect (decision A1, ADR 008 Stage 3).
+    session_id = str(uuid.uuid4())
+    logs_enabled = await voice_logger.is_logging_enabled(user_id)
+    print(
+        f"voice-session: user_id={user_id} session_id={session_id} "
+        f"logs_enabled={logs_enabled}",
+        flush=True,
+    )
+    turn_counter = voice_logger.TurnCounter()
+
     # ── Tools: read-only direct-Supabase reads (per ADR 006) ──
     # Schema declarations the LLM reads to decide whether/how to call.
     # Match the existing MCP server tool signatures for cross-surface
@@ -409,38 +434,213 @@ async def _run_voice_pipeline(
         required=[],
     )
 
-    tools_schema = ToolsSchema(
-        standard_tools=[list_inventory_schema, get_expiring_soon_schema]
+    list_shopping_schema = FunctionSchema(
+        name="list_shopping",
+        description=(
+            "List the user's shopping list. Use for 'what's on my list', "
+            "'what do I need to buy', 'what's still to be bought'."
+        ),
+        properties={
+            "status": {
+                "type": "string",
+                "enum": ["pending", "completed", "all"],
+                "description": "Filter by status. Default 'pending' (not yet bought).",
+            },
+        },
+        required=[],
     )
 
-    # Tool handlers — closures over user_token so each invocation runs
-    # under that user's RLS. Pipecat's OpenAILLMService registers handlers
-    # by tool name and invokes them with a FunctionCallParams object.
-    async def _handle_list_inventory(params):
-        try:
+    search_inventory_schema = FunctionSchema(
+        name="search_inventory",
+        description=(
+            "Fuzzy search inventory items by name. Use for 'do I have X?', "
+            "'did I buy X recently?', or to find a specific item. Searches "
+            "both current and archived items so you can answer about past "
+            "purchases too."
+        ),
+        properties={
+            "query": {
+                "type": "string",
+                "description": "Item name fragment (case-insensitive).",
+            },
+        },
+        required=["query"],
+    )
+
+    suggest_meals_schema = FunctionSchema(
+        name="suggest_meals",
+        description=(
+            "Suggest recipes ranked by how well they match the user's current "
+            "pantry. Use for 'what should I cook tonight', 'suggest a meal', "
+            "'what can I make with what I have'."
+        ),
+        properties={
+            "limit": {
+                "type": "integer",
+                "description": "Max suggestions (default 5, max 10).",
+            },
+        },
+        required=[],
+    )
+
+    get_waste_stats_schema = FunctionSchema(
+        name="get_waste_stats",
+        description=(
+            "Food waste analytics. Returns total wasted items, breakdown by "
+            "category and reason. Use for 'how much do I waste', 'what do I "
+            "throw away most', 'am I getting better at not wasting food'."
+        ),
+        properties={
+            "days": {
+                "type": "integer",
+                "description": "Days to look back (default 30, max 365).",
+            },
+        },
+        required=[],
+    )
+
+    list_recipes_schema = FunctionSchema(
+        name="list_recipes",
+        description=(
+            "List the user's saved recipes. Returns id + title + metadata. "
+            "Use for 'what recipes do I have' / 'what can I cook'. The ids "
+            "this returns can be passed to get_recipe for full details."
+        ),
+        properties={},
+        required=[],
+    )
+
+    get_recipe_schema = FunctionSchema(
+        name="get_recipe",
+        description=(
+            "Get the full ingredients + instructions for one specific recipe. "
+            "Typically called AFTER list_recipes or suggest_meals — use the "
+            "id from those results. If the user asks 'tell me about the "
+            "biryani', and you've previously listed recipes including "
+            "Biryani with id 'abc123', call this with recipe_id='abc123'."
+        ),
+        properties={
+            "recipe_id": {
+                "type": "string",
+                "description": "Recipe id (UUID) from list_recipes or suggest_meals.",
+            },
+        },
+        required=["recipe_id"],
+    )
+
+    tools_schema = ToolsSchema(
+        standard_tools=[
+            list_inventory_schema,
+            get_expiring_soon_schema,
+            list_shopping_schema,
+            search_inventory_schema,
+            suggest_meals_schema,
+            get_waste_stats_schema,
+            list_recipes_schema,
+            get_recipe_schema,
+        ]
+    )
+
+    # ── Tool handlers ──
+    # Closures over user_token (for RLS) + logging context. Each handler
+    # measures latency, logs the call (if logging enabled), and returns the
+    # result. Failures inside the tool are caught and surfaced as
+    # {"error": "..."} so the LLM can phrase them verbally.
+    def _make_tool_handler(tool_name: str, fn):
+        """Wrap a tool function with latency timing + voice_session_logs writes."""
+        async def _handler(params):
+            start_ms = time.perf_counter() * 1000
             args = params.arguments or {}
-            result = await tool_reads.list_inventory(
+            try:
+                result = await fn(args)
+                latency = int(time.perf_counter() * 1000 - start_ms)
+                voice_logger.log_turn(
+                    enabled=logs_enabled,
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_number=turn_counter.next(),
+                    role="tool",
+                    tool_name=tool_name,
+                    tool_args=args,
+                    tool_result=result,
+                    latency_ms=latency,
+                )
+                await params.result_callback(result)
+            except Exception as e:  # noqa: BLE001
+                latency = int(time.perf_counter() * 1000 - start_ms)
+                err = {"error": str(e), "type": type(e).__name__}
+                voice_logger.log_turn(
+                    enabled=logs_enabled,
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_number=turn_counter.next(),
+                    role="tool",
+                    tool_name=tool_name,
+                    tool_args=args,
+                    tool_result=err,
+                    latency_ms=latency,
+                )
+                await params.result_callback(err)
+        return _handler
+
+    llm.register_function(
+        "list_inventory",
+        _make_tool_handler(
+            "list_inventory",
+            lambda a: tool_reads.list_inventory(
+                user_token, category=a.get("category"), location=a.get("location")
+            ),
+        ),
+    )
+    llm.register_function(
+        "get_expiring_soon",
+        _make_tool_handler(
+            "get_expiring_soon",
+            lambda a: tool_reads.get_expiring_soon(
                 user_token,
-                category=args.get("category"),
-                location=args.get("location"),
-            )
-            await params.result_callback(result)
-        except Exception as e:  # noqa: BLE001
-            await params.result_callback({"error": str(e)})
-
-    async def _handle_get_expiring_soon(params):
-        try:
-            args = params.arguments or {}
-            days = args.get("days", 3)
-            if not isinstance(days, int) or days < 1 or days > 60:
-                days = 3
-            result = await tool_reads.get_expiring_soon(user_token, days=days)
-            await params.result_callback(result)
-        except Exception as e:  # noqa: BLE001
-            await params.result_callback({"error": str(e)})
-
-    llm.register_function("list_inventory", _handle_list_inventory)
-    llm.register_function("get_expiring_soon", _handle_get_expiring_soon)
+                days=a["days"] if isinstance(a.get("days"), int) and 1 <= a["days"] <= 60 else 3,
+            ),
+        ),
+    )
+    llm.register_function(
+        "list_shopping",
+        _make_tool_handler(
+            "list_shopping",
+            lambda a: tool_reads.list_shopping(user_token, status=a.get("status", "pending")),
+        ),
+    )
+    llm.register_function(
+        "search_inventory",
+        _make_tool_handler(
+            "search_inventory",
+            lambda a: tool_reads.search_inventory(user_token, query=a.get("query", "")),
+        ),
+    )
+    llm.register_function(
+        "suggest_meals",
+        _make_tool_handler(
+            "suggest_meals",
+            lambda a: tool_reads.suggest_meals(user_token, limit=a.get("limit", 5)),
+        ),
+    )
+    llm.register_function(
+        "get_waste_stats",
+        _make_tool_handler(
+            "get_waste_stats",
+            lambda a: tool_reads.get_waste_stats(user_token, days=a.get("days", 30)),
+        ),
+    )
+    llm.register_function(
+        "list_recipes",
+        _make_tool_handler("list_recipes", lambda a: tool_reads.list_recipes(user_token)),
+    )
+    llm.register_function(
+        "get_recipe",
+        _make_tool_handler(
+            "get_recipe",
+            lambda a: tool_reads.get_recipe(user_token, recipe_id=a.get("recipe_id", "")),
+        ),
+    )
 
     # ── Context: system prompt with catalog + tools ──
     # LLMContext is the universal context (provider-agnostic). The aggregator
@@ -455,26 +655,134 @@ async def _run_voice_pipeline(
     # ── RTVI processor — client/server protocol bridge ──
     rtvi = RTVIProcessor()
 
+    # ── Transcript logging processors (ADR 008, Stage 3) ──
+    # UserTurnLogger sits after STT so it sees finalized TranscriptionFrames.
+    # AgentTurnLogger sits after the assistant aggregator so it sees the
+    # complete assistant message in context.messages (the aggregator appends
+    # to context just before this processor runs). Both no-op cheaply when
+    # logs_enabled is False.
+
+    class UserTurnLogger(FrameProcessor):
+        async def process_frame(self, frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+            if logs_enabled and isinstance(frame, TranscriptionFrame) and frame.text:
+                voice_logger.log_turn(
+                    enabled=True,
+                    user_id=user_id,
+                    session_id=session_id,
+                    turn_number=turn_counter.next(),
+                    role="user",
+                    text=frame.text,
+                    model="saaras:v3",
+                )
+            await self.push_frame(frame, direction)
+
+    class AgentTurnLogger(FrameProcessor):
+        """Logs the assistant's full response after the aggregator appends it
+        to context.messages.
+
+        Also captures user-perceived latency for the agent row: the time
+        between UserStoppedSpeakingFrame and LLMContextAssistantTimestampFrame
+        — i.e. "how long after I finished talking did the agent finish
+        thinking?". This is STT + aggregator + LLM time. TTS playback time
+        starts after, so the user hears the response a bit later than this
+        number suggests; for "is the agent slow?" debugging this metric is
+        the most actionable single number.
+        """
+
+        def __init__(self):
+            super().__init__()
+            # Avoid double-logging if multiple "turn complete" frames fire
+            # for one assistant turn.
+            self._last_logged_message_count = 0
+            # Timestamp (perf_counter ms) when user finished speaking. Reset
+            # after each agent turn is logged.
+            self._user_stopped_perf_ms = None
+
+        async def process_frame(self, frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+            if logs_enabled:
+                name = type(frame).__name__
+
+                # Latency anchor: VAD-detected end of user's utterance.
+                if name == "UserStoppedSpeakingFrame":
+                    self._user_stopped_perf_ms = time.perf_counter() * 1000
+
+                # Pipecat 1.3.0 emits LLMContextAssistantTimestampFrame
+                # immediately after the assistant aggregator appends the
+                # complete assistant turn to context.messages. Other historical
+                # names kept for forward-compat with future Pipecat versions.
+                elif name in (
+                    "LLMContextAssistantTimestampFrame",
+                    "LLMResponseEndFrame",
+                    "LLMFullResponseEndFrame",
+                    "OpenAIAssistantContextAggregatorFrame",
+                    "LLMMessagesUpdateFrame",
+                    "AssistantContextUpdatedFrame",
+                ):
+                    try:
+                        messages = list(context.messages or [])
+                        if len(messages) > self._last_logged_message_count:
+                            last = messages[-1] if messages else None
+                            if (
+                                last
+                                and last.get("role") == "assistant"
+                                and last.get("content")
+                            ):
+                                latency_ms = None
+                                if self._user_stopped_perf_ms is not None:
+                                    latency_ms = int(
+                                        time.perf_counter() * 1000
+                                        - self._user_stopped_perf_ms
+                                    )
+                                    # Reset so the next turn starts a fresh window
+                                    self._user_stopped_perf_ms = None
+                                voice_logger.log_turn(
+                                    enabled=True,
+                                    user_id=user_id,
+                                    session_id=session_id,
+                                    turn_number=turn_counter.next(),
+                                    role="agent",
+                                    text=last.get("content"),
+                                    latency_ms=latency_ms,
+                                    model="gpt-4o-mini",
+                                )
+                                self._last_logged_message_count = len(messages)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"voice-logger: agent turn capture failed: {e}", flush=True)
+            await self.push_frame(frame, direction)
+
+    user_turn_logger = UserTurnLogger()
+    agent_turn_logger = AgentTurnLogger()
+
     # ── Wire the pipeline ──
     # Order matters:
-    #   transport.input() → audio frames arrive
-    #   rtvi              → handles client protocol messages
-    #   stt               → audio → TranscriptionFrame
-    #   user aggregator   → collects transcripts into user-turn messages
-    #   llm               → reads context, generates response
-    #   tts               → response text → audio frames
-    #   transport.output()→ sends audio to client
+    #   transport.input()    → audio frames arrive
+    #   rtvi                 → handles client protocol messages
+    #   stt                  → audio → TranscriptionFrame
+    #   user_turn_logger     → logs user transcripts (must be BEFORE the user
+    #                          aggregator — the aggregator consumes
+    #                          TranscriptionFrame and emits a context frame
+    #                          instead, so a logger downstream would never
+    #                          see raw transcripts)
+    #   user aggregator      → collects transcripts into user-turn messages
+    #   llm                  → reads context, generates response
+    #   tts                  → response text → audio frames
+    #   transport.output()   → sends audio to client
     #   assistant aggregator → records assistant turn in context
+    #   agent_turn_logger    → logs agent response (now in context) to logs
     pipeline = Pipeline(
         [
             transport.input(),
             rtvi,
             stt,
+            user_turn_logger,
             context_aggregator.user(),
             llm,
             tts,
             transport.output(),
             context_aggregator.assistant(),
+            agent_turn_logger,
         ]
     )
 
@@ -484,15 +792,37 @@ async def _run_voice_pipeline(
         observers=[RTVIObserver(rtvi)],
     )
 
+    # Log session boundary so analytics can frame turns by session lifetime.
+    voice_logger.log_turn(
+        enabled=logs_enabled,
+        user_id=user_id,
+        session_id=session_id,
+        turn_number=turn_counter.next(),
+        role="system",
+        text="session_started",
+        model="saaras:v3+gpt-4o-mini+bulbul:v3",
+    )
+
     # Greet the user on session start. Removes the "is it listening?"
     # ambiguity that plagues early voice UX. Direct TTSSpeakFrame bypasses
     # the LLM — cheaper and deterministic for a fixed greeting.
+    GREETING = "Hi! I'm Kitchen Mate. What can I help you with?"
+
     @rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi_processor):
         await rtvi_processor.set_bot_ready()
-        await task.queue_frames([
-            TTSSpeakFrame("Hi! I'm Kitchen Mate. What can I help you with?"),
-        ])
+        await task.queue_frames([TTSSpeakFrame(GREETING)])
+        # The greeting bypasses the LLM, so the AgentTurnLogger won't see
+        # it via the context. Log it directly here for completeness.
+        voice_logger.log_turn(
+            enabled=logs_enabled,
+            user_id=user_id,
+            session_id=session_id,
+            turn_number=turn_counter.next(),
+            role="agent",
+            text=GREETING,
+            model="bulbul:v3 (greeting, no LLM)",
+        )
 
     runner = PipelineRunner()
     await runner.run(task)

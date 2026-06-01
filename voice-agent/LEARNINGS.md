@@ -35,6 +35,28 @@ The endpoint at [pipeline.py — diagnostics](pipeline.py) probes import paths a
 
 When extending to new Pipecat surfaces (function calling, audio mixers, observers, etc.), add probe targets to the `/diagnostics` candidates list *before* writing the pipeline code that uses them.
 
+### 1b. For "what frame is emitted at moment X?" — add a one-shot `first-saw` print
+
+When you need to hook into a specific lifecycle event (assistant turn complete, user stopped speaking, tool result ready, etc.), Pipecat's frame names are the API surface. They drift between versions, aren't always documented, and guessing wastes deploys.
+
+The diagnostic that worked (Slice 1 Stage 3): add a `FrameProcessor` whose only job is to print each unique frame type name once per session.
+
+```python
+class FrameNameProbe(FrameProcessor):
+    def __init__(self):
+        super().__init__()
+        self._seen = set()
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+        name = type(frame).__name__
+        if name not in self._seen:
+            self._seen.add(name)
+            print(f"frame-probe: first-saw {name}", flush=True)
+        await self.push_frame(frame, direction)
+```
+
+Drop it anywhere in the pipeline, run a session, `modal app logs ... | grep frame-probe`, then patch your real logic with the correct names. This is what surfaced `LLMContextAssistantTimestampFrame` in ~one deploy cycle vs. multiple guess-and-check rounds.
+
 ### 2. Check Pipecat's CHANGELOG before each new feature
 
 [github.com/pipecat-ai/pipecat/blob/main/CHANGELOG.md](https://github.com/pipecat-ai/pipecat/blob/main/CHANGELOG.md)
@@ -119,6 +141,20 @@ the diagnostic that would have surfaced it in one shot.
 **Fix:** added a `/api/dev/voice-token` server route that calls `supabase.auth.getSession()` and returns the access_token cleanly. **Should have been the first thing built when we decided on JWT-based auth.**
 **Apply this lesson by:** whenever a flow needs a user JWT for testing, build the server endpoint that returns it *before* you start the testing loop. Five minutes upfront saves multiple debugging sessions.
 
+### AgentTurnLogger missed assistant turns due to wrong frame-name check (Slice 1 Stage 3)
+
+**Symptom:** User transcripts logged correctly; agent (LLM-generated) responses didn't appear in `voice_session_logs`. Only the direct-TTS greeting (logged outside the pipeline) showed up as an `agent` row.
+**Root cause:** Hardcoded a list of plausible "assistant turn complete" frame names (`LLMResponseEndFrame`, `LLMFullResponseEndFrame`, etc.) — none of which matched Pipecat 1.3.0's actual emission, which is `LLMContextAssistantTimestampFrame`.
+**Fast diagnostic:** the "print every unique frame type once per session" pattern (see Playbook §1b) surfaced the right name in one deploy cycle.
+**Apply this lesson by:** when hooking into Pipecat lifecycle events, *probe before guessing*. Three-minute helper class > three deploy cycles of guesses.
+
+### UserTurnLogger positioned downstream of aggregator (Slice 1 Stage 3)
+
+**Symptom:** `voice_session_logs` had `system` and `agent` rows but no `user` rows.
+**Root cause:** Placed `UserTurnLogger` *after* `context_aggregator.user()` in the pipeline. The aggregator consumes `TranscriptionFrame` and emits a different (context) frame downstream — so the logger never saw the raw transcript.
+**Fix:** move `UserTurnLogger` to the position immediately after `stt`, *before* the user aggregator.
+**Apply this lesson by:** any FrameProcessor that wants to observe a specific input frame type must sit upstream of any processor that consumes that type. Pipecat aggregators are transformers, not pass-throughs.
+
 ### Supabase moved to asymmetric JWT signing (Slice 1 Stage 2)
 
 **Symptom:** `Token failed verification: The specified alg value is not allowed`
@@ -182,6 +218,8 @@ If something stops working after a Pipecat / Pipecat-client / Sarvam version bum
 | Pipecat OpenAI context | `OpenAILLMContext` from `…openai_llm_context` | `LLMContext` from `…llm_context` |
 | Pipecat OpenAI context aggregator | `llm.create_context_aggregator(ctx)` | `LLMContextAggregatorPair(ctx)` |
 | Pipecat RTVI config | `RTVIConfig` (removed) | `RTVIProcessor()` no-arg |
+| Pipecat "assistant turn complete" frame | unknown / had to discover | `LLMContextAssistantTimestampFrame` |
+| Pipecat "user stopped speaking" frame | — | `UserStoppedSpeakingFrame` (VAD-emitted) |
 | Pipecat JS client npm package | `@pipecat-ai/client-web` | `@pipecat-ai/client-js` |
 | Sarvam STT model | `saarika:v2`, `saarika:v2.5` (legacy) | `saaras:v3` + `mode="transcribe"` |
 | Sarvam TTS model | `bulbul:v2` (deprecated but still works) | `bulbul:v3` voice `"shubh"` |

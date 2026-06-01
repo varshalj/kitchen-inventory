@@ -26,7 +26,7 @@ image = (
     .apt_install("ffmpeg")
     # Install Python deps. `add_local_dir` brings our source into the image.
     .pip_install_from_pyproject("pyproject.toml")
-    .add_local_python_source("pipeline", "auth", "tools")
+    .add_local_python_source("pipeline", "auth", "tools", "logger")
     # Include the feature catalog so the LLM system prompt can reference it.
     # Catalog lives in the parent docs/ directory (single source of truth);
     # we mount it into the container at a fixed path that pipeline.py reads.
