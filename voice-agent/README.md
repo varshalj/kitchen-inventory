@@ -21,35 +21,46 @@ The deployment foundation and pipeline assembly are confirmed:
 - ✅ `/health` returns 200 with all three secrets present
 - ✅ `/ws` accepts WebSocket upgrade, stays open waiting for audio
 - ✅ Sarvam STT + TTS connect from inside Modal to Sarvam's APIs at session start
-- ⏳ **Audio doesn't flow end-to-end yet.** The browser test client connects
-  cleanly, mic captures, but no audio frames reach Sarvam STT inside the
-  pipeline. Root cause: protocol mismatch.
+- ✅ **End-to-end audio round-trip works** (verified 2026-06-01): speak into
+  browser mic → Sarvam STT transcribes → EchoProcessor wraps as
+  `TTSSpeakFrame` → Sarvam TTS synthesizes → audio plays in browser.
+  Handles English and Hindi/Marathi input out of the box.
 
-## Known limitation: client/server protocol mismatch
+## Implementation notes worth remembering
 
-`@pipecat-ai/websocket-transport` (the JS client SDK we use in
-`test_client.html`) speaks the **RTVI protocol** — handshake, structured
-client/server messages, etc.
+For future sessions or anyone porting this pattern:
 
-`pipecat.transports.websocket.fastapi.FastAPIWebsocketTransport` (our
-server transport) speaks **raw Pipecat frames** without the RTVI envelope.
+1. **Pipecat 1.3.0 import drift** — transports moved from
+   `pipecat.transports.network.fastapi_websocket` to
+   `pipecat.transports.websocket.fastapi`. Confirmed via `/diagnostics`.
+2. **JS client package rename** — `@pipecat-ai/client-web` is now
+   `@pipecat-ai/client-js`. WebSocket transport stayed at
+   `@pipecat-ai/websocket-transport`.
+3. **CDN matters for the JS client** — `esm.sh` mistranspiles the
+   transport's class hierarchy (gives "Class constructor E cannot be
+   invoked without 'new'"). Use `cdn.jsdelivr.net/.../+esm` instead.
+4. **RTVI bridge is mandatory.** The JS client SDK speaks RTVI; the
+   server transport speaks raw Pipecat frames. Without `RTVIProcessor`
+   in the pipeline + `RTVIObserver` on the `PipelineTask`, websockets
+   handshake successfully but audio frames are silently dropped at the
+   application layer.
+5. **`RTVIConfig` was removed in Pipecat 1.3.0** — `RTVIProcessor()`
+   takes no args now.
+6. **Echo / generic text must be `TTSSpeakFrame`, not `TextFrame`.**
+   Pipecat TTS services don't synthesize raw `TextFrame`; they expect
+   `TTSSpeakFrame` (direct command) or LLM aggregation markers around
+   `LLMTextFrame`.
+7. **VAD analyzer is required** for STT to know when an utterance ends.
+   We use `SileroVADAnalyzer` in `FastAPIWebsocketParams`.
+8. **`ProtobufFrameSerializer` is required** in the transport params —
+   that's the wire format the RTVI client expects.
 
-At the WebSocket level they connect fine. At the application layer they
-talk different languages — RTVI-formatted frames from the browser are
-silently dropped server-side because they're not the protobuf-encoded raw
-frames the transport expects. Modal logs confirm this: pipeline starts,
-Sarvam STT/TTS connect to their APIs, then nothing for the session
-duration until disconnect.
+## Sarvam model identifiers (verified working as of 2026-06-01)
 
-**Fix (next session):** wrap the server pipeline with an RTVI-compatible
-session manager. Pipecat exposes `RTVIObserver` / `RTVIProcessor` / an
-RTVI session helper. Server-side change, no client changes needed.
-~1 hour of focused work in a fresh context.
-
-Alternative (more JS code): write a raw browser client that encodes
-audio as protobuf frames matching the server's expected format. ~150
-lines, but bypasses the SDK. Use this only if RTVI on the server proves
-infeasible.
+| Service | Model | Notes |
+|---|---|---|
+| STT | `saarika:v2.5` | Pure transcription (no translation). Auto-detects Hindi/Marathi/English even when `language="en-IN"` is set. |
+| TTS | `bulbul:v2` | Voice ID `anushka` works; "Priya", "Neha" also available. |
 
 ## Prerequisites
 

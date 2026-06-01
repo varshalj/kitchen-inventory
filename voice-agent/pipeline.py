@@ -108,10 +108,34 @@ def build_app() -> FastAPI:
             except Exception as e:
                 probe[path] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
+        # Inspect the rtvi module specifically since RTVIConfig was missing.
+        rtvi_inspection = {}
+        try:
+            from pipecat.processors.frameworks import rtvi as rtvi_module
+            rtvi_inspection["module_path"] = getattr(rtvi_module, "__file__", "unknown")
+            rtvi_inspection["all_exports"] = sorted(
+                [s for s in dir(rtvi_module) if not s.startswith("_")]
+            )
+        except Exception as e:
+            rtvi_inspection["error"] = f"{type(e).__name__}: {e}"
+
+        # Also check pipecat.serializers and pipecat.audio.vad while we're here
+        serializer_inspection = {}
+        try:
+            from pipecat import serializers
+            for finder, name, ispkg in pkgutil.iter_modules(
+                serializers.__path__, prefix="pipecat.serializers."
+            ):
+                serializer_inspection.setdefault("submodules", []).append(name)
+        except Exception as e:
+            serializer_inspection["error"] = str(e)
+
         return {
             "pipecat_version": getattr(pipecat, "__version__", "unknown"),
             "relevant_modules": sorted(relevant),
             "import_probes": probe,
+            "rtvi_inspection": rtvi_inspection,
+            "serializer_inspection": serializer_inspection,
             "total_module_count": len(all_modules),
         }
 
@@ -150,19 +174,36 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
     # Imports kept inside the function so the /health endpoint works even if
     # Pipecat is half-broken — useful while debugging deps.
     from pipecat.pipeline.pipeline import Pipeline
-    from pipecat.pipeline.task import PipelineTask
+    from pipecat.pipeline.task import PipelineTask, PipelineParams
     from pipecat.pipeline.runner import PipelineRunner
     from pipecat.services.sarvam.stt import SarvamSTTService
     from pipecat.services.sarvam.tts import SarvamTTSService
     # Pipecat 1.3.0 reorganized transports — was pipecat.transports.network.*
     # in older versions; now lives under pipecat.transports.websocket.fastapi.
-    # Verified via /diagnostics on 2026-05-31.
     from pipecat.transports.websocket.fastapi import (
         FastAPIWebsocketTransport,
         FastAPIWebsocketParams,
     )
-    from pipecat.frames.frames import TranscriptionFrame, TextFrame
+    from pipecat.frames.frames import TranscriptionFrame, TextFrame, TTSSpeakFrame
     from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
+    # RTVI bridge so the @pipecat-ai/client-js browser SDK can talk to us.
+    # Without this, FastAPIWebsocketTransport speaks raw Pipecat frames while
+    # the client SDK speaks RTVI — websocket connects but audio is silently
+    # dropped. Adding RTVIProcessor (in the pipeline) + RTVIObserver (on the
+    # PipelineTask) translates between the two protocols.
+    # NOTE: RTVIConfig was removed in Pipecat 1.3.0; RTVIProcessor now takes
+    # no config arg (or takes individual kwargs). See /diagnostics
+    # rtvi_inspection for confirmation.
+    from pipecat.processors.frameworks.rtvi import (
+        RTVIObserver,
+        RTVIProcessor,
+    )
+    # Voice Activity Detection — STT needs this to know when an utterance
+    # ends so it can commit a transcript. Without VAD, Sarvam STT may never
+    # emit a TranscriptionFrame even with audio flowing in.
+    from pipecat.audio.vad.silero import SileroVADAnalyzer
+    # Wire serializer — RTVI client expects protobuf-encoded frames.
+    from pipecat.serializers.protobuf import ProtobufFrameSerializer
 
     # ── Transport (browser ↔ Pipecat over the WebSocket FastAPI accepted) ──
     transport = FastAPIWebsocketTransport(
@@ -171,6 +212,8 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
             audio_in_enabled=True,
             audio_out_enabled=True,
             add_wav_header=False,
+            vad_analyzer=SileroVADAnalyzer(),
+            serializer=ProtobufFrameSerializer(),
         ),
     )
 
@@ -186,13 +229,17 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
 
     # ── Loopback "LLM" — turns the transcript into an echo statement. ──
     # Replace with OpenAILLMService in session 2.
+    #
+    # Uses TTSSpeakFrame (direct "speak this now") rather than plain
+    # TextFrame — Pipecat TTS services don't synthesize raw TextFrames;
+    # they expect either TTSSpeakFrame or text wrapped in LLM aggregation
+    # markers (LLMResponseStart → LLMTextFrame → LLMResponseEnd).
     class EchoProcessor(FrameProcessor):
         async def process_frame(self, frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
             if isinstance(frame, TranscriptionFrame) and frame.text:
-                # Emit a TextFrame downstream so TTS speaks it.
                 await self.push_frame(
-                    TextFrame(text=f"You said: {frame.text}"),
+                    TTSSpeakFrame(f"You said: {frame.text}"),
                     direction,
                 )
             else:
@@ -207,10 +254,16 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
         model="bulbul:v2",     # check Sarvam docs for current model identifier
     )
 
+    # ── RTVI processor — handles client/server protocol messages ──
+    rtvi = RTVIProcessor()
+
     # ── Wire the pipeline ──
+    # RTVI processor goes immediately after transport.input() so it can
+    # intercept and handle RTVI client messages before they reach STT.
     pipeline = Pipeline(
         [
             transport.input(),
+            rtvi,
             stt,
             echo,
             tts,
@@ -218,6 +271,17 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
         ]
     )
 
-    task = PipelineTask(pipeline)
+    task = PipelineTask(
+        pipeline,
+        params=PipelineParams(allow_interruptions=True),
+        observers=[RTVIObserver(rtvi)],
+    )
+
+    # Tell the client we're ready as soon as it signals it is. Without this,
+    # the client SDK waits forever for the bot-ready ack.
+    @rtvi.event_handler("on_client_ready")
+    async def on_client_ready(rtvi_processor):
+        await rtvi_processor.set_bot_ready()
+
     runner = PipelineRunner()
     await runner.run(task)
