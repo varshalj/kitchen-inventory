@@ -44,26 +44,38 @@ things up.
 - Reply in whatever language the user spoke — English, Hindi, Marathi, or \
 code-mixed all work.
 
-# Current capabilities (Slice 1)
-You are in early development. Right now you can:
-- Describe what Kitchen Inventory does
-- Explain how to use any feature (the catalog below has UI paths and \
-descriptions)
-- Answer questions about features in the catalog
+# Current capabilities (Slice 1 Stage 2)
+You can:
+- Describe what Kitchen Inventory does and explain how to use any feature
+- Call `list_inventory` to read the user's current inventory (optionally \
+filtered by category like 'dairy' or location like 'fridge')
+- Call `get_expiring_soon` to find items expiring within N days (default 3)
 
 You CANNOT yet:
-- Read the user's actual inventory or shopping list data
-- Add, modify, or delete items
-- Look up specific recipes
+- Read the user's shopping list or recipes
+- Add, edit, or delete any items
+- Mark anything as consumed / wasted / rated
 
-For data requests ("what's in my fridge", "what's on my shopping list"), say: \
-"I can't read your inventory yet, but you can see it in the app." Don't \
-pretend to know.
+For requests outside the supported tools (shopping list, recipes, writes), \
+say so plainly: "I can't do that yet — try the app directly."
+
+# Using tools well
+- Prefer calling a tool over guessing. If the user asks "what's expiring?", \
+call get_expiring_soon — don't make up items.
+- When a tool returns many rows (truncated: true, or total > 5), DO NOT list \
+them all verbally. Mention 3–5 representative items and tell the user the \
+total count plus where to see the full list in the app.
+  - Example: "You have 152 items in your inventory. The newest are tomatoes, \
+yogurt, and bread. Open the Inventory page in the app to browse them all."
+  - Example: "You have 6 items expiring in the next 3 days, including milk \
+in 2 days and spinach tomorrow. Want me to read the rest?"
+- If a tool returns an empty list, say so cheerfully: "Nothing's expiring in \
+the next few days — you're good." Don't apologize.
 
 # Scope refusal
-If asked about anything outside this app's scope (general questions, news, \
-other apps), say: "I can only help with your Kitchen Inventory — try asking \
-what features I support or how to do something in the app."
+If asked about anything outside Kitchen Inventory (general questions, news, \
+weather, other apps), say: "I can only help with your kitchen — try asking \
+what's in your inventory or what's expiring."
 
 # Feature catalog (single source of truth)
 Below is the complete list of features. Use this to answer questions about \
@@ -210,18 +222,45 @@ def build_app() -> FastAPI:
 
     @app.websocket("/ws")
     async def websocket_voice(websocket: WebSocket):
-        """Voice session over a WebSocket. See _run_voice_pipeline."""
+        """
+        Voice session over a WebSocket.
+
+        Auth: browser passes the user's Supabase access token as ?token=<jwt>.
+        We verify before accepting the WS — invalid tokens get a clean 4001
+        close instead of an in-pipeline exception.
+        """
+        from auth import InvalidToken, verify_user_token
+
+        # Accept first, then validate. Closing BEFORE accept produces a
+        # generic 1006 on the browser side; accepting first lets us send a
+        # JSON diagnostic and close with the proper 4001 code.
         await websocket.accept()
+
+        token = websocket.query_params.get("token")
         try:
-            await _run_voice_pipeline(websocket)
+            claims = verify_user_token(token or "")
+        except InvalidToken as e:
+            print(f"voice-auth: token rejected — {e}", flush=True)
+            try:
+                await websocket.send_json({"error": "invalid_token", "message": str(e)})
+            except Exception:
+                pass
+            await websocket.close(code=4001, reason=str(e))
+            return
+
+        user_id = claims["sub"]
+        print(f"voice-auth: accepted user_id={user_id}", flush=True)
+        try:
+            await _run_voice_pipeline(websocket, user_token=token, user_id=user_id)
         except Exception as exc:  # noqa: BLE001
-            # Log and close — Pipecat exceptions during dev are common and
-            # noisy. Surface the message so client-side gets context.
             import traceback
 
             traceback.print_exc()
-            await websocket.send_json({"error": str(exc)})
-            await websocket.close()
+            try:
+                await websocket.send_json({"error": str(exc)})
+                await websocket.close()
+            except Exception:
+                pass
 
     return app
 
@@ -229,17 +268,29 @@ def build_app() -> FastAPI:
 # ─── Pipeline construction ────────────────────────────────────────────────────
 
 
-async def _run_voice_pipeline(websocket: WebSocket) -> None:
+async def _run_voice_pipeline(
+    websocket: WebSocket,
+    user_token: str,
+    user_id: str,
+) -> None:
     """
-    Build and run a Pipecat pipeline (Slice 1):
+    Build and run a Pipecat pipeline (Slice 1 Stage 2):
 
         Audio in → RTVI → Sarvam Saaras v3 STT → user-context aggregator →
-        OpenAI GPT-4o-mini LLM → Sarvam Bulbul v3 TTS → Audio out → assistant-context aggregator
+        OpenAI GPT-4o-mini LLM (with tools) → Sarvam Bulbul v3 TTS →
+        Audio out → assistant-context aggregator
 
     The agent is Kitchen Mate — a kitchen inventory assistant scoped to the
     Kitchen Inventory app. System prompt embeds the feature catalog so the
-    LLM can answer "what can you do" / "how do I X" questions without
-    hallucinating features. Tools (real data reads) come in Slice 2.
+    LLM can answer feature/how-do-I questions; tools (list_inventory,
+    get_expiring_soon) let it answer data questions about the user's actual
+    inventory.
+
+    Args:
+        websocket: live FastAPI WebSocket; caller has already accept()'d it.
+        user_token: verified Supabase user JWT; passed to tools so their
+                    queries run under the user's RLS.
+        user_id: user UUID (the sub claim from user_token), for logging.
 
     See docs/decisions.md ADRs 001–008 for full architectural rationale.
     """
@@ -259,6 +310,13 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
     from pipecat.processors.aggregators.llm_response_universal import (
         LLMContextAggregatorPair,
     )
+    # Function calling schemas. These import paths may drift in Pipecat 1.x;
+    # if either fails, /diagnostics + a quick dir() inspection will surface
+    # the actual locations.
+    from pipecat.adapters.schemas.function_schema import FunctionSchema
+    from pipecat.adapters.schemas.tools_schema import ToolsSchema
+    # Local tool implementations — sibling modules in the Modal image.
+    from tools import reads as tool_reads
     from pipecat.transports.websocket.fastapi import (
         FastAPIWebsocketTransport,
         FastAPIWebsocketParams,
@@ -311,14 +369,87 @@ async def _run_voice_pipeline(websocket: WebSocket) -> None:
         model="gpt-4o-mini",
     )
 
-    # ── Context: system prompt with catalog ──
+    # ── Tools: read-only direct-Supabase reads (per ADR 006) ──
+    # Schema declarations the LLM reads to decide whether/how to call.
+    # Match the existing MCP server tool signatures for cross-surface
+    # consistency.
+    list_inventory_schema = FunctionSchema(
+        name="list_inventory",
+        description=(
+            "List the user's current (non-archived) inventory items. "
+            "Use this when asked what they have, what's in their kitchen / "
+            "fridge / pantry, or to verify if they own a specific category."
+        ),
+        properties={
+            "category": {
+                "type": "string",
+                "description": "Filter by category (e.g. 'dairy', 'vegetables'). Optional.",
+            },
+            "location": {
+                "type": "string",
+                "description": "Filter by storage location (e.g. 'fridge', 'pantry', 'freezer'). Optional.",
+            },
+        },
+        required=[],
+    )
+
+    get_expiring_soon_schema = FunctionSchema(
+        name="get_expiring_soon",
+        description=(
+            "Get inventory items expiring within N days (default 3). "
+            "Use this for 'what's expiring', 'what do I need to use up', "
+            "'anything going bad' kinds of questions."
+        ),
+        properties={
+            "days": {
+                "type": "integer",
+                "description": "Days to look ahead. Default 3. Use 7 for 'this week', 1 for 'today/tomorrow'.",
+            },
+        },
+        required=[],
+    )
+
+    tools_schema = ToolsSchema(
+        standard_tools=[list_inventory_schema, get_expiring_soon_schema]
+    )
+
+    # Tool handlers — closures over user_token so each invocation runs
+    # under that user's RLS. Pipecat's OpenAILLMService registers handlers
+    # by tool name and invokes them with a FunctionCallParams object.
+    async def _handle_list_inventory(params):
+        try:
+            args = params.arguments or {}
+            result = await tool_reads.list_inventory(
+                user_token,
+                category=args.get("category"),
+                location=args.get("location"),
+            )
+            await params.result_callback(result)
+        except Exception as e:  # noqa: BLE001
+            await params.result_callback({"error": str(e)})
+
+    async def _handle_get_expiring_soon(params):
+        try:
+            args = params.arguments or {}
+            days = args.get("days", 3)
+            if not isinstance(days, int) or days < 1 or days > 60:
+                days = 3
+            result = await tool_reads.get_expiring_soon(user_token, days=days)
+            await params.result_callback(result)
+        except Exception as e:  # noqa: BLE001
+            await params.result_callback({"error": str(e)})
+
+    llm.register_function("list_inventory", _handle_list_inventory)
+    llm.register_function("get_expiring_soon", _handle_get_expiring_soon)
+
+    # ── Context: system prompt with catalog + tools ──
     # LLMContext is the universal context (provider-agnostic). The aggregator
     # pair has .user() and .assistant() methods that wrap the pipeline's
     # input/output sides to maintain conversation state.
     messages = [
         {"role": "system", "content": _build_system_prompt()},
     ]
-    context = LLMContext(messages)
+    context = LLMContext(messages, tools=tools_schema)
     context_aggregator = LLMContextAggregatorPair(context)
 
     # ── RTVI processor — client/server protocol bridge ──

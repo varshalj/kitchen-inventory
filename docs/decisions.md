@@ -209,6 +209,12 @@ Revisit if quarterly review consistently finds >20% of entries needing changes.
 - Feature count crosses ~100 entries (manual walk-through becomes painful)
 - Multiple developers ship to the catalog (single-author discipline doesn't scale to teams)
 
+### Postscript: catalog-first paid off (2026-06-01)
+
+When Slice 1 Stage 2 of the voice agent went to wire `list_inventory` and `get_expiring_soon`, the catalog entries already had `voice.can_execute: true` and the correct `tool:` names from the original drafting session. Zero catalog changes were needed for the code to catch up to spec.
+
+The catalog-first discipline (writing the catalog *before* the consuming code) surfaced naming and capability decisions up front rather than during implementation. The cost (~one hour drafting the catalog) bought multiple later sessions of "what should we call this tool / what does it return / what's in scope" friction. Worth doing again on future projects — write the catalog before the agent, not alongside it.
+
 ---
 
 ## ADR 006 — Voice agent tool access: hybrid (reads direct, writes via MCP)

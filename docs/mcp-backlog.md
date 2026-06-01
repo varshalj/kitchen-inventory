@@ -19,6 +19,16 @@ What's deferred from the current MCP work and the conditions under which we'd re
 
 ## Phase 1 — reliability & agent safety
 
+### MCP write coverage for voice agent
+- **What:** Four user-facing write actions exist in `docs/feature-catalog.yaml` that the voice agent will eventually want to call but are not yet implemented in the MCP server:
+  - `add_inventory_item` — add a new inventory row (name, optional expiry/category/location/quantity/unit/brand/price)
+  - `edit_inventory_item` — modify any field on an existing inventory item (same disambiguation problem as `mark_as_consumed`)
+  - `mark_wasted` — archive with `archive_reason='wasted'` + a `wastage_reason` (expired / spoiled / unused / excess)
+  - `rate_item` — set rating/review_tags/review_note on a (typically archived) inventory row
+- **Why not yet:** ADR 006 routes voice writes through MCP for the dry-run/ambiguity/normalization safety patterns. Until these MCP tools exist, voice can't execute these actions; agent can only describe them.
+- **Trigger to pick up:** when voice Slice 2/3 (writes) starts — these tools become Stage 0 of that slice. Each one needs definition + handler + outputSchema, following the existing `add_to_shopping_list` / `mark_as_consumed` patterns.
+- **Cost:** ~half a day per tool including dry-run + ambiguity handling. Four tools total ≈ two days.
+
 ### Soft undo: `restore_inventory_item(item_id)`
 - **What:** flip `archived=false`, clear `consumed_on`/`wasted_on`/`archive_reason` for a given inventory id.
 - **Why now? not yet:** the dry-run default makes accidental archives much rarer. Ship the cheap undo only once we see the first agent-mark-consume that the user can't easily fix from the web UI.

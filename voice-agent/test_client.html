@@ -62,21 +62,30 @@
   </style>
 </head>
 <body>
-  <h1>Kitchen Inventory voice — Slice 0 test client</h1>
+  <h1>Kitchen Inventory voice — Slice 1 Stage 2 test client</h1>
   <p class="subtitle">
-    <strong>⚠️ WIP — audio doesn't flow yet (2026-06-01).</strong>
-    Connection works, mic captures, Pipecat client + server both load.
-    But the JS client SDK speaks the RTVI protocol while our server uses
-    the raw Pipecat frame protocol — audio frames arrive at the server
-    but are silently dropped because they're in the wrong wire format.
-    Fix: add an RTVI wrapper to the server pipeline. See voice-agent
-    session notes / README "Known limitations" for next steps.
+    Paste your Supabase user JWT below, click <strong>Connect</strong>,
+    allow microphone access, then speak. Try
+    <em>"what's in my kitchen?"</em>,
+    <em>"what's expiring soon?"</em>, or
+    <em>"how do I add an expiry date?"</em>
   </p>
-  <p class="subtitle">
-    Click <strong>Connect</strong>, allow microphone access, then speak.
-    Agent should echo back: <em>"You said: &lt;your text&gt;"</em>
-    (Not currently working — see warning above.)
+  <p class="subtitle" style="font-size: 13px; color: #666;">
+    <strong>Where to get the token:</strong> open the Kitchen Inventory app
+    in another tab → DevTools → Application → Local Storage →
+    look for <code>sb-&lt;projectref&gt;-auth-token</code> → copy the
+    <code>access_token</code> field from the JSON.
   </p>
+
+  <div style="margin: 1em 0;">
+    <label for="token" style="font-size: 13px; color: #444;">
+      User JWT (access_token):
+    </label>
+    <input id="token" type="password" placeholder="eyJhbGci…"
+           style="display: block; width: 100%; padding: 8px; font-family: monospace;
+                  font-size: 12px; margin-top: 4px; border: 1px solid #ccc; border-radius: 4px;" />
+  </div>
+
   <p class="endpoint">
     Endpoint:
     <code id="endpoint">wss://varshaljain--kitchen-inventory-voice-fastapi-app.modal.run/ws</code>
@@ -114,6 +123,14 @@
     const $log = document.getElementById("log");
     const $connect = document.getElementById("connect");
     const $disconnect = document.getElementById("disconnect");
+    const $token = document.getElementById("token");
+
+    // Persist token across page reloads so dev iteration is less painful.
+    const TOKEN_STORAGE_KEY = "voice-test-token";
+    $token.value = localStorage.getItem(TOKEN_STORAGE_KEY) || "";
+    $token.addEventListener("input", () => {
+      localStorage.setItem(TOKEN_STORAGE_KEY, $token.value);
+    });
 
     function log(msg, type = "info") {
       const div = document.createElement("div");
@@ -134,14 +151,70 @@
 
     let client = null;
 
+    function extractAccessToken(raw) {
+      // Be lenient about what was pasted:
+      //   1. A bare JWT (eyJxxx.eyJxxx.xxx) → use as-is
+      //   2. A JSON object containing access_token → extract that field
+      //   3. A JSON value with surrounding quotes → strip the quotes
+      const trimmed = (raw || "").trim();
+      if (!trimmed) return null;
+
+      // Strip outer quotes if user pasted a JSON-quoted string
+      let s = trimmed;
+      if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+        s = s.slice(1, -1);
+      }
+
+      // If it looks like a JSON object, parse and grab access_token
+      if (s.startsWith("{")) {
+        try {
+          const obj = JSON.parse(s);
+          if (obj && typeof obj.access_token === "string") {
+            return obj.access_token;
+          }
+          // Sometimes Supabase wraps under "currentSession" etc.
+          if (obj?.currentSession?.access_token) {
+            return obj.currentSession.access_token;
+          }
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      // Otherwise treat as a raw token
+      return s;
+    }
+
+    function looksLikeJWT(token) {
+      const parts = token.split(".");
+      return parts.length === 3 && parts.every((p) => p.length > 0);
+    }
+
     async function connect() {
+      const token = extractAccessToken($token.value);
+      if (!token) {
+        log("Couldn't find a token to send — paste either the access_token JWT directly or the whole sb-<ref>-auth-token JSON.", "error");
+        setStatus("Need token", "error");
+        return;
+      }
+      if (!looksLikeJWT(token)) {
+        log(`Pasted value doesn't look like a JWT (got ${token.split(".").length} dot-separated parts; expected 3). Make sure you copied the access_token field, not the refresh_token.`, "error");
+        setStatus("Bad token shape", "error");
+        return;
+      }
+
       $connect.disabled = true;
       setStatus("Connecting…");
       log("Building Pipecat client…", "info");
 
+      // Append token as query param. Server-side WS route validates it
+      // before accepting; bad token → close code 4001 with reason.
+      const wsUrl = `${ENDPOINT}?token=${encodeURIComponent(token)}`;
+
       try {
         const transport = new WebSocketTransport({
-          wsUrl: ENDPOINT,
+          wsUrl,
           // Audio I/O config — 16kHz mono is Pipecat's default; STT/TTS may
           // expect specific rates. Adjust if Sarvam rejects audio frames.
           sampleRate: 16000,

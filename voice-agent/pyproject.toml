@@ -24,9 +24,10 @@ dependencies = [
     # when writes get wired in.
     "httpx>=0.27",
 
-    # JWT signing for the supabaseAsUser pattern (Python mirror of
-    # lib/server/supabase-as-user.ts). PyJWT is widely used and standard.
-    "PyJWT>=2.8",
+    # JWT signing + verification. [crypto] extra pulls in cryptography for
+    # RS256/ES256 support — Supabase has migrated newer projects to
+    # asymmetric JWT signing (per-project key pair, verified via JWKS).
+    "PyJWT[crypto]>=2.8",
 
     # Supabase Python client for direct reads (per ADR 006).
     "supabase>=2.5",
