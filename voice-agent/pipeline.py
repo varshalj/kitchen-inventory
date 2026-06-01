@@ -44,29 +44,142 @@ things up.
 - Reply in whatever language the user spoke — English, Hindi, Marathi, or \
 code-mixed all work.
 
-# Current capabilities (Slice 1 Stages 2 & 2.5)
+# Current capabilities (Slice 1 + Slice 2 Stages 1 & 2)
 You can:
 - Describe what Kitchen Inventory does and explain how to use any feature
-- Call `list_inventory` to read the user's current inventory (optionally \
-filtered by category like 'dairy' or location like 'fridge')
-- Call `get_expiring_soon` to find items expiring within N days (default 3)
-- Call `list_shopping` to read the shopping list (status: pending / completed / all)
-- Call `search_inventory(query)` to look up items by name across current and \
-archived inventory — use for "do I have X?" / "did I ever buy X?"
-- Call `suggest_meals(limit)` to recommend recipes ranked by how well they \
-match what's in the pantry right now
-- Call `get_waste_stats(days)` for waste analytics (default 30 days lookback)
-- Call `list_recipes` for the list of saved recipes (returns ids + titles)
-- Call `get_recipe(recipe_id)` for ingredients + instructions of a specific \
-recipe — typically after list_recipes or suggest_meals returned an id
+- Read data via these tools:
+  - `list_inventory` (optionally filtered by category or location)
+  - `get_expiring_soon` (items expiring within N days, default 3)
+  - `list_shopping` (status: pending / completed / all)
+  - `search_inventory(query)` (fuzzy name match across current + archived)
+  - `suggest_meals(limit)` (recipes ranked by pantry compatibility)
+  - `get_waste_stats(days)` (waste analytics, default 30 days)
+  - `list_recipes` (saved recipes; returns ids for chaining)
+  - `get_recipe(recipe_id)` (full ingredients + instructions)
+- Write data via (all use the strict confirmation flow below):
+  - `add_to_shopping_list` (add items to shopping list)
+  - `mark_as_consumed` (archive an inventory item; auto-restocks to shopping list)
+  - `remove_from_shopping_list` (delete an item from the shopping list)
+  - `update_shopping_item` (change quantity, unit, mark as bought, edit notes)
 
 You CANNOT yet:
-- Add, edit, or delete any items
-- Mark anything as consumed / wasted / rated
-- Modify the shopping list (add/remove/check off)
+- Mark inventory items as wasted or rated
+- Add or edit inventory items directly (only consume / restock)
 
-For write requests, say so plainly: "I can't add or change items yet — try \
-the app directly."
+For requests outside the supported tools, say so plainly: "I can't do that \
+yet — try the app directly."
+
+# Writing data: the strict confirmation pattern (CRITICAL)
+
+ANY write action (currently just `add_to_shopping_list`) MUST follow this \
+sequence:
+
+1. Call the tool with `confirm: false` to get a dry-run preview. NEVER \
+   call with `confirm: true` on your first attempt — the user hasn't \
+   agreed yet.
+2. Narrate the preview to the user in one short sentence. Include the \
+   inferred quantity and unit so they can correct: "I'll add 1 kilo of \
+   atta to your shopping list — confirm?"
+3. WAIT for an explicit affirmative. Counts as affirmative: yes, yeah, \
+   yep, sure, go ahead, do it, okay, haan, ji, ji haan, kar do, bilkul, \
+   theek hai. Does NOT count: maybe, hmm, I'm not sure, ambiguous \
+   silence — in those cases, ask again.
+4. If the user wants different args (different quantity, unit, name \
+   variant), call the tool again with `confirm: false` and the new \
+   args. Re-preview. Get fresh affirmation.
+5. ONLY THEN call the tool with `confirm: true` and the same args to \
+   actually execute. After execution, give a brief acknowledgment: \
+   "Done — added to your list."
+
+If the user says "yes" or similar without a pending preview, ask "what \
+would you like me to do?" Don't guess.
+
+# Defaults when the user doesn't specify quantity or unit
+
+Use these sensible defaults and surface them in the preview so the user \
+can correct:
+
+- quantity: 1 unless specified
+- atta / wheat flour: 1 kg
+- rice / dal / sugar / salt / flour: 1 kg
+- milk: 1 litre
+- eggs: 12 pcs (or "a dozen")
+- bread: 1 loaf
+- fruits (bananas, apples, mangoes, oranges): 1 kg
+- vegetables (tomatoes, onions, potatoes): 1 kg unless they're items \
+  typically counted (lemon, cucumber: 1 pcs)
+- spices / small packets (haldi, garam masala, mustard seeds): 1 packet
+- everything else: 1 pcs
+
+These are starting guesses, not rules. The user's correction in the \
+preview phase is the source of truth.
+
+# Handling unusual item names (transcription-error guard)
+
+If the transcribed item name is not a typical grocery / food / household \
+item — proper nouns ("Mickey", "Sarah"), brand names you don't recognize, \
+very short or unusual words that might be Sarvam STT errors — VERIFY the \
+item name BEFORE generating a preview. Sarvam can mis-transcribe phrases \
+like "make it" as "Mickey", and confidently adding nonsense to the user's \
+shopping list is the worst failure mode.
+
+Example:
+- User (transcribed): "add Mickey to my list"
+- You: "I heard 'Mickey' — that doesn't sound like a typical grocery item. \
+  Did you mean something else, or do you actually want Mickey added?"
+- Wait for confirmation before previewing.
+
+# Tracking corrections across turns
+
+When the user says "no", "actually", "I meant", they're correcting your \
+last preview. Maintain the context of the MOST RECENT pending preview \
+and interpret the correction as a modification to it.
+
+Example:
+- You: "I'll add 1 dozen eggs to your list — confirm?"
+- User: "No, make that 2 instead of a dozen"
+- You (correctly): "I'll add 2 pcs of eggs to your list — confirm?" \
+  (still about eggs)
+
+If the correction is ambiguous about which item it refers to (multiple \
+recent items in play, or "no" without a clear target), ask plainly: \
+"You want to change the eggs preview, or add something new?" Don't guess.
+
+# Multi-item ambiguity
+
+If the user references multiple items in one turn ambiguously ("add \
+those", "put them on the list", "do both"), do NOT assume a combination. \
+Ask: "Just to confirm — are you asking me to add both X and Y, or just \
+one of them?" Better to confirm than over-deliver.
+
+# Disambiguation for inventory items (mark_as_consumed)
+
+`mark_as_consumed` operates on the user's real inventory. If they have \
+multiple items with similar names (e.g. two yogurts, two milks), MCP will \
+return isError="ambiguous" with a `candidates` list. Each candidate has \
+distinguishing info — id, name, brand, quantity, unit, expiry_date, \
+location.
+
+When you receive an ambiguous error:
+
+1. DO NOT call mark_as_consumed again with the same args — you'll get the \
+   same error.
+2. Narrate the candidates to the user with their distinguishing features. \
+   Pick the 1-2 most distinguishing fields per candidate (brand + expiry, \
+   or location + quantity — whatever differentiates them best). Don't \
+   read out every field.
+   Example: "I found two yogurts — one Amul from May 28, and one Greek \
+   from yesterday. Which one?"
+3. Take the user's verbal pick ("the older one", "the Amul one", \
+   "yesterday's").
+4. Map it back to one of the candidate ids you just received.
+5. Call mark_as_consumed AGAIN with `item_id` set to the chosen candidate's \
+   id (NOT item_name), and `confirm=false`. The id-based lookup bypasses \
+   the ambiguity check.
+6. Continue with the normal preview → user confirmation → confirm=true flow.
+
+If the user's pick is itself ambiguous ("the smaller one" but quantities \
+are equal), ask for more detail rather than guessing.
 
 # Using tools well
 - Prefer calling a tool over guessing. If the user asks "what's expiring?", \
@@ -328,6 +441,7 @@ async def _run_voice_pipeline(
     from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
     # Local tool implementations + logger — sibling modules in the Modal image.
     from tools import reads as tool_reads
+    from tools import mcp_writes as tool_writes
     import logger as voice_logger
     import time
     import uuid
@@ -528,6 +642,154 @@ async def _run_voice_pipeline(
         required=["recipe_id"],
     )
 
+    # ── Write tools (per ADR 009) ──
+    # All writes route through the MCP server. The MCP server enforces
+    # dry-run-by-default: call with confirm=false to get a preview, then
+    # call again with confirm=true to execute. The system prompt explains
+    # the user-facing flow.
+    # All write tools share the strict-confirmation rule documented at length
+    # in the system prompt. Per-tool descriptions repeat the key bullet so
+    # the LLM sees it inline with the schema.
+    _CONFIRM_PROPERTY = {
+        "type": "boolean",
+        "description": (
+            "MUST be false on the first call (to get a preview). Only set to "
+            "true after the user has verbally agreed to the previewed action."
+        ),
+    }
+
+    add_to_shopping_list_schema = FunctionSchema(
+        name="add_to_shopping_list",
+        description=(
+            "Add an item to the user's shopping list. STRICT CONFIRMATION: "
+            "first call MUST be confirm=false (preview); only call confirm=true "
+            "after explicit user affirmation."
+        ),
+        properties={
+            "item_name": {
+                "type": "string",
+                "description": "Item name (e.g. 'eggs', 'atta', 'paneer').",
+            },
+            "quantity": {
+                "type": "number",
+                "description": (
+                    "Quantity. If user didn't say, infer (a dozen for eggs, "
+                    "1 kg for staples, etc.)."
+                ),
+            },
+            "unit": {
+                "type": "string",
+                "description": (
+                    "Unit. Infer sensible default from item: atta/rice/dal/"
+                    "sugar/flour/fruits/vegetables → 'kg'; milk → 'litre'; "
+                    "eggs → 'pcs' or 'dozen'; bread → 'loaf'; spices → 'packet'."
+                ),
+            },
+            "confirm": _CONFIRM_PROPERTY,
+        },
+        required=["item_name"],
+    )
+
+    mark_as_consumed_schema = FunctionSchema(
+        name="mark_as_consumed",
+        description=(
+            "Archive an inventory item as consumed (and auto-restock to shopping "
+            "list). Use for 'I finished the X' / 'we used up the Y'. STRICT "
+            "CONFIRMATION (confirm=false first for preview, then confirm=true). "
+            "If MCP returns isError='ambiguous' with a candidates list, narrate "
+            "the candidates verbally with distinguishing details (brand, expiry, "
+            "location), take the user's pick, then retry with the chosen "
+            "candidate's id via the item_id arg (NOT item_name) plus confirm=false."
+        ),
+        properties={
+            "item_name": {
+                "type": "string",
+                "description": (
+                    "Name of the inventory item (normalized match). Use this on "
+                    "the first attempt. If MCP returns 'ambiguous', switch to "
+                    "item_id on the retry."
+                ),
+            },
+            "item_id": {
+                "type": "string",
+                "description": (
+                    "Direct id lookup. Use this AFTER the user disambiguates "
+                    "from a candidates list returned in an earlier ambiguous "
+                    "error. Pass the chosen candidate's id here, omit item_name."
+                ),
+            },
+            "quantity": {
+                "type": "number",
+                "description": (
+                    "How many to add back to the shopping list (defaults to "
+                    "the item's current inventory quantity)."
+                ),
+            },
+            "confirm": _CONFIRM_PROPERTY,
+        },
+        required=[],
+    )
+
+    remove_from_shopping_list_schema = FunctionSchema(
+        name="remove_from_shopping_list",
+        description=(
+            "Delete an item from the shopping list. Use for 'remove X from my "
+            "list' / 'I don't need to buy X anymore'. STRICT CONFIRMATION. "
+            "Prefer item_id (from a prior list_shopping call); falls back to "
+            "name-match if only item_name is given."
+        ),
+        properties={
+            "item_id": {
+                "type": "string",
+                "description": "Exact shopping item id (from list_shopping or a prior add).",
+            },
+            "item_name": {
+                "type": "string",
+                "description": "Item name (normalized match). Used when item_id isn't known.",
+            },
+            "confirm": _CONFIRM_PROPERTY,
+        },
+        required=[],
+    )
+
+    update_shopping_item_schema = FunctionSchema(
+        name="update_shopping_item",
+        description=(
+            "Update fields on an existing shopping list item — quantity, unit, "
+            "completed status, or notes. Use for 'change milk to 2 cartons', "
+            "'mark eggs as bought', 'actually that should be in litres'. STRICT "
+            "CONFIRMATION."
+        ),
+        properties={
+            "item_id": {
+                "type": "string",
+                "description": "Exact shopping item id (preferred).",
+            },
+            "item_name": {
+                "type": "string",
+                "description": "Item name (normalized match). Used when id isn't known.",
+            },
+            "quantity": {
+                "type": "number",
+                "description": "New quantity. >= 0. Pass 0 only as a soft-clear; usually use remove_from_shopping_list for actual deletes.",
+            },
+            "unit": {
+                "type": "string",
+                "description": "New unit.",
+            },
+            "completed": {
+                "type": "boolean",
+                "description": "Set true to mark the item as already bought.",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Free-form notes to replace existing notes.",
+            },
+            "confirm": _CONFIRM_PROPERTY,
+        },
+        required=[],
+    )
+
     tools_schema = ToolsSchema(
         standard_tools=[
             list_inventory_schema,
@@ -538,6 +800,10 @@ async def _run_voice_pipeline(
             get_waste_stats_schema,
             list_recipes_schema,
             get_recipe_schema,
+            add_to_shopping_list_schema,
+            mark_as_consumed_schema,
+            remove_from_shopping_list_schema,
+            update_shopping_item_schema,
         ]
     )
 
@@ -639,6 +905,74 @@ async def _run_voice_pipeline(
         _make_tool_handler(
             "get_recipe",
             lambda a: tool_reads.get_recipe(user_token, recipe_id=a.get("recipe_id", "")),
+        ),
+    )
+
+    # ── Write tool handlers (route through MCP per ADR 006) ──
+    # Same _make_tool_handler wrapper as reads — gets latency + logging for
+    # free. The MCP HTTP call returns a structured result either way (dry-run
+    # preview or execute confirmation), and the LLM gets that as the tool
+    # result to phrase verbally.
+    # Helper: forward args verbatim to MCP, defaulting confirm to false
+    # (server enforces the same default but being explicit keeps intent clear).
+    def _mcp_args(name_or_id_keys, a):
+        """Build the args dict for an MCP write call. Drops None values so MCP
+        doesn't see explicit nulls for missing optional fields."""
+        out = {"confirm": bool(a.get("confirm", False))}
+        for key in name_or_id_keys:
+            v = a.get(key)
+            if v is not None and v != "":
+                out[key] = v
+        return out
+
+    llm.register_function(
+        "add_to_shopping_list",
+        _make_tool_handler(
+            "add_to_shopping_list",
+            lambda a: tool_writes.call_mcp_tool(
+                "add_to_shopping_list",
+                arguments=_mcp_args(("item_name", "quantity", "unit"), a),
+                user_token=user_token,
+            ),
+        ),
+    )
+
+    llm.register_function(
+        "mark_as_consumed",
+        _make_tool_handler(
+            "mark_as_consumed",
+            lambda a: tool_writes.call_mcp_tool(
+                "mark_as_consumed",
+                arguments=_mcp_args(("item_id", "item_name", "quantity"), a),
+                user_token=user_token,
+            ),
+        ),
+    )
+
+    llm.register_function(
+        "remove_from_shopping_list",
+        _make_tool_handler(
+            "remove_from_shopping_list",
+            lambda a: tool_writes.call_mcp_tool(
+                "remove_from_shopping_list",
+                arguments=_mcp_args(("item_id", "item_name"), a),
+                user_token=user_token,
+            ),
+        ),
+    )
+
+    llm.register_function(
+        "update_shopping_item",
+        _make_tool_handler(
+            "update_shopping_item",
+            lambda a: tool_writes.call_mcp_tool(
+                "update_shopping_item",
+                arguments=_mcp_args(
+                    ("item_id", "item_name", "quantity", "unit", "completed", "notes"),
+                    a,
+                ),
+                user_token=user_token,
+            ),
         ),
     )
 

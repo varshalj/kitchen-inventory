@@ -412,45 +412,82 @@ async function handleMarkAsConsumed(
   args: Record<string, unknown>,
   supabase: SupabaseClient,
 ): Promise<ToolResult> {
+  // Either item_id OR item_name is required. item_id is preferred — used
+  // by the voice agent to disambiguate after an earlier "ambiguous" error
+  // returned a candidates list. Bypasses name normalization entirely.
+  const itemId = typeof args.item_id === "string" ? args.item_id.trim() : ""
   const itemName = typeof args.item_name === "string" ? args.item_name.trim() : ""
-  if (!itemName) return errorResult({ error: "invalid_input", message: "item_name is required" })
+  if (!itemId && !itemName) {
+    return errorResult({
+      error: "invalid_input",
+      message: "Either item_id or item_name is required",
+    })
+  }
 
   const requestedQty =
     typeof args.quantity === "number" && args.quantity > 0 ? args.quantity : undefined
   const confirm = args.confirm === true
 
-  const items = await inventoryRepo.list(supabase, false)
-  const target = normalizeName(itemName)
-  const matches = items.filter((i) => normalizeName(i.name) === target)
+  // Resolve to a single inventory item. item_id is direct; item_name uses
+  // normalize-and-match with ambiguity detection.
+  let item: Awaited<ReturnType<typeof inventoryRepo.getById>> = null
+  if (itemId) {
+    item = await inventoryRepo.getById(supabase, itemId)
+    if (!item) {
+      return errorResult({
+        error: "not_found",
+        item_id: itemId,
+        message: `No inventory item with id '${itemId}'. The id may belong to a different user or have been deleted.`,
+      })
+    }
+    if (item.archived) {
+      return errorResult({
+        error: "already_archived",
+        item_id: itemId,
+        item_name: item.name,
+        archive_reason: item.archiveReason,
+        message: `Item '${item.name}' is already archived (reason: ${item.archiveReason}). Nothing to do.`,
+      })
+    }
+  } else {
+    const items = await inventoryRepo.list(supabase, false)
+    const target = normalizeName(itemName)
+    const matches = items.filter((i) => normalizeName(i.name) === target)
 
-  if (matches.length === 0) {
-    return errorResult({
-      error: "not_found",
-      item_name: itemName,
-      normalized: target,
-      message: `No active inventory item matches '${itemName}' (normalized: '${target}'). Suggest checking spelling, or call add_to_shopping_list if the user wants to restock it anyway.`,
-    })
+    if (matches.length === 0) {
+      return errorResult({
+        error: "not_found",
+        item_name: itemName,
+        normalized: target,
+        message: `No active inventory item matches '${itemName}' (normalized: '${target}'). Suggest checking spelling, or call add_to_shopping_list if the user wants to restock it anyway.`,
+      })
+    }
+
+    if (matches.length > 1) {
+      return errorResult({
+        error: "ambiguous",
+        item_name: itemName,
+        normalized: target,
+        message: `${matches.length} active inventory items match '${itemName}'. Ask the user which one to mark consumed and pass its id via item_id on the next call. Each candidate below has an 'id' field for that purpose.`,
+        candidates: matches.map((m) => ({
+          id: m.id,
+          name: m.name,
+          brand: m.brand,
+          quantity: m.quantity,
+          unit: m.unit,
+          expiry_date: m.expiryDate,
+          location: m.location,
+        })),
+      })
+    }
+
+    item = matches[0]
   }
 
-  if (matches.length > 1) {
-    return errorResult({
-      error: "ambiguous",
-      item_name: itemName,
-      normalized: target,
-      message: `${matches.length} active inventory items match '${itemName}' (normalized: '${target}'). Ask the user which one to mark consumed and pass its id via item_id (not yet supported — for now disambiguate by passing the exact stored name).`,
-      candidates: matches.map((m) => ({
-        id: m.id,
-        name: m.name,
-        brand: m.brand,
-        quantity: m.quantity,
-        unit: m.unit,
-        expiry_date: m.expiryDate,
-        location: m.location,
-      })),
-    })
+  // item is now non-null and unambiguous past this point.
+  if (!item) {
+    return errorResult({ error: "internal_error", message: "item resolution failed unexpectedly" })
   }
-
-  const item = matches[0]
   const restockQuantity =
     requestedQty ?? (item.quantity && item.quantity > 0 ? item.quantity : 1)
 

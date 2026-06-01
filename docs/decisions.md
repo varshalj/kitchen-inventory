@@ -368,9 +368,52 @@ When audio capture is added, requirements include:
 
 ---
 
+## ADR 009 — Voice writes: confirmation pattern + LLM disambiguation
+
+**Date:** 2026-06-01
+**Status:** Accepted
+
+### Context
+
+Slice 2 adds write capabilities to the voice agent. Per ADR 006, voice writes route through the existing MCP server (vs. directly to Supabase) to reuse the dry-run / ambiguity / normalization safety patterns already implemented there. This ADR locks the voice-specific UX patterns layered on top of those safety mechanisms.
+
+The dangerous failure mode (documented from earlier exploration where a chat agent confidently executed adds without explicit user consent): the agent confuses "user mentioned X" with "user wants me to do X" and mutates real data. Recovery requires the user to manually correct via the UI.
+
+### Decision
+
+**Confirmation: strict two-call pattern, server-enforced.**
+Every voice write tool exposes a `confirm: bool` argument. The LLM is instructed to call with `confirm=false` first to get a dry-run preview, narrate it verbally, wait for explicit user affirmation, then call again with `confirm=true` to execute. Server-side, the MCP write tools enforce this — `confirm=false` always returns a preview without mutating; only `confirm=true` triggers the write. Even if the LLM tries to shortcut, the server refuses.
+
+**Defaults: LLM infers quantity + unit, surfaces in preview.**
+When the user doesn't specify quantity or unit, the LLM picks sensible defaults from the item name (atta → 1 kg, eggs → 12 pcs / a dozen, milk → 1 litre, bread → 1 loaf, fruits → 1 kg, etc.). The inferred values are included in the dry-run preview so the user can correct ("make that 5 kilos") during confirmation. Avoids the round-trip cost of asking "what unit?" before doing anything.
+
+**Ambiguity: LLM disambiguates verbally via candidates list.**
+When `mark_as_consumed` (and similar) finds multiple matches, MCP returns an `ambiguous` error with a candidates list (id, name, brand, expiry, location). The LLM narrates the candidates verbally with distinguishing features, takes the user's natural-language pick ("the older one", "the one in the fridge"), maps it back to a specific `item_id`, and retries.
+Requires MCP server-side extension: ambiguity-prone tools accept `item_id` as an alternative to `item_name`. Done in Stage 2; Stage 1 only ships `add_to_shopping_list` which doesn't have this problem (it uses normalize-aware merging, not refuse-on-ambiguity).
+
+**Tool shape: one tool per action, `confirm` exposed to LLM.**
+Alternative considered: separate preview + commit tool pairs (e.g. `preview_add_shopping_item` and `commit_add_shopping_item`). Rejected — twice the schema surface for the LLM, hard to maintain state-coherent calls across paired invocations. The `confirm` arg approach is simpler; server-side enforcement is the actual safety mechanism.
+
+**Multilingual confirmations: trust the LLM.**
+GPT-4o-mini natively understands "haan", "ji", "ji haan", "kar do", "bilkul", "okay", "yes", "yeah", "sure", "go ahead", "do it" as affirmative across English / Hindi / Marathi / Hinglish — no explicit prompt rules needed. The dry-run server-side enforcement is the safety net if the LLM misreads an ambiguous response.
+
+### Alternatives considered
+
+- **LLM-judged confirms (single call with `confirm=true` based on LLM's read of consent):** rejected. The "suggest vs execute" failure mode is documented from earlier exploration; server-side enforcement is non-negotiable.
+- **Auto-pick on ambiguity (always pick oldest / newest):** rejected as the default — too easy for the agent to mark the wrong yogurt as consumed. Verbal disambiguation is slower but correct. Could revisit as an optional heuristic mode later for low-stakes flows.
+- **Asking "what unit?" upfront before any preview:** rejected — adds a turn for no real benefit when the LLM can infer reasonable defaults and surface them in the preview for verbal correction.
+
+### Revisit when
+
+- Real usage shows strict confirmation feels too sluggish for trivial adds ("add eggs" → preview → confirm → execute = ~5-7s end-to-end) → consider a per-tool "low-risk" flag that lets adds skip the preview while keeping consumes / deletes / edits strict
+- LLM disambiguation accuracy is poor — agent picks the wrong candidate too often → add fuzzy-match scoring or stronger prompt-side guidance
+- Write tool count grows past ~15 → consider auto-generating voice tool registrations from the feature catalog instead of hand-wiring each
+
+---
+
 ## How to add a new decision
 
-1. Increment the ADR number (next one is ADR 009).
+1. Increment the ADR number (next one is ADR 010).
 2. Use the template above: Date, Status, Context, Decision, Rationale, Alternatives, Revisit triggers.
 3. Don't edit historical entries to "fix" the rationale in hindsight. Add a new ADR that supersedes the old one — keeps the reasoning history honest.
 4. Update the entry's Status if it's later superseded: `Status: Superseded by ADR 0XX`.

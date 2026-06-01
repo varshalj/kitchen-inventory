@@ -180,12 +180,15 @@ const TOOL_DEFINITIONS = [
     name: "mark_as_consumed",
     title: "Mark As Consumed",
     description:
-      "Archive an active inventory item as consumed (full archive — no partial decrement in v1) and add it back to the shopping list. Names are matched with case- and plural-insensitive normalization. 0 active matches → isError 'not_found'; 2+ active matches → isError 'ambiguous' with candidates so the agent can ask the user. SAFETY: defaults to dry-run (confirm:false) — first call returns a preview; repeat with confirm:true to execute.",
+      "Archive an active inventory item as consumed (full archive — no partial decrement in v1) and add it back to the shopping list. Accepts item_id (direct id lookup, used after disambiguation) OR item_name (normalized match). 0 active name matches → isError 'not_found'; 2+ active name matches → isError 'ambiguous' with a candidates list (each has an id); the caller should ask the user which one and retry with that id via the item_id arg. SAFETY: defaults to dry-run (confirm:false) — first call returns a preview; repeat with confirm:true to execute.",
     inputSchema: {
       type: "object",
-      required: ["item_name"],
       properties: {
-        item_name: { type: "string", description: "Name of the inventory item to mark consumed (normalized match)" },
+        item_id: {
+          type: "string",
+          description: "Direct lookup by inventory item id (UUID). Preferred when resolving an earlier ambiguous response — use one of the candidate ids returned in that error.",
+        },
+        item_name: { type: "string", description: "Name of the inventory item to mark consumed (normalized match). Use when you don't have an id." },
         quantity: {
           type: "number",
           description: "Quantity to put on the shopping list (defaults to the item's current inventory quantity)",
