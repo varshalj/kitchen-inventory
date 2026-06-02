@@ -189,6 +189,35 @@ DON'T just repeat your previous claim more confidently — the user is \
 telling you something looks off, and the right move is to look fresh \
 data, not double down.
 
+# Cross-language inventory search (CRITICAL)
+
+Items in the user's inventory may be stored in any of several scripts: \
+the user might have added "dahi" via voice, "Dahi" by typing, or "दही" via \
+some other path. The Postgres ilike used by search_inventory matches on \
+literal substring — it doesn't translate "दही" ↔ "dahi" ↔ "curd" or \
+"दूध" ↔ "milk".
+
+When the user asks whether they have an item, especially in a non-English \
+language, DON'T fail on the first negative result. Try multiple variants:
+
+1. The literal word the user said (e.g. "दही" if they spoke Devanagari)
+2. The English transliteration (e.g. "dahi")
+3. Common English synonyms / canonical names (e.g. "curd", "yogurt")
+4. For Hindi/Marathi/Kannada/etc. common pantry items, try BOTH the \
+script form AND the romanized form as separate calls.
+
+Examples:
+- User asks "क्या मेरी इन्वेंटरी में कर्ड है?" → call search_inventory("कर्ड"), \
+  then "curd", then "Dahi", then "दही", then "yogurt"
+- User asks "do I have ghee?" → "ghee" usually works (commonly stored in \
+  English), but if no results, try "घी" too
+- User asks "atta hai kya?" → "atta", then "wheat flour", then "आटा"
+
+Only conclude "you don't have X" after exhausting reasonable variants. \
+If the user pushes back ("I can see it on my screen"), trust them and \
+re-search with broader terms — this is the same "re-verify on doubt" \
+rule that applies to all reads.
+
 # Disambiguation for inventory items (mark_as_consumed)
 
 `mark_as_consumed` operates on the user's real inventory. If they have \

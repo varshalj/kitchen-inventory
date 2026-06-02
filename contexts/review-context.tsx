@@ -48,6 +48,12 @@ interface ReviewContextValue {
    * action that would have queued the review (e.g., undo-consume toast).
    */
   cancelPending: (itemId: string) => void
+  /**
+   * True when the rating chip is currently visible (there's a queued item
+   * and the "Share more feedback" sheet isn't covering it). Consumed by
+   * other bottom-positioned UIs (like the voice mic strip) to yield.
+   */
+  chipVisible: boolean
 }
 
 const ReviewContext = createContext<ReviewContextValue | null>(null)
@@ -182,7 +188,16 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ReviewContext.Provider value={{ queueForReview, cancelPending }}>
+    <ReviewContext.Provider
+      value={{
+        queueForReview,
+        cancelPending,
+        // Chip is visible iff there's an item to surface AND the "share
+        // more feedback" sheet isn't covering it (the chip is set to
+        // item={null} while the sheet is open).
+        chipVisible: reviewItem !== null && !reviewSheetOpen,
+      }}
+    >
       {children}
 
       {/* Chip — visible on every route. Hidden while the sheet is open. */}

@@ -235,6 +235,24 @@ Don't iterate prompts in isolation from real conversations — it leads to over-
 
 - **Smart pause/resume on overlay (Policy D).** Stage 1 ships Policy A: voice session auto-disconnects when any sheet/dialog opens (clean intent, predictable, cheap). The dream UX is Policy D: pause mic + TTS, keep the session technically alive, resume on overlay close — voice as a continuous companion rather than an on/off switch. Requires verifying Pipecat JS client's mute/pause API supports this cleanly, designing a "minimized voice indicator" affordance that doesn't conflict with bottom sheets, and handling edge cases (sheet opens mid-tool-call, mid-confirmation, etc.). Estimated 1-2 days. Pick up when real usage shows the auto-disconnect feels too aggressive — particularly the "agent just gave a preview, I tapped to peek at something, now I have to start over" scenario.
 
+## Backlog: data canonicalization for cross-language storage
+
+Voice writes currently store items in whatever script/language the user spoke. Saying "add dahi" in Hindi → item stored as "dahi". Saying "add दही" in Devanagari → item stored as "दही". Saying "add curd" in English → item stored as "curd". All three are semantically the same dairy product but they're three different rows in the shopping list and inventory.
+
+This causes downstream mismatches:
+- Search calls don't cross-script-match (`ilike '%dahi%'` misses "दही")
+- Merge-on-add (the MCP server's add_to_shopping_list normalize-aware merge) won't combine "dahi" + "दही" into one row
+- The voice agent's "do I have curd?" type questions fail when the item is stored under a different lexical form
+
+Stage 1 mitigation: system prompt now instructs the LLM to try multiple variants (script + English + synonyms) before concluding "you don't have X". That's a workaround, not a fix.
+
+Real fix candidates:
+- **Canonicalize on write.** Maintain a small grocery-name lookup table mapping common variants to a canonical form ("dahi", "दही", "curd" → canonical "curd"; "atta", "आटा", "wheat flour" → canonical "wheat flour"). On add, look up canonical; store both the user's original term (for display) and the canonical (for matching).
+- **Semantic embedding search.** Replace the ilike-based search with vector similarity (Supabase has pgvector). Slow to build, doesn't help merge-on-write.
+- **LLM-assisted normalization.** Before storing, send the name through GPT-4o-mini with a one-shot prompt: "what's the canonical English name for this grocery item?" Higher cost per write, more flexible than a hardcoded table.
+
+Pick up when: the user has 5+ duplicate items in shopping list / inventory due to script variants, OR cross-language searches fail despite the prompt-level variant retries. The household will hit this with everyday items (dahi, atta, ghee, paneer, sabzi) faster than imagined.
+
 ## Backlog: prompt iterations deferred from Slice 2 testing
 
 Things observed in voice testing that aren't shipped yet. Will batch with the next round of session observations.

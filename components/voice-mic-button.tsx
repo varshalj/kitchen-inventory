@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from "react"
+import { usePathname } from "next/navigation"
 import {
   Mic,
   Loader2,
@@ -26,19 +27,70 @@ import {
   X,
   AlertCircle,
 } from "lucide-react"
-import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 import {
   useVoiceSession,
   type VoiceStatus,
   type VoiceTurn,
 } from "@/hooks/use-voice-session"
 import { useOverlayActive } from "@/hooks/use-overlay-active"
+import { useReview } from "@/contexts/review-context"
+
+// Paths where the mic button should NOT appear. These are non-main pages
+// (auth, marketing, focused-task page routes that aren't modals). Avoids
+// the situation where voice tries to interact with a focused setup flow.
+const HIDDEN_PATHS = new Set([
+  "/add-item",
+  "/auth",
+  "/authorize",
+  "/landing-preview",
+  "/privacy",
+  "/terms",
+])
+
+// Pre-warm Pipecat SDK chunks during browser idle time so the first
+// connect tap doesn't pay the entire dynamic-import cost. Falls back to
+// a deferred setTimeout when requestIdleCallback isn't available
+// (Safari < 17, etc.). Safe to call multiple times — browsers dedupe
+// fetches for the same dynamic import.
+let _pipecatPreloadStarted = false
+function preloadPipecatSdk() {
+  if (_pipecatPreloadStarted) return
+  _pipecatPreloadStarted = true
+  const start = () => {
+    Promise.all([
+      import("@pipecat-ai/client-js"),
+      import("@pipecat-ai/websocket-transport"),
+    ]).catch(() => {
+      // Network hiccup — let the real connect retry surface the error.
+      _pipecatPreloadStarted = false
+    })
+  }
+  if (typeof window === "undefined") return
+  const w = window as Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void
+  }
+  if (typeof w.requestIdleCallback === "function") {
+    w.requestIdleCallback(start, { timeout: 4000 })
+  } else {
+    setTimeout(start, 1200)
+  }
+}
 
 export function VoiceMicButton() {
   const { status, transcript, error, connect, disconnect } = useVoiceSession()
   const [expanded, setExpanded] = useState(false)
   const overlayActive = useOverlayActive()
+  const { chipVisible } = useReview()
+  const pathname = usePathname()
+  const { toast } = useToast()
+
+  // Pre-warm the Pipecat SDK chunks on mount so the first connect tap
+  // doesn't pay the full dynamic-import latency (~500ms-1s on cold cache).
+  useEffect(() => {
+    preloadPipecatSdk()
+  }, [])
 
   // Auto-collapse the transcript whenever the session ends so re-connecting
   // starts in the clean compact state.
@@ -57,16 +109,19 @@ export function VoiceMicButton() {
   useEffect(() => {
     if (overlayActive && isSessionAlive) {
       disconnect()
-      toast.info("Voice paused", {
+      toast({
+        title: "Voice paused",
         description: "Resume by tapping the mic after you close this.",
       })
     }
-  }, [overlayActive, isSessionAlive, disconnect])
+  }, [overlayActive, isSessionAlive, disconnect, toast])
 
-  // Hide the entire widget while any overlay is open. The auto-disconnect
-  // above guarantees the session is terminated; the visual hide ensures
-  // the strip doesn't try to render over a sheet (it'd be obscured anyway).
+  // Hide on non-main pages (auth flow, /add-item, marketing pages, etc.)
+  // and whenever an overlay or the review chip is visible. Each of these
+  // is a "focused task" surface that voice should yield to.
+  if (pathname && HIDDEN_PATHS.has(pathname)) return null
   if (overlayActive) return null
+  if (chipVisible) return null
 
   // Idle: just the floating mic button.
   if (status === "idle") {
