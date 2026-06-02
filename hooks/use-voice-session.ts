@@ -33,10 +33,17 @@ function voiceAgentUrl(): string {
 
 export type VoiceStatus =
   | "idle" // not connected, button shown
-  | "connecting" // calling connect(), Pipecat handshaking
-  | "connected" // session live, agent listening
+  | "connecting" // calling connect(), Pipecat handshaking, OR mid-greeting
+  | "connected" // session live, agent listening for user input
   | "speaking" // agent is talking back
   | "error" // failed; button shows retry affordance
+
+// Note on `connecting`: this status now covers BOTH the actual WebSocket /
+// Pipecat handshake AND the post-handshake window before the agent
+// finishes its session-start greeting. Until the greeting completes, the
+// agent isn't really listening to the user — labeling that window as
+// "connected"/"listening" was misleading. We flip to "connected" only
+// after the first onBotStoppedSpeaking fires.
 
 export interface VoiceTurn {
   id: string
@@ -69,6 +76,10 @@ export function useVoiceSession(): UseVoiceSessionReturn {
   // Track mount status so we can suppress state updates after unmount
   // (Pipecat callbacks can fire during teardown).
   const mountedRef = useRef(true)
+  // Tracks whether the session's start-up greeting has finished. Used to
+  // hold the status at "connecting" through the greeting so we don't
+  // briefly flash "Listening" before the agent has stopped speaking.
+  const greetingDoneRef = useRef(false)
 
   const safeSetStatus = useCallback((next: VoiceStatus) => {
     if (mountedRef.current) setStatus(next)
@@ -98,6 +109,7 @@ export function useVoiceSession(): UseVoiceSessionReturn {
     safeSetStatus("connecting")
     setError(null)
     setTranscript([])
+    greetingDoneRef.current = false
 
     try {
       // 1. Get user JWT from existing Supabase session — no manual paste.
@@ -139,13 +151,17 @@ export function useVoiceSession(): UseVoiceSessionReturn {
         enableCam: false,
         callbacks: {
           onConnected: () => {
-            safeSetStatus("connected")
+            // Stay at "connecting" — the agent is about to start its
+            // greeting, not yet listening. We'll flip to "connected"
+            // only after the first onBotStoppedSpeaking fires (greeting
+            // finished, now actually listening for user input).
           },
           onDisconnected: () => {
             if (mountedRef.current) {
               setStatus("idle")
             }
             clientRef.current = null
+            greetingDoneRef.current = false
           },
           onError: (err: unknown) => {
             if (!mountedRef.current) return
@@ -174,6 +190,10 @@ export function useVoiceSession(): UseVoiceSessionReturn {
             safeSetStatus("speaking")
           },
           onBotStoppedSpeaking: () => {
+            // First time: greeting just finished — now we're truly listening.
+            // Subsequent times: agent finished a reply, back to listening.
+            // Either way, "connected" = "ready for user input" now.
+            greetingDoneRef.current = true
             safeSetStatus("connected")
           },
         },
