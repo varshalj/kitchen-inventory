@@ -50,6 +50,14 @@ export function decryptApiKey(blob: EncryptedBlob): string {
 }
 
 export function createMaskedFingerprint(apiKey: string): { maskedKey: string; fingerprint: string } {
+  // SHA-256 is intentional here. CodeQL's js/insufficient-password-hash flags
+  // this because the input is named `apiKey`, but this is NOT password hashing:
+  //   - The fingerprint is sliced to 12 hex chars and used purely as a display
+  //     identifier so users can tell their keys apart in the UI (no auth).
+  //   - Actual key storage uses AES-256-GCM (see encryptApiKey above).
+  //   - Pre-image attack on a 12-char prefix of sha256(provider-API-key) is
+  //     computationally infeasible.
+  // Switching to bcrypt/argon2/scrypt would not improve security for this use.
   const fingerprint = createHash("sha256").update(apiKey).digest("hex")
   const prefix = apiKey.slice(0, 4)
   const suffix = apiKey.slice(-4)

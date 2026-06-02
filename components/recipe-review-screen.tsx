@@ -570,6 +570,11 @@ export function RecipeReviewScreen({
             className="text-base md:text-sm"
           />
           {editableSourceUrl && (() => {
+            // CodeQL flags this as js/xss-through-dom because editableSourceUrl
+            // is user-controlled and flows into href. The protocol allowlist
+            // below (http: / https: only) blocks the actual XSS vectors
+            // (javascript:, data:, vbscript:); invalid URLs throw in `new URL()`
+            // and are caught. Safe to keep as-is.
             try {
               const urlObj = new URL(editableSourceUrl)
               if (!["http:", "https:"].includes(urlObj.protocol)) return null

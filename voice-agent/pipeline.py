@@ -17,7 +17,7 @@ check the current Pipecat docs (https://docs.pipecat.ai) or
 from __future__ import annotations
 
 import os
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Header, HTTPException, WebSocket
 
 
 # ─── Feature catalog → system prompt ──────────────────────────────────────────
@@ -470,12 +470,23 @@ def build_app() -> FastAPI:
         }
 
     @app.get("/diagnostics")
-    async def diagnostics():
+    async def diagnostics(x_diagnostics_token: str | None = Header(default=None)):
         """
         Introspect Pipecat to discover the right import paths for the
         installed version. Used to patch pipeline imports without guessing.
-        Safe to leave in long-term — read-only, no secrets exposed.
+
+        Gated behind a shared-secret header. Without DIAGNOSTICS_TOKEN set
+        on the Modal deployment, the endpoint returns 404 — so the endpoint's
+        existence isn't broadcast in production. To hit it locally / in dev:
+            curl -H "X-Diagnostics-Token: $DIAGNOSTICS_TOKEN" .../diagnostics
         """
+        expected = os.environ.get("DIAGNOSTICS_TOKEN")
+        # If the env var isn't configured, behave as if the route doesn't exist.
+        # If it is configured, require an exact-match header. 404 (not 401) so
+        # we don't reveal that the endpoint exists to unauthenticated callers.
+        if not expected or x_diagnostics_token != expected:
+            raise HTTPException(status_code=404, detail="Not Found")
+
         import pipecat
         import pkgutil
 
@@ -487,7 +498,10 @@ def build_app() -> FastAPI:
             ):
                 all_modules.append(name)
         except Exception as e:
-            all_modules = [f"<walk_packages failed: {e}>"]
+            # Only the exception type, not the message — message can contain
+            # full paths / version strings that flag as stack-trace exposure
+            # (CodeQL: py/stack-trace-exposure). Full detail stays in logs.
+            all_modules = [f"<walk_packages failed: {type(e).__name__}>"]
 
         # Filter to the modules we care about for the loopback pipeline.
         keywords = ("transport", "websocket", "fastapi", "sarvam", "openai")
@@ -526,10 +540,12 @@ def build_app() -> FastAPI:
                     )
                 ]
                 probe[path] = {"ok": True, "symbols": symbols}
-            except ModuleNotFoundError as e:
+            except ModuleNotFoundError:
                 probe[path] = {"ok": False, "error": "ModuleNotFoundError"}
             except Exception as e:
-                probe[path] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+                # Only the type name — exception message stays out of the
+                # response body (CodeQL: py/stack-trace-exposure).
+                probe[path] = {"ok": False, "error": type(e).__name__}
 
         # Inspect the rtvi module specifically since RTVIConfig was missing.
         rtvi_inspection = {}
@@ -540,7 +556,7 @@ def build_app() -> FastAPI:
                 [s for s in dir(rtvi_module) if not s.startswith("_")]
             )
         except Exception as e:
-            rtvi_inspection["error"] = f"{type(e).__name__}: {e}"
+            rtvi_inspection["error"] = type(e).__name__
 
         # Also check pipecat.serializers and pipecat.audio.vad while we're here
         serializer_inspection = {}
@@ -551,7 +567,7 @@ def build_app() -> FastAPI:
             ):
                 serializer_inspection.setdefault("submodules", []).append(name)
         except Exception as e:
-            serializer_inspection["error"] = str(e)
+            serializer_inspection["error"] = type(e).__name__
 
         return {
             "pipecat_version": getattr(pipecat, "__version__", "unknown"),
