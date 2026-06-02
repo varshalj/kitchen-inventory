@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { BarChart2, DollarSign, PieChart, TrendingDown, AlertTriangle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -25,6 +26,27 @@ export function WasteAnalytics() {
   const [timeFrame, setTimeFrame] = useState<TimeFrame>("month")
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Sync timeFrame from URL `?timeframe=` (week/month/quarter/year) so the
+  // voice agent's apply_filter("timeframe", ...) tool can drive this UI.
+  // UI Select changes still update state directly; no URL write-back to
+  // keep scope minimal. Invalid URL values fall through and stay on the
+  // current state (last-known-good).
+  const _searchParams = useSearchParams()
+  useEffect(() => {
+    const urlTimeFrame = _searchParams?.get("timeframe")
+    if (
+      urlTimeFrame === "week" ||
+      urlTimeFrame === "month" ||
+      urlTimeFrame === "quarter" ||
+      urlTimeFrame === "year"
+    ) {
+      setTimeFrame(urlTimeFrame)
+    } else if (urlTimeFrame === null) {
+      // clear_filters → no param → reset to default
+      setTimeFrame("month")
+    }
+  }, [_searchParams])
 
   useEffect(() => {
     const load = async () => {

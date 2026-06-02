@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Archive, ShoppingCart, Trash, ArrowLeft, ChevronDown, Star, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +18,24 @@ export function ArchivedItems() {
   const [activeTab, setActiveTab] = useState("all")
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
+
+  // Sync activeTab from URL `?tab=` (all/consumed/wasted/other) so the
+  // voice agent's apply_filter("tab", ...) tool can drive this UI. Same
+  // one-way URL→state pattern used in /dashboard and /analytics.
+  const _searchParams = useSearchParams()
+  useEffect(() => {
+    const urlTab = _searchParams?.get("tab")
+    if (
+      urlTab === "all" ||
+      urlTab === "consumed" ||
+      urlTab === "wasted" ||
+      urlTab === "other"
+    ) {
+      setActiveTab(urlTab)
+    } else if (urlTab === null) {
+      setActiveTab("all")
+    }
+  }, [_searchParams])
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => {

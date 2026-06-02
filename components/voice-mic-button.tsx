@@ -41,7 +41,15 @@ import { useReview } from "@/contexts/review-context"
 // Paths where the mic button should NOT appear. These are non-main pages
 // (auth, marketing, focused-task page routes that aren't modals). Avoids
 // the situation where voice tries to interact with a focused setup flow.
+//
+// Doubles as a nav blocklist used by handleServerMessage below — if the
+// voice agent ever emits navigate_to with one of these paths, we drop it.
+// `/` belongs here for the nav case (the landing page bounces signed-in
+// users awkwardly through /auth → /dashboard); on the auth-less landing
+// the mic doesn't render anyway via VoiceMicGated, so adding `/` doesn't
+// affect the hide-on-page behavior.
 const HIDDEN_PATHS = new Set([
+  "/",
   "/add-item",
   "/auth",
   "/authorize",
@@ -120,9 +128,38 @@ export function VoiceMicButton() {
           description: data.description,
           variant: data.kind === "error" ? "destructive" : undefined,
         })
+      } else if (msg.type === "apply_filter") {
+        // Slice 3 Stage 4: agent set one URL search-param on the
+        // current page (e.g. ?filter=expiring-soon). Read current path
+        // + query string FRESH from window.location rather than the
+        // closure-captured `pathname` / `searchParams`. This reduces
+        // the race window when the agent chains navigate_to + apply_filter
+        // back-to-back — the closure's pathname may not have caught up
+        // to the in-flight router.push, but window.location.pathname is
+        // closer to the truth in most cases. Fall back to closure
+        // pathname for SSR safety only.
+        const data = (msg.data ?? {}) as { name?: unknown; value?: unknown }
+        const name = typeof data.name === "string" ? data.name.trim() : ""
+        const value = typeof data.value === "string" ? data.value.trim() : ""
+        if (!name || !value) return
+        const currentPath =
+          typeof window !== "undefined" ? window.location.pathname : pathname
+        const params = new URLSearchParams(
+          typeof window !== "undefined" ? window.location.search : "",
+        )
+        params.set(name, value)
+        const qs = params.toString()
+        router.push(qs ? `${currentPath}?${qs}` : currentPath)
+      } else if (msg.type === "clear_filters") {
+        // Strip all URL search-params on the current page. Page reverts
+        // to its default filters / sort. If the page used no search
+        // params anyway, this is a cheap no-op.
+        const currentPath =
+          typeof window !== "undefined" ? window.location.pathname : pathname
+        router.push(currentPath)
       }
       // Unknown message types are ignored — forward-compatible for
-      // future Stage 4 (apply_filter / clear_filters).
+      // future stages.
     },
     [router, toast, pathname],
   )

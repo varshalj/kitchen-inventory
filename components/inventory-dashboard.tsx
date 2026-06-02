@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Search, Filter, Check, Trash2, Edit, AlertCircle, ShoppingCart, Trash, Sparkles, Clock, ChefHat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -176,6 +176,23 @@ export function InventoryDashboard() {
   const [activeFilter, setActiveFilter] = useState("all")
   const [editItem, setEditItem] = useState<InventoryItem | null>(null)
   const [sortBy, setSortBy] = useState("expiryDate")
+
+  // Sync filter + sort state from URL search params (one-way: URL → state).
+  // Lets the voice agent's apply_filter / clear_filters tools drive the UI
+  // by router.push'ing new query strings. UI-tap toggles still call
+  // setActiveFilter / setSortBy directly (no URL write-back) — slight
+  // asymmetry but minimal scope, and keeps voice control working without
+  // refactoring every filter pill click handler. When URL has no param,
+  // we reset to the defaults ("all" / "expiryDate") so clear_filters works.
+  const _searchParams = useSearchParams()
+  useEffect(() => {
+    const urlFilter = _searchParams?.get("filter") ?? "all"
+    setActiveFilter(urlFilter)
+  }, [_searchParams])
+  useEffect(() => {
+    const urlSort = _searchParams?.get("sort") ?? "expiryDate"
+    setSortBy(urlSort)
+  }, [_searchParams])
   const [showMealPlanModal, setShowMealPlanModal] = useState(false)
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)

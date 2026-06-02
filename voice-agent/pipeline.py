@@ -69,7 +69,7 @@ source" or "you can find the link in the app." Never spell out the URL.
 If you want to list items verbally, use natural phrasing: "you have three \
 things — eggs, milk, and bread" — NOT "1. eggs\n2. milk\n3. bread".
 
-# Current capabilities (Slice 1 + Slice 2 + Slice 3 Stages 2 & 3)
+# Current capabilities (Slice 1 + Slice 2 + Slice 3 Stages 2-4)
 You can:
 - Describe what Kitchen Inventory does and explain how to use any feature
 - Read data via these tools:
@@ -89,6 +89,9 @@ You can:
   - `update_shopping_item` (change quantity, unit, mark as bought, edit notes)
 - Navigate the user's browser:
   - `navigate_to(path)` (jump to another page in the app — no preview/confirm)
+- Filter / sort the current page:
+  - `apply_filter(name, value)` (set one URL search-param — see Filters section)
+  - `clear_filters()` (reset all filters/sort on the current page)
 
 You CANNOT yet:
 - Mark inventory items as wasted or rated
@@ -288,12 +291,17 @@ When the user asks to GO somewhere ("take me to the shopping list", \
 call `navigate_to(path)` with the right route. Do NOT preview or ask \
 "are you sure?" — voice navigation is collaborative, just go.
 
-Path mapping (common phrasings → route):
-- "home" / "inventory" / "dashboard" / "main screen" → `/`
+Path mapping (common phrasings → route). CRITICAL: the app's inventory \
+dashboard is at `/dashboard`, NOT `/`. The bare `/` is the unauthenticated \
+landing page and will bounce signed-in users through /auth → /dashboard, \
+which is an awkward UX. Always use `/dashboard` for the home/inventory screen.
+
+- "home" / "inventory" / "dashboard" / "main screen" → `/dashboard`
 - "shopping list" / "shopping" / "what I need to buy" → `/shopping-list`
 - "recipes" / "saved recipes" / "what can I cook" → `/recipes`
 - "profile" / "my account" / "settings" → `/profile`
 - "analytics" / "waste stats" / "how much am I wasting" → `/analytics`
+- "archived" / "consumed items" / "history" → `/archived`
 
 After calling `navigate_to`, give a SHORT tense-neutral acknowledgment: \
 "Done." or "There you go." or "Sure thing." Don't say "Taking you to X" \
@@ -308,12 +316,82 @@ Don't go silent — a short ack confirms the request was heard.
 
 Do NOT navigate to: `/add-item` (focused task, user has to open it \
 themselves), `/auth`, `/authorize`, `/privacy`, `/terms` (out-of-app \
-routes). If the user asks for one of these, say "you'll need to open \
-that yourself — I can't drop you into it."
+routes), or bare `/` (landing page — bounces signed-in users awkwardly; \
+use `/dashboard` instead). If the user asks for one of these, say "you'll \
+need to open that yourself — I can't drop you into it."
 
 Don't navigate without an explicit request. If the user asks "what's on \
 my shopping list?", READ the list and answer — don't auto-navigate. Voice \
 should answer in-place when it can.
+
+# Filters and sort (the apply_filter / clear_filters tools)
+
+Use `apply_filter(name, value)` to narrow what the user sees on their \
+CURRENT page. Use `clear_filters()` to reset everything back to defaults. \
+Don't preview or confirm — these are cheap, reversible UI tweaks.
+
+If the user wants a filter on a DIFFERENT page than the one they're on, \
+call `navigate_to(target_path)` first, then `apply_filter(...)`. Two \
+tool calls is fine.
+
+## Supported filters per page
+
+`/dashboard` (inventory dashboard — NOT `/`):
+- `filter` accepts: "all", "expired", "expiring-soon", "missing-expiry", \
+  or any category name like "Vegetables", "Dairy", "Fruits", "Grains", \
+  "Spices", "Beverages" (capitalize the category)
+- `sort` accepts: "expiryDate" (default), "addedOn", "name", "category", \
+  "location"
+
+`/analytics`:
+- `timeframe` accepts: "week", "month" (default), "quarter", "year"
+
+`/archived`:
+- `tab` accepts: "all" (default), "consumed", "wasted", "other"
+
+`/shopping-list`, `/recipes`, `/profile` and other pages do NOT currently \
+support voice-driven filters — their sort/view state lives in component \
+local state, not the URL. If the user asks for one of those, say "you'll \
+have to tap the filter on that page yourself for now."
+
+## Mapping common phrasings → (name, value)
+
+Treat ANY of these phrasings as a request to call `apply_filter`, NOT a \
+request to read out the list verbally. The user wants the UI to change. \
+Examples that all map to `apply_filter("filter", "expiring-soon")` on \
+the inventory dashboard:
+- "show me what's expiring"
+- "filter the UI for expiring items"
+- "filter to expiring"
+- "narrow it down to expiring"
+- "just the ones expiring soon"
+
+Examples that all map to `apply_filter("filter", "expired")`:
+- "show expired items"
+- "filter the UI for items that are expired"
+- "filter for expired"
+- "just the expired ones"
+
+Category filters → `apply_filter("filter", "Dairy")` / "Vegetables" / etc. \
+(capitalize the category):
+- "only dairy" / "just vegetables" / "filter to dairy"
+
+Other common mappings:
+- "show items missing expiry dates" → `apply_filter("filter", "missing-expiry")`
+- "sort by name" → `apply_filter("sort", "name")`
+- "sort by when I added them" → `apply_filter("sort", "addedOn")`
+- "this week" / "last week" (on analytics) → `apply_filter("timeframe", "week")`
+- "show consumed items" (on archived) → `apply_filter("tab", "consumed")`
+- "clear the filter" / "show everything" / "reset" → `clear_filters()`
+
+CRITICAL: when the user asks you to filter the UI, you MUST call \
+`apply_filter` — don't just say "Done" verbally without dispatching the \
+tool. The agent saying "Done" without actually calling the tool means \
+the UI doesn't change and the user is confused.
+
+After applying a filter, give a short tense-neutral acknowledgment like \
+"Done." or "Filtered to expiring items." — same timing-lag concern as \
+`navigate_to`. Don't say "I'm filtering…" in present tense.
 
 # Toasts on writes (automatic — no tool call needed)
 
@@ -835,6 +913,57 @@ async def _run_voice_pipeline(
         required=["path"],
     )
 
+    # Slice 3 Stage 4: filter manipulation. Server emits an RTVI
+    # `apply_filter` or `clear_filters` server-message; browser reads
+    # the current useSearchParams, builds new params, router.pushes.
+    # The set of valid (page, param, value) tuples is documented in
+    # the system prompt under "Filters" so the LLM picks correctly.
+    apply_filter_schema = FunctionSchema(
+        name="apply_filter",
+        description=(
+            "Set a URL search parameter on the user's current page to "
+            "filter/sort/view what they see. Use when the user asks to "
+            "narrow down the list ('show me only dairy', 'just the "
+            "expiring items', 'sort by name', 'show last week's data'). "
+            "Operates on the CURRENT page only — if the user wants the "
+            "filter on a different page, call navigate_to first, then "
+            "apply_filter. Don't preview/confirm — just apply."
+        ),
+        properties={
+            "name": {
+                "type": "string",
+                "description": (
+                    "URL search-param name. See system prompt 'Filters' "
+                    "section for which names work on which page. Common: "
+                    "'filter', 'sort', 'timeframe', 'tab'."
+                ),
+            },
+            "value": {
+                "type": "string",
+                "description": (
+                    "URL search-param value. Must match one of the "
+                    "allowed values for the given name on the current "
+                    "page (see 'Filters' section). Pass as a string even "
+                    "for things that look numeric — URL params are "
+                    "strings."
+                ),
+            },
+        },
+        required=["name", "value"],
+    )
+
+    clear_filters_schema = FunctionSchema(
+        name="clear_filters",
+        description=(
+            "Remove ALL URL search parameters on the user's current "
+            "page, resetting filters and sort to defaults. Use when the "
+            "user says 'clear filters', 'reset', 'show everything', "
+            "'never mind that filter'. Operates on the current page only."
+        ),
+        properties={},
+        required=[],
+    )
+
     # ── Write tools (per ADR 009) ──
     # All writes route through the MCP server. The MCP server enforces
     # dry-run-by-default: call with confirm=false to get a preview, then
@@ -995,6 +1124,8 @@ async def _run_voice_pipeline(
             get_recipe_schema,
             get_current_view_schema,
             navigate_to_schema,
+            apply_filter_schema,
+            clear_filters_schema,
             add_to_shopping_list_schema,
             mark_as_consumed_schema,
             remove_from_shopping_list_schema,
@@ -1146,6 +1277,14 @@ async def _run_voice_pipeline(
     # pages) and reject obviously bad shapes here as a defensive
     # second layer.
     _NAVIGATE_BLOCKED_PATHS = {
+        # `/` is the unauthenticated landing page (app/page.tsx returns
+        # <LandingPage />). Signed-in users browsing the app live at
+        # /dashboard. Voice should never push the user to landing — it
+        # bounces through /auth and ends up at /dashboard with a confusing
+        # transition. If the agent says "go home", the right target is
+        # /dashboard, enforced by both the system prompt mapping and this
+        # blocklist.
+        "/",
         "/add-item",
         "/auth",
         "/authorize",
@@ -1191,6 +1330,54 @@ async def _run_voice_pipeline(
     llm.register_function(
         "navigate_to",
         _make_tool_handler("navigate_to", _navigate_to),
+    )
+
+    # ── apply_filter / clear_filters (Slice 3 Stage 4) ──
+    # Both emit RTVI server-messages the browser dispatches to URL
+    # search-param updates. No allowlist on (name, value) — the system
+    # prompt tells the LLM what works where, and the browser silently
+    # ignores params that don't apply on the current page. Cheap and
+    # forgiving.
+    async def _apply_filter(args):
+        name = args.get("name")
+        value = args.get("value")
+        if not isinstance(name, str) or not name.strip():
+            return {"error": "name is required"}
+        if not isinstance(value, str):
+            # Numeric or boolean came through — coerce to string. URL
+            # params are strings on the wire anyway.
+            value = str(value) if value is not None else ""
+        if not value.strip():
+            return {"error": "value is required (use clear_filters to remove a filter)"}
+        try:
+            await rtvi.send_server_message(
+                {
+                    "type": "apply_filter",
+                    "data": {"name": name.strip(), "value": value.strip()},
+                }
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"voice-filter: apply_filter send failed: {e}", flush=True)
+            return {"error": f"could not dispatch filter: {e}"}
+        return {"ok": True, "name": name.strip(), "value": value.strip()}
+
+    async def _clear_filters(_args):
+        try:
+            await rtvi.send_server_message(
+                {"type": "clear_filters", "data": {}}
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"voice-filter: clear_filters send failed: {e}", flush=True)
+            return {"error": f"could not dispatch clear: {e}"}
+        return {"ok": True}
+
+    llm.register_function(
+        "apply_filter",
+        _make_tool_handler("apply_filter", _apply_filter),
+    )
+    llm.register_function(
+        "clear_filters",
+        _make_tool_handler("clear_filters", _clear_filters),
     )
 
     # ── Toast emission helper (Slice 3 S3) ──
