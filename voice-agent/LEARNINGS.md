@@ -231,6 +231,14 @@ Don't iterate prompts in isolation from real conversations — it leads to over-
 
 ## Backlog: design items deferred from Slice 3 planning
 
+- **Loading state UX — make the connecting animation feel intentional rather than slow.** Current flow (post the "no-listening-flash" fix in commit 8f3f8a89) is: `Connecting (4-8s) → Speaking (greeting, 3-4s) → Listening (real)`. The total ~8s wait before user can talk is real — Modal cold-start (~1-3s) + Sarvam STT/TTS handshakes (~1-2s) + greeting playback (~3-4s). Three angles to explore in a later Stage 4 polish pass:
+  1. **Drop the start-of-session greeting.** Saves 3-4s. Trade-off: loses the audible "I'm ready" affordance the greeting provides for first-time / occasional users. Worth A/B-ing with real household use.
+  2. **Pre-warm Modal container more aggressively.** We already have `min_containers=1` in modal_app.py. If real cold-starts still happen, options are bumping to 2, or adding a keepalive cron that pings `/health` every 4 minutes.
+  3. **Intentional connecting animation.** Don't show any status text during "connecting" — just an animated mic icon (subtle pulse). Status appears only when the agent has something to say. Feels faster because the user isn't reading "Connecting…" for 4 seconds.
+  Trigger to pick up: real user (your wife) reports the wait feels too long. Most likely fix combo: drop greeting + animated mic.
+
+
+
 - **User self-disable for voice agent.** Currently `feature_grants.voice_agent_enabled` is admin-only (RLS denies user writes). Once we invite users outside the household, users should be able to opt out themselves without bothering admin. Cleanest pattern: add a `voice_opt_out` boolean to `user_settings` (user-writable) and gate access on `feature_grants.voice_agent_enabled && !user_settings.voice_opt_out`. Profile page UI for the toggle. Re-enable still requires admin (asymmetric — easy to opt out, deliberate to opt in). Estimated half-day of work. Not blocking household use.
 
 - **Smart pause/resume on overlay (Policy D).** Stage 1 ships Policy A: voice session auto-disconnects when any sheet/dialog opens (clean intent, predictable, cheap). The dream UX is Policy D: pause mic + TTS, keep the session technically alive, resume on overlay close — voice as a continuous companion rather than an on/off switch. Requires verifying Pipecat JS client's mute/pause API supports this cleanly, designing a "minimized voice indicator" affordance that doesn't conflict with bottom sheets, and handling edge cases (sheet opens mid-tool-call, mid-confirmation, etc.). Estimated 1-2 days. Pick up when real usage shows the auto-disconnect feels too aggressive — particularly the "agent just gave a preview, I tapped to peek at something, now I have to start over" scenario.
