@@ -172,6 +172,23 @@ the diagnostic that would have surfaced it in one shot.
 **Fix:** always `accept()` first, then `send_json({error: ...})` for diagnostics, then `close(code=4001, reason=...)`. Browser receives both the error JSON and the proper close code.
 **Apply this lesson by:** any WebSocket auth gate that wants its close codes visible should accept first, validate second.
 
+### Literal `{}` in a `.format()` template caused a misleading "Unknown data type" error in the JS client (Slice 3 Stage 2)
+
+**Symptom (browser):** `Failed to deserialize incoming message Error: Unknown data type` inside @pipecat-ai/websocket-transport, followed by `signaling socket closed unexpectedly: 1000` and `Fatal error reported. Disconnecting...`. WS handshake succeeded (101), then died on the first server message. The mic UI flipped Connecting → idle with no visible app-level error.
+
+**Actual root cause (server, three layers up):** I added a sentence to the system prompt that contained the literal string `` returns `{path, search_params}` ``. The prompt is assembled via `_SYSTEM_PROMPT_TEMPLATE.format(catalog=catalog)`. Python's `str.format()` parsed `{path, search_params}` as a placeholder named `path, search_params`, raised `KeyError: 'path, search_params'` during pipeline setup, the WS handler's outer `except` ran `websocket.send_json({"error": ...})` (a TEXT frame), and the JS client — whose deserializer requires Blob/binary — threw "Unknown data type" on that text frame.
+
+**Why the symptom misled for so long:** the error surfaced three abstraction layers above the bug. The JS console blamed the protocol (`Unknown data type` → `Fatal error` → close 1000). I chased wire-format theories (Pipecat version drift, RTVI handler side-effects, Suspense double-mounts, `binaryType` issues) for several diagnostic rounds. None panned out because the server was sending a perfectly valid HTTP-error JSON — the problem is the JS deserializer treats *any* non-Blob frame as fatal, so server-side exceptions look identical to genuine wire-format breaks.
+
+**How it got diagnosed:** asked the user for `modal app logs kitchen-inventory-voice` after one failed connect. The first 30 lines included the traceback ending in `KeyError: 'path, search_params'`. Fix was mechanical from there: double the braces to `{{path, search_params}}` so `.format()` emits the literal.
+
+**Apply this lesson by:**
+- Treat any string that flows through `.format()` as a minefield once it contains literal `{}`. Safer alternatives when a prompt body needs literal braces:
+  - F-strings with explicit substitution: `f"...{catalog}..."` (interpolated at definition time — no later `.format()` call).
+  - `Template.substitute()` from `string.Template` — uses `$var` syntax, leaves braces alone.
+  - Plain `.replace("{catalog}", catalog)` for one or two slots.
+- Whenever a "deserialize / unknown frame / connection died after 101" symptom shows up on a Pipecat WS client, **always check Modal logs first** before chasing wire-format theories — the FastAPI `except` path turns server-side Python exceptions into client-side text frames that mimic protocol errors. The real error is a Python traceback one `tail -100` away.
+
 ---
 
 ## Workflow patterns that worked

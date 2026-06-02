@@ -69,7 +69,7 @@ source" or "you can find the link in the app." Never spell out the URL.
 If you want to list items verbally, use natural phrasing: "you have three \
 things — eggs, milk, and bread" — NOT "1. eggs\n2. milk\n3. bread".
 
-# Current capabilities (Slice 1 + Slice 2 + Slice 3 Stage 2)
+# Current capabilities (Slice 1 + Slice 2 + Slice 3 Stages 2 & 3)
 You can:
 - Describe what Kitchen Inventory does and explain how to use any feature
 - Read data via these tools:
@@ -87,6 +87,8 @@ You can:
   - `mark_as_consumed` (archive an inventory item; auto-restocks to shopping list)
   - `remove_from_shopping_list` (delete an item from the shopping list)
   - `update_shopping_item` (change quantity, unit, mark as bought, edit notes)
+- Navigate the user's browser:
+  - `navigate_to(path)` (jump to another page in the app — no preview/confirm)
 
 You CANNOT yet:
 - Mark inventory items as wasted or rated
@@ -261,7 +263,7 @@ are equal), ask for more detail rather than guessing.
 
 The browser pushes the user's current page (URL path + any filters in the \
 URL) to you as they navigate. You can read it via `get_current_view` — \
-returns `{path, search_params}`. The path is an app route like `/` \
+returns `{{path, search_params}}`. The path is an app route like `/` \
 (inventory dashboard), `/shopping-list`, `/recipes`, `/profile`, etc.
 
 When to call `get_current_view`:
@@ -278,6 +280,40 @@ When to call `get_current_view`:
 
 Don't call `get_current_view` reflexively at the start of every \
 conversation. Only when the user's question is location-dependent.
+
+# Navigation (the navigate_to tool)
+
+When the user asks to GO somewhere ("take me to the shopping list", \
+"open recipes", "go home", "show me my profile", "go back to inventory"), \
+call `navigate_to(path)` with the right route. Do NOT preview or ask \
+"are you sure?" — voice navigation is collaborative, just go.
+
+Path mapping (common phrasings → route):
+- "home" / "inventory" / "dashboard" / "main screen" → `/`
+- "shopping list" / "shopping" / "what I need to buy" → `/shopping-list`
+- "recipes" / "saved recipes" / "what can I cook" → `/recipes`
+- "profile" / "my account" / "settings" → `/profile`
+- "analytics" / "waste stats" / "how much am I wasting" → `/analytics`
+
+After calling `navigate_to`, give a brief acknowledgment: "Taking you \
+there." or "Done — opening your shopping list now." Don't go silent.
+
+Do NOT navigate to: `/add-item` (focused task, user has to open it \
+themselves), `/auth`, `/authorize`, `/privacy`, `/terms` (out-of-app \
+routes). If the user asks for one of these, say "you'll need to open \
+that yourself — I can't drop you into it."
+
+Don't navigate without an explicit request. If the user asks "what's on \
+my shopping list?", READ the list and answer — don't auto-navigate. Voice \
+should answer in-place when it can.
+
+# Toasts on writes (automatic — no tool call needed)
+
+When you successfully execute a write (confirm=true returns success), \
+the app automatically shows a toast notification to the user — they get \
+a visual confirmation in addition to your verbal one. You don't need to \
+do anything special; just narrate the action verbally as usual ("Done — \
+added to your list"). The toast is automatic.
 
 # Using tools well
 - Prefer calling a tool over guessing. If the user asks "what's expiring?", \
@@ -758,6 +794,39 @@ async def _run_voice_pipeline(
         required=[],
     )
 
+    # Slice 3 Stage 3: outbound navigation. The agent can navigate the
+    # user's browser to a different app route. Server emits an RTVI
+    # server-message ({type: "navigate_to", data: {path}}) via
+    # `rtvi.send_server_message`; browser's onServerMessage handler
+    # invokes Next.js router.push. No allowlist per ADR 010 — the agent
+    # acts under the user's identity, same trust as the user navigating
+    # manually. Prompt-level guardrails keep it from jumping into
+    # focused-task surfaces (/add-item) or auth flows.
+    navigate_to_schema = FunctionSchema(
+        name="navigate_to",
+        description=(
+            "Navigate the user's browser to a different page in the app. "
+            "Call this when the user explicitly asks to go somewhere "
+            "('take me to the shopping list', 'open recipes', 'go home', "
+            "'show me my profile'). Don't preview or confirm — just "
+            "navigate. The browser pushes the new route immediately."
+        ),
+        properties={
+            "path": {
+                "type": "string",
+                "description": (
+                    "Target app route — leading slash required, no domain, "
+                    "no query string. Valid examples: '/', '/shopping-list', "
+                    "'/recipes', '/profile', '/analytics'. Use the same "
+                    "shape returned by get_current_view. NEVER pass: "
+                    "'/add-item' (focused task), '/auth', '/authorize', "
+                    "'/privacy', '/terms' (out-of-app routes)."
+                ),
+            },
+        },
+        required=["path"],
+    )
+
     # ── Write tools (per ADR 009) ──
     # All writes route through the MCP server. The MCP server enforces
     # dry-run-by-default: call with confirm=false to get a preview, then
@@ -917,6 +986,7 @@ async def _run_voice_pipeline(
             list_recipes_schema,
             get_recipe_schema,
             get_current_view_schema,
+            navigate_to_schema,
             add_to_shopping_list_schema,
             mark_as_consumed_schema,
             remove_from_shopping_list_schema,
@@ -1056,6 +1126,133 @@ async def _run_voice_pipeline(
         _make_tool_handler("get_current_view", _get_current_view),
     )
 
+    # ── navigate_to — emits server→client RTVI message (Slice 3 S3) ──
+    # The agent calls this with a target path; we forward to the browser
+    # via `rtvi.send_server_message`. The browser's onServerMessage
+    # handler (see hooks/use-voice-session.ts) dispatches to
+    # router.push(). We deliberately don't validate against an
+    # allowlist (per ADR 010) — the agent is acting under the user's
+    # identity, same nav scope as the user themselves. We do block a
+    # few non-app routes at the system-prompt level (HIDDEN_PATHS on
+    # the browser side: /add-item focused task, /auth flows, marketing
+    # pages) and reject obviously bad shapes here as a defensive
+    # second layer.
+    _NAVIGATE_BLOCKED_PATHS = {
+        "/add-item",
+        "/auth",
+        "/authorize",
+        "/landing-preview",
+        "/privacy",
+        "/terms",
+    }
+
+    async def _navigate_to(args):
+        raw = args.get("path")
+        if not isinstance(raw, str) or not raw.strip():
+            return {"error": "path is required"}
+        path = raw.strip()
+        # Reject domains / protocols — relative app routes only.
+        if "://" in path or path.startswith("//"):
+            return {"error": "external URLs not allowed; pass an app route like '/shopping-list'"}
+        # Normalize: leading slash, strip trailing whitespace, drop any
+        # ?query the agent might tack on (filters belong to apply_filter
+        # in Stage 4; navigate_to is route-only).
+        if not path.startswith("/"):
+            path = "/" + path
+        if "?" in path:
+            path = path.split("?", 1)[0]
+        # Final guard: routes the agent shouldn't drop the user into.
+        if path in _NAVIGATE_BLOCKED_PATHS:
+            return {
+                "error": (
+                    f"path '{path}' is not navigable via voice. Tell the user "
+                    "to open that screen themselves."
+                ),
+            }
+        # Diagnostic logs — these surface in `modal app logs` and let us
+        # confirm the send actually happens during a session. Remove once
+        # nav has been stable in real use for a few days.
+        print(f"voice-nav: dispatching navigate_to path={path}", flush=True)
+        try:
+            await rtvi.send_server_message(
+                {"type": "navigate_to", "data": {"path": path}}
+            )
+        except Exception as e:  # noqa: BLE001
+            # Browser-side handler might've torn down; surface so the
+            # LLM phrases something useful rather than claiming success.
+            print(f"voice-nav: send_server_message failed: {e}", flush=True)
+            return {"error": f"could not dispatch navigation: {e}"}
+        print(f"voice-nav: send_server_message returned ok path={path}", flush=True)
+        return {"ok": True, "path": path, "note": "navigation dispatched to browser"}
+
+    llm.register_function(
+        "navigate_to",
+        _make_tool_handler("navigate_to", _navigate_to),
+    )
+
+    # ── Toast emission helper (Slice 3 S3) ──
+    # After a successful confirm=true write, automatically emit a toast
+    # RTVI message so the user sees a visual confirmation in addition
+    # to the agent's verbal "Done — added to your list." On dry-run
+    # (confirm=false) or on any error return, no toast — toasts mean
+    # "something just happened in your data."
+    def _toast_for_write(mcp_tool: str, args: dict) -> dict | None:
+        """Build a toast payload for a successful write. Returns None if
+        the tool isn't toast-worthy (shouldn't happen — every write
+        currently has a mapping). Title/description are short and
+        speak-natural in case the user reads them aloud."""
+        item = (args.get("item_name") or "item").strip() or "item"
+        if mcp_tool == "add_to_shopping_list":
+            qty = args.get("quantity")
+            unit = (args.get("unit") or "").strip()
+            qty_part = f"{qty} {unit}".strip() if qty is not None else ""
+            desc = f"{qty_part} {item}".strip() if qty_part else item
+            return {
+                "kind": "success",
+                "title": "Added to shopping list",
+                "description": desc,
+            }
+        if mcp_tool == "mark_as_consumed":
+            return {"kind": "success", "title": "Marked as consumed", "description": item}
+        if mcp_tool == "remove_from_shopping_list":
+            return {"kind": "success", "title": "Removed from shopping list", "description": item}
+        if mcp_tool == "update_shopping_item":
+            return {"kind": "success", "title": "Shopping list updated", "description": item}
+        return None
+
+    def _is_mcp_error(result: object) -> bool:
+        """Heuristic: MCP write returns surface errors a few different ways."""
+        if not isinstance(result, dict):
+            return True
+        return bool(result.get("error") or result.get("isError"))
+
+    def _write_with_toast(mcp_tool_name: str, arg_keys: tuple[str, ...]):
+        """Wraps an MCP write call so a successful execute emits a toast.
+
+        Returned async fn matches the shape _make_tool_handler expects:
+        `async (args_dict) -> result_dict`. Dry-runs and errors are
+        forwarded unchanged — no toast in those cases.
+        """
+        async def _do(args):
+            result = await tool_writes.call_mcp_tool(
+                mcp_tool_name,
+                arguments=_mcp_args(arg_keys, args),
+                user_token=user_token,
+            )
+            confirm = bool(args.get("confirm", False))
+            if confirm and not _is_mcp_error(result):
+                toast_data = _toast_for_write(mcp_tool_name, args)
+                if toast_data:
+                    try:
+                        await rtvi.send_server_message(
+                            {"type": "toast", "data": toast_data}
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        # Non-fatal — the LLM still narrates verbally.
+                        print(f"voice-toast: emit failed for {mcp_tool_name}: {e}", flush=True)
+            return result
+        return _do
+
     # ── Write tool handlers (route through MCP per ADR 006) ──
     # Same _make_tool_handler wrapper as reads — gets latency + logging for
     # free. The MCP HTTP call returns a structured result either way (dry-run
@@ -1077,10 +1274,9 @@ async def _run_voice_pipeline(
         "add_to_shopping_list",
         _make_tool_handler(
             "add_to_shopping_list",
-            lambda a: tool_writes.call_mcp_tool(
+            _write_with_toast(
                 "add_to_shopping_list",
-                arguments=_mcp_args(("item_name", "quantity", "unit"), a),
-                user_token=user_token,
+                ("item_name", "quantity", "unit"),
             ),
         ),
     )
@@ -1089,10 +1285,9 @@ async def _run_voice_pipeline(
         "mark_as_consumed",
         _make_tool_handler(
             "mark_as_consumed",
-            lambda a: tool_writes.call_mcp_tool(
+            _write_with_toast(
                 "mark_as_consumed",
-                arguments=_mcp_args(("item_id", "item_name", "quantity"), a),
-                user_token=user_token,
+                ("item_id", "item_name", "quantity"),
             ),
         ),
     )
@@ -1101,10 +1296,9 @@ async def _run_voice_pipeline(
         "remove_from_shopping_list",
         _make_tool_handler(
             "remove_from_shopping_list",
-            lambda a: tool_writes.call_mcp_tool(
+            _write_with_toast(
                 "remove_from_shopping_list",
-                arguments=_mcp_args(("item_id", "item_name"), a),
-                user_token=user_token,
+                ("item_id", "item_name"),
             ),
         ),
     )
@@ -1113,13 +1307,9 @@ async def _run_voice_pipeline(
         "update_shopping_item",
         _make_tool_handler(
             "update_shopping_item",
-            lambda a: tool_writes.call_mcp_tool(
+            _write_with_toast(
                 "update_shopping_item",
-                arguments=_mcp_args(
-                    ("item_id", "item_name", "quantity", "unit", "completed", "notes"),
-                    a,
-                ),
-                user_token=user_token,
+                ("item_id", "item_name", "quantity", "unit", "completed", "notes"),
             ),
         ),
     )
@@ -1237,6 +1427,78 @@ async def _run_voice_pipeline(
     user_turn_logger = UserTurnLogger()
     agent_turn_logger = AgentTurnLogger()
 
+    # Import frame types needed by WireFrameFilter. These are stable
+    # public Pipecat exports; if they move in a future version the AST
+    # check + /diagnostics will surface it.
+    from pipecat.frames.frames import (
+        TextFrame as _PCTextFrame,
+        TranscriptionFrame as _PCTranscriptionFrame,
+        InterruptionFrame as _PCInterruptionFrame,
+    )
+
+    class WireFrameFilter(FrameProcessor):
+        """Drops frame types that @pipecat-ai/websocket-transport@1.6.5
+        deserialize() doesn't recognize.
+
+        The JS client's protobuf knows 4+ oneof variants on the wire
+        (text, audio, transcription, message, interruption…) but the
+        deserializer in @pipecat-ai/websocket-transport@1.6.5 ONLY
+        handles `audio` and `message`. Anything else throws
+        `Unknown frame kind` in the browser console (and the message is
+        dropped, so any real signal it carried is lost).
+
+        Frame types that need dropping before transport.output():
+          - `TextFrame` and subclasses (LLMTextFrame, TTSTextFrame, etc.)
+            — TTS / LLM emit these as streaming markers; the user-facing
+            text already travels via RTVI's BotLLMTextMessage in the
+            `message` oneof so dropping bare frames loses nothing.
+          - `TranscriptionFrame` and subclasses (InterimTranscriptionFrame
+            etc.) — same story; UserTranscriptionMessage carries the
+            user-facing payload.
+          - `InterruptionFrame` — Pipecat's interruption signaling.
+            Internal pipeline signal, not something the browser needs to
+            render. JS client doesn't handle the `interruption` oneof.
+
+        Place this processor *immediately before* transport.output() in
+        the pipeline. Only filters downstream-bound traffic.
+
+        Diagnostic: on first occurrence of each dropped frame type,
+        prints to Modal logs so we can see exactly what's leaking. After
+        we're confident the filter is complete, this print can be
+        removed.
+        """
+
+        # Names that, if SEEN downstream-bound, indicate the filter is
+        # working as intended. Subclasses are caught via isinstance.
+        _DROP_TYPES = (_PCTextFrame, _PCTranscriptionFrame, _PCInterruptionFrame)
+
+        def __init__(self):
+            super().__init__()
+            self._seen_dropped: set[str] = set()
+            self._seen_passed: set[str] = set()
+
+        async def process_frame(self, frame, direction: FrameDirection):
+            await super().process_frame(frame, direction)
+            if direction == FrameDirection.DOWNSTREAM:
+                name = type(frame).__name__
+                if isinstance(frame, self._DROP_TYPES):
+                    if name not in self._seen_dropped:
+                        self._seen_dropped.add(name)
+                        print(
+                            f"voice-filter: first-saw DROP {name}",
+                            flush=True,
+                        )
+                    return
+                if name not in self._seen_passed:
+                    self._seen_passed.add(name)
+                    print(
+                        f"voice-filter: first-saw PASS {name}",
+                        flush=True,
+                    )
+            await self.push_frame(frame, direction)
+
+    wire_frame_filter = WireFrameFilter()
+
     # ── Wire the pipeline ──
     # Order matters:
     #   transport.input()    → audio frames arrive
@@ -1250,6 +1512,10 @@ async def _run_voice_pipeline(
     #   user aggregator      → collects transcripts into user-turn messages
     #   llm                  → reads context, generates response
     #   tts                  → response text → audio frames
+    #   wire_frame_filter    → drops bare TextFrame/TranscriptionFrame that
+    #                          would otherwise hit the protobuf serializer
+    #                          and surface as "Unknown frame kind" in the JS
+    #                          client console (Slice 3 Stage 3 fix)
     #   transport.output()   → sends audio to client
     #   assistant aggregator → records assistant turn in context
     #   agent_turn_logger    → logs agent response (now in context) to logs
@@ -1262,6 +1528,7 @@ async def _run_voice_pipeline(
             context_aggregator.user(),
             llm,
             tts,
+            wire_frame_filter,
             transport.output(),
             context_aggregator.assistant(),
             agent_turn_logger,
@@ -1318,6 +1585,21 @@ async def _run_voice_pipeline(
     @rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi_processor):
         await rtvi_processor.set_bot_ready()
+        # DIAGNOSTIC (Slice 3 Stage 3 debug): send a test server-message
+        # right after bot-ready. If the browser logs `[voice]
+        # onServerMessage test_ping {...}` in console, the
+        # server→client RTVI channel is alive end-to-end and the
+        # navigate_to failure is a tool-handler-specific issue. If we
+        # NEVER see it in the browser, the channel itself is broken
+        # regardless of the specific message. Remove once nav is
+        # confirmed working.
+        try:
+            await rtvi_processor.send_server_message(
+                {"type": "test_ping", "data": {"source": "on_client_ready"}}
+            )
+            print("voice-ping: test_ping dispatched", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"voice-ping: test_ping failed: {e}", flush=True)
         await task.queue_frames([TTSSpeakFrame(GREETING)])
         # The greeting bypasses the LLM, so the AgentTurnLogger won't see
         # it via the context. Log it directly here for completeness.

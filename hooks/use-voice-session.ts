@@ -52,6 +52,33 @@ export interface VoiceTurn {
   timestamp: Date
 }
 
+/**
+ * Server → browser custom messages sent via Pipecat RTVI. The agent
+ * emits these to drive the UI: navigate to another page, show a toast,
+ * etc. Branch on `type` in the consumer's handler.
+ *
+ * Currently emitted by the voice agent:
+ *   - `{type: "navigate_to", data: {path: string}}` — Stage 3
+ *   - `{type: "toast", data: {kind, title, description}}` — Stage 3
+ * Stage 4 will add `{type: "apply_filter", ...}` / `{type: "clear_filters"}`.
+ */
+export interface VoiceServerMessage {
+  type: string
+  data?: unknown
+}
+
+export interface UseVoiceSessionOptions {
+  /**
+   * Handler for inbound server-originated messages (RTVI ServerMessage).
+   * Stored in a ref internally so the consumer can pass an inline arrow
+   * without churning the Pipecat client on every render.
+   *
+   * Receives the inner `{type, data}` payload directly — the RTVI
+   * envelope is unwrapped by the JS client SDK.
+   */
+  onServerMessage?: (msg: VoiceServerMessage) => void
+}
+
 export interface UseVoiceSessionReturn {
   status: VoiceStatus
   transcript: VoiceTurn[]
@@ -75,10 +102,21 @@ function generateTurnId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function useVoiceSession(): UseVoiceSessionReturn {
+export function useVoiceSession(
+  options: UseVoiceSessionOptions = {},
+): UseVoiceSessionReturn {
   const [status, setStatus] = useState<VoiceStatus>("idle")
   const [transcript, setTranscript] = useState<VoiceTurn[]>([])
   const [error, setError] = useState<string | null>(null)
+
+  // Keep the latest onServerMessage in a ref so the Pipecat client
+  // callback (created once inside connect()) always invokes the freshest
+  // handler. Without this, consumers would have to memoize their
+  // handler perfectly to avoid stale closures.
+  const onServerMessageRef = useRef(options.onServerMessage)
+  useEffect(() => {
+    onServerMessageRef.current = options.onServerMessage
+  }, [options.onServerMessage])
 
   // Ref to the live Pipecat client so disconnect() can reach it; refs
   // (not state) because we don't want re-renders when the client changes
@@ -222,6 +260,39 @@ export function useVoiceSession(): UseVoiceSessionReturn {
             // Either way, "connected" = "ready for user input" now.
             greetingDoneRef.current = true
             safeSetStatus("connected")
+          },
+          onServerMessage: (msg: unknown) => {
+            // DIAGNOSTIC (Slice 3 Stage 3 debug): unconditional log so we
+            // can tell whether the SDK invokes this callback at all, vs.
+            // whether the message is reaching the SDK but being routed
+            // somewhere else. Keep until nav has been stable in real use.
+            // eslint-disable-next-line no-console
+            console.log("[voice] hook onServerMessage fired", msg)
+            // RTVI server-message arrived. We unwrap defensively — the
+            // SDK delivers the inner `data` from RTVIServerMessage, which
+            // in our protocol is shaped {type, data}. Forward to the
+            // consumer's handler via the ref so it's always fresh.
+            const handler = onServerMessageRef.current
+            // eslint-disable-next-line no-console
+            console.log("[voice] hook handler set?", !!handler)
+            if (!handler) return
+            try {
+              if (
+                msg &&
+                typeof msg === "object" &&
+                typeof (msg as { type?: unknown }).type === "string"
+              ) {
+                handler(msg as VoiceServerMessage)
+              } else {
+                // eslint-disable-next-line no-console
+                console.log("[voice] hook msg shape rejected", msg)
+              }
+            } catch (e) {
+              // Best-effort. Consumer-side errors shouldn't tear down
+              // the audio session.
+              // eslint-disable-next-line no-console
+              console.log("[voice] hook handler threw", e)
+            }
           },
         },
       }) as { connect: () => Promise<void>; disconnect: () => Promise<void> }

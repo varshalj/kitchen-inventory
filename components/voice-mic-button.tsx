@@ -17,8 +17,8 @@
  *   open). That gating is the next sub-step of Stage 1.
  */
 
-import { useEffect, useRef, useState } from "react"
-import { usePathname, useSearchParams } from "next/navigation"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Mic,
   Loader2,
@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import {
   useVoiceSession,
+  type VoiceServerMessage,
   type VoiceStatus,
   type VoiceTurn,
 } from "@/hooks/use-voice-session"
@@ -79,17 +80,64 @@ function preloadPipecatSdk() {
 }
 
 export function VoiceMicButton() {
-  const { status, transcript, error, connect, disconnect, sendClientMessage } =
-    useVoiceSession()
-  const [expanded, setExpanded] = useState(false)
-  const overlayActive = useOverlayActive()
-  const { chipVisible } = useReview()
+  const router = useRouter()
+  const { toast } = useToast()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   // Stable string for effect deps — URLSearchParams identity churns on
   // every render in app-router. toString() gives a deterministic key.
   const searchParamsKey = searchParams?.toString() ?? ""
-  const { toast } = useToast()
+
+  // Slice 3 Stage 3: handle RTVI server-messages emitted by the agent.
+  // The agent calls `navigate_to(path)` or auto-emits `toast` after a
+  // successful write; both come down this single channel. Branch on
+  // `msg.type`. Keep handlers idempotent + cheap — they fire from the
+  // Pipecat client's onServerMessage hook, possibly during render.
+  //
+  // Defense in depth: even though the server rejects HIDDEN_PATHS,
+  // re-validate here in case the agent sends something stale or the
+  // path list drifts.
+  const handleServerMessage = useCallback(
+    (msg: VoiceServerMessage) => {
+      // Diagnostic log — confirms server-messages are reaching this
+      // handler at all. Strip once nav/toast have been stable in real
+      // use for a few days. See voice-agent/LEARNINGS.md entry on
+      // "Unknown frame kind" debugging.
+      // eslint-disable-next-line no-console
+      console.log("[voice] onServerMessage", msg.type, msg.data)
+      if (msg.type === "navigate_to") {
+        const data = (msg.data ?? {}) as { path?: unknown }
+        const target = typeof data.path === "string" ? data.path.trim() : ""
+        if (!target || !target.startsWith("/")) return
+        if (HIDDEN_PATHS.has(target)) return
+        // Skip a no-op push to avoid an unnecessary re-render + a stale
+        // page_context echo on the server side.
+        if (target === pathname) return
+        router.push(target)
+      } else if (msg.type === "toast") {
+        const data = (msg.data ?? {}) as {
+          kind?: string
+          title?: string
+          description?: string
+        }
+        if (!data.title && !data.description) return
+        toast({
+          title: data.title,
+          description: data.description,
+          variant: data.kind === "error" ? "destructive" : undefined,
+        })
+      }
+      // Unknown message types are ignored — forward-compatible for
+      // future Stage 4 (apply_filter / clear_filters).
+    },
+    [router, toast, pathname],
+  )
+
+  const { status, transcript, error, connect, disconnect, sendClientMessage } =
+    useVoiceSession({ onServerMessage: handleServerMessage })
+  const [expanded, setExpanded] = useState(false)
+  const overlayActive = useOverlayActive()
+  const { chipVisible } = useReview()
 
   // Pre-warm the Pipecat SDK chunks on mount so the first connect tap
   // doesn't pay the full dynamic-import latency (~500ms-1s on cold cache).
