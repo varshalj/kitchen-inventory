@@ -295,8 +295,16 @@ Path mapping (common phrasings → route):
 - "profile" / "my account" / "settings" → `/profile`
 - "analytics" / "waste stats" / "how much am I wasting" → `/analytics`
 
-After calling `navigate_to`, give a brief acknowledgment: "Taking you \
-there." or "Done — opening your shopping list now." Don't go silent.
+After calling `navigate_to`, give a SHORT tense-neutral acknowledgment: \
+"Done." or "There you go." or "Sure thing." Don't say "Taking you to X" \
+in present tense — the navigation message reaches the browser in ~100ms \
+but your verbal reply trails by 1-2 seconds (LLM + TTS latency), so by \
+the time the user hears "taking you", they're already on the new page \
+and it sounds like you're narrating a future that's already happened. \
+Past-tense or neutral phrasing works regardless of which lands first.\
+\
+\
+Don't go silent — a short ack confirms the request was heard.
 
 Do NOT navigate to: `/add-item` (focused task, user has to open it \
 themselves), `/auth`, `/authorize`, `/privacy`, `/terms` (out-of-app \
@@ -1169,10 +1177,6 @@ async def _run_voice_pipeline(
                     "to open that screen themselves."
                 ),
             }
-        # Diagnostic logs — these surface in `modal app logs` and let us
-        # confirm the send actually happens during a session. Remove once
-        # nav has been stable in real use for a few days.
-        print(f"voice-nav: dispatching navigate_to path={path}", flush=True)
         try:
             await rtvi.send_server_message(
                 {"type": "navigate_to", "data": {"path": path}}
@@ -1182,7 +1186,6 @@ async def _run_voice_pipeline(
             # LLM phrases something useful rather than claiming success.
             print(f"voice-nav: send_server_message failed: {e}", flush=True)
             return {"error": f"could not dispatch navigation: {e}"}
-        print(f"voice-nav: send_server_message returned ok path={path}", flush=True)
         return {"ok": True, "path": path, "note": "navigation dispatched to browser"}
 
     llm.register_function(
@@ -1461,40 +1464,21 @@ async def _run_voice_pipeline(
 
         Place this processor *immediately before* transport.output() in
         the pipeline. Only filters downstream-bound traffic.
-
-        Diagnostic: on first occurrence of each dropped frame type,
-        prints to Modal logs so we can see exactly what's leaking. After
-        we're confident the filter is complete, this print can be
-        removed.
         """
 
-        # Names that, if SEEN downstream-bound, indicate the filter is
-        # working as intended. Subclasses are caught via isinstance.
+        # Subclasses are caught via isinstance — e.g. LLMTextFrame,
+        # TTSTextFrame inherit from TextFrame; InterimTranscriptionFrame
+        # inherits from TranscriptionFrame. Add new types here when a
+        # future Pipecat release adds a new oneof variant we'd otherwise
+        # leak as "Unknown frame kind".
         _DROP_TYPES = (_PCTextFrame, _PCTranscriptionFrame, _PCInterruptionFrame)
-
-        def __init__(self):
-            super().__init__()
-            self._seen_dropped: set[str] = set()
-            self._seen_passed: set[str] = set()
 
         async def process_frame(self, frame, direction: FrameDirection):
             await super().process_frame(frame, direction)
-            if direction == FrameDirection.DOWNSTREAM:
-                name = type(frame).__name__
-                if isinstance(frame, self._DROP_TYPES):
-                    if name not in self._seen_dropped:
-                        self._seen_dropped.add(name)
-                        print(
-                            f"voice-filter: first-saw DROP {name}",
-                            flush=True,
-                        )
-                    return
-                if name not in self._seen_passed:
-                    self._seen_passed.add(name)
-                    print(
-                        f"voice-filter: first-saw PASS {name}",
-                        flush=True,
-                    )
+            if direction == FrameDirection.DOWNSTREAM and isinstance(
+                frame, self._DROP_TYPES
+            ):
+                return
             await self.push_frame(frame, direction)
 
     wire_frame_filter = WireFrameFilter()
@@ -1585,21 +1569,6 @@ async def _run_voice_pipeline(
     @rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi_processor):
         await rtvi_processor.set_bot_ready()
-        # DIAGNOSTIC (Slice 3 Stage 3 debug): send a test server-message
-        # right after bot-ready. If the browser logs `[voice]
-        # onServerMessage test_ping {...}` in console, the
-        # server→client RTVI channel is alive end-to-end and the
-        # navigate_to failure is a tool-handler-specific issue. If we
-        # NEVER see it in the browser, the channel itself is broken
-        # regardless of the specific message. Remove once nav is
-        # confirmed working.
-        try:
-            await rtvi_processor.send_server_message(
-                {"type": "test_ping", "data": {"source": "on_client_ready"}}
-            )
-            print("voice-ping: test_ping dispatched", flush=True)
-        except Exception as e:  # noqa: BLE001
-            print(f"voice-ping: test_ping failed: {e}", flush=True)
         await task.queue_frames([TTSSpeakFrame(GREETING)])
         # The greeting bypasses the LLM, so the AgentTurnLogger won't see
         # it via the context. Log it directly here for completeness.

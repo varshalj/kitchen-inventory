@@ -262,19 +262,11 @@ export function useVoiceSession(
             safeSetStatus("connected")
           },
           onServerMessage: (msg: unknown) => {
-            // DIAGNOSTIC (Slice 3 Stage 3 debug): unconditional log so we
-            // can tell whether the SDK invokes this callback at all, vs.
-            // whether the message is reaching the SDK but being routed
-            // somewhere else. Keep until nav has been stable in real use.
-            // eslint-disable-next-line no-console
-            console.log("[voice] hook onServerMessage fired", msg)
             // RTVI server-message arrived. We unwrap defensively — the
             // SDK delivers the inner `data` from RTVIServerMessage, which
             // in our protocol is shaped {type, data}. Forward to the
             // consumer's handler via the ref so it's always fresh.
             const handler = onServerMessageRef.current
-            // eslint-disable-next-line no-console
-            console.log("[voice] hook handler set?", !!handler)
             if (!handler) return
             try {
               if (
@@ -283,15 +275,10 @@ export function useVoiceSession(
                 typeof (msg as { type?: unknown }).type === "string"
               ) {
                 handler(msg as VoiceServerMessage)
-              } else {
-                // eslint-disable-next-line no-console
-                console.log("[voice] hook msg shape rejected", msg)
               }
-            } catch (e) {
+            } catch {
               // Best-effort. Consumer-side errors shouldn't tear down
               // the audio session.
-              // eslint-disable-next-line no-console
-              console.log("[voice] hook handler threw", e)
             }
           },
         },

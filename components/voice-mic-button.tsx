@@ -99,12 +99,6 @@ export function VoiceMicButton() {
   // path list drifts.
   const handleServerMessage = useCallback(
     (msg: VoiceServerMessage) => {
-      // Diagnostic log — confirms server-messages are reaching this
-      // handler at all. Strip once nav/toast have been stable in real
-      // use for a few days. See voice-agent/LEARNINGS.md entry on
-      // "Unknown frame kind" debugging.
-      // eslint-disable-next-line no-console
-      console.log("[voice] onServerMessage", msg.type, msg.data)
       if (msg.type === "navigate_to") {
         const data = (msg.data ?? {}) as { path?: unknown }
         const target = typeof data.path === "string" ? data.path.trim() : ""

@@ -189,6 +189,56 @@ the diagnostic that would have surfaced it in one shot.
   - Plain `.replace("{catalog}", catalog)` for one or two slots.
 - Whenever a "deserialize / unknown frame / connection died after 101" symptom shows up on a Pipecat WS client, **always check Modal logs first** before chasing wire-format theories — the FastAPI `except` path turns server-side Python exceptions into client-side text frames that mimic protocol errors. The real error is a Python traceback one `tail -100` away.
 
+### JS client at `@pipecat-ai/websocket-transport@1.6.5` only deserializes 2 of 4+ protobuf oneof variants (Slice 3 Stage 3)
+
+**Symptom:** intermittent `Failed to deserialize incoming message Error: Unknown frame kind` in the browser console mid-session. Audio kept playing; navigation/toast server-messages didn't reach our handler reliably; the connection survived but messages were silently dropped.
+
+**Root cause:** the Pipecat Python `ProtobufFrameSerializer` defines at least 5 oneof variants on the wire — `text`, `audio`, `transcription`, `message`, `interruption` (`src/pipecat/serializers/protobuf.py` lines 48-54). The JS deserializer in `@pipecat-ai/websocket-transport@1.6.5` only recognizes **`audio`** and **`message`** (see `index.js` around line 4163). Anything else throws `Unknown frame kind` and the frame is dropped. The most common leak: bare `TextFrame` (LLM/TTS streaming markers), `TranscriptionFrame` (STT output), and `InterruptionFrame` (VAD/turn-taking signals) reaching `transport.output()`. Their user-facing payloads ALSO travel separately as `BotLLMTextMessage` / `UserTranscriptionMessage` in the `message` oneof via RTVIObserver, so dropping the bare frames loses no client-visible data.
+
+**Fix:** drop them at the pipeline level with a small `FrameProcessor` (see `WireFrameFilter` in `pipeline.py`) placed immediately before `transport.output()`. Match with `isinstance` (not `type().__name__ ==`) so subclasses (`LLMTextFrame`, `TTSTextFrame`, `InterimTranscriptionFrame`) are also caught. Returning without `push_frame(frame, direction)` blocks the frame from reaching the serializer entirely.
+
+**Apply this lesson by:**
+- Pin BOTH the Python `pipecat-ai` AND the JS `@pipecat-ai/client-js` + `@pipecat-ai/websocket-transport` versions you're testing with. Bump them together. The wire format is the contract between them; lock-step or you'll spend an afternoon debugging "Unknown frame kind."
+- When upgrading either side, grep the JS transport for the `deserialize` function's oneof handling — if the server-side serializer added a new variant, the JS may not have caught up. Add it to your filter.
+
+### Stale Vercel prod bundle can fake a server bug for hours (Slice 3 Stage 3)
+
+**Symptom:** spent ~2 hours debugging server-side RTVI message dispatch (added diagnostic prints, traced Pipecat source, suspected pipecat version drift, considered the protobuf serializer). Server logs showed `voice-nav: send_server_message returned ok` for every navigate_to call. Browser console showed `[RTVI Message] type: 'server-message'` arriving at the SDK. But our `onServerMessage` callback never fired. The navigation never happened.
+
+**Actual root cause:** Vercel hadn't deployed the latest commit. The production bundle still had pre-fix `voice-mic-button.tsx` / `use-voice-session.ts` — without the `onServerMessage` callback registration. The user's "after git push, it started working" was Vercel's auto-deploy finally rebuilding with the actually-correct browser code that had been committed locally for hours.
+
+**Why this fooled us:** the Modal voice agent redeployed cleanly each time (one `modal deploy` command). But the Next.js code lives on Vercel and ships separately. We were testing against a half-deployed system — current server, stale client — and seeing wire-format-looking symptoms (messages arriving but not being handled).
+
+**Apply this lesson by:**
+- For any cross-stack change in this app, **confirm both deploys completed** before chasing bugs. Concretely: `vercel ls` or check the deployment dashboard for the latest commit's status, AND `modal app logs kitchen-inventory-voice` for the matching server version. If they're not in sync, your test is invalid.
+- Better: include a build-time constant in both bundles (e.g. `process.env.NEXT_PUBLIC_COMMIT_SHA` on the client, a `/health` field on the server) and log them at session start. A quick eyeball confirms both halves are running the same SHA.
+- The agent's verbal "doing X" while X clearly hasn't happened is a strong signal: the server believes it dispatched, the client didn't receive. Wire-format mismatches are one cause; **a stale client bundle is another** — and the latter is cheaper to rule out first.
+
+### Verbal acknowledgments for fast actions need to be tense-neutral (Slice 3 Stage 3)
+
+**Symptom:** user asked "take me to the shopping list", the page navigated correctly in ~100ms, then ~1-2 seconds later the agent said "Taking you to the shopping list now" — present-tense narration of an action that had already completed. The user noticed and called it out as awkward.
+
+**Root cause:** the LLM-then-TTS pipeline has two latency components:
+- **Tool side-effect** (`navigate_to` → RTVI server-message → browser router.push): ~100ms. Fast because no language model is involved.
+- **Verbal acknowledgment** (LLM completes the assistant turn → text → Sarvam TTS → audio frames → playback start): 1-2 seconds. Slow because the LLM has to produce the text, then TTS synthesizes it.
+
+So **the action visibly completes ~1-2 seconds before the user hears the agent confirm it**. Any present-tense narration ("Taking you to…", "I'm opening…", "Let me bring up…") will sometimes — often — land after the thing it describes is already done. Past-tense ("Opened your shopping list") sounds weird before nav has happened. Tense-neutral ("Done.", "There you go.", "Sure thing.") works either way.
+
+**Fix:** prompt-level — instruct the agent to use short tense-neutral acks for nav. Same advice probably applies to any future fast side-effect tool (apply_filter, clear_filters in Stage 4, etc.).
+
+**Apply this lesson by:**
+- For any tool whose side-effect happens faster than the verbal can be synthesized, **avoid present-tense narration in the prompt**. Default to short tense-neutral confirmation ("Done", "Got it", "Sure").
+- Toast notifications for writes have the inverse problem — the write completes BEFORE the toast renders (server pushes the toast RTVI message after the MCP returns). Same neutral phrasing works ("Done — added to your list" reads correctly whether the toast appears slightly before or after the audio).
+- The 1-2 second TTS lag is the more durable signal here: voice-driven UX should assume the verbal output is the SLOWEST channel and write text that's robust to that.
+
+### BotReady's `version` field is the RTVI protocol version, not the `pipecat-ai` package version (Slice 3 Stage 3 footnote)
+
+The JS client logs `[Pipecat Client] Bot is ready. Version: 1.4.0` at session start. We briefly thought this meant the Python `pipecat-ai` package was upgraded to 1.4.0 and pinned to 1.3.0 to "fix" wire drift. It wasn't — PyPI's latest `pipecat-ai` is 1.3.0 as of this writing; the "1.4.0" is the RTVI protocol revision that pipecat-ai 1.3.0 implements.
+
+If you need the actual installed package version, hit the `/diagnostics` endpoint (returns `pipecat_version`). Don't trust the BotReady string.
+
+The pin is still worth keeping — `>=0.0.40` would let a future minor with breaking RTVI changes land silently.
+
 ---
 
 ## Workflow patterns that worked
