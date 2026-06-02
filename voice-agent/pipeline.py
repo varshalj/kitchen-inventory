@@ -69,7 +69,7 @@ source" or "you can find the link in the app." Never spell out the URL.
 If you want to list items verbally, use natural phrasing: "you have three \
 things — eggs, milk, and bread" — NOT "1. eggs\n2. milk\n3. bread".
 
-# Current capabilities (Slice 1 + Slice 2 Stages 1 & 2)
+# Current capabilities (Slice 1 + Slice 2 + Slice 3 Stage 2)
 You can:
 - Describe what Kitchen Inventory does and explain how to use any feature
 - Read data via these tools:
@@ -81,6 +81,7 @@ You can:
   - `get_waste_stats(days)` (waste analytics, default 30 days)
   - `list_recipes` (saved recipes; returns ids for chaining)
   - `get_recipe(recipe_id)` (full ingredients + instructions)
+  - `get_current_view` (the page the user is currently looking at in the app)
 - Write data via (all use the strict confirmation flow below):
   - `add_to_shopping_list` (add items to shopping list)
   - `mark_as_consumed` (archive an inventory item; auto-restocks to shopping list)
@@ -255,6 +256,28 @@ When you receive an ambiguous error:
 
 If the user's pick is itself ambiguous ("the smaller one" but quantities \
 are equal), ask for more detail rather than guessing.
+
+# Page context awareness
+
+The browser pushes the user's current page (URL path + any filters in the \
+URL) to you as they navigate. You can read it via `get_current_view` — \
+returns `{path, search_params}`. The path is an app route like `/` \
+(inventory dashboard), `/shopping-list`, `/recipes`, `/profile`, etc.
+
+When to call `get_current_view`:
+- User asks "what page am I on?", "where am I?", "what am I looking at?" \
+  → call it and answer naturally. Don't read out the raw path; translate it \
+  into the human name. `/` → "the inventory dashboard"; `/shopping-list` \
+  → "your shopping list"; `/recipes` → "your recipes"; `/profile` → \
+  "your profile".
+- User says "this list", "this item", "here", "this one" and it's not \
+  obvious which screen they mean → call `get_current_view` first to ground \
+  the reference, then proceed.
+- If `path` is null / unknown (no context yet), say so plainly: "I don't \
+  know which page you're on yet — give me a second."
+
+Don't call `get_current_view` reflexively at the start of every \
+conversation. Only when the user's question is location-dependent.
 
 # Using tools well
 - Prefer calling a tool over guessing. If the user asks "what's expiring?", \
@@ -717,6 +740,24 @@ async def _run_voice_pipeline(
         required=["recipe_id"],
     )
 
+    # Slice 3 Stage 2: page context inbound. Browser pushes the current
+    # pathname + search_params via RTVI `sendClientMessage("page_context", ...)`
+    # on connect and on every route change. The server stashes the latest
+    # value in `session_state` (below). `get_current_view` reads it.
+    get_current_view_schema = FunctionSchema(
+        name="get_current_view",
+        description=(
+            "Get the page the user is currently looking at in the app. "
+            "Returns {path, search_params}. Use ONLY when the user asks "
+            "where they are ('what page am I on?', 'where am I?') or "
+            "references the current view ambiguously ('this list', 'this "
+            "item', 'here') and you need to ground the reference. Don't "
+            "call this reflexively for every turn."
+        ),
+        properties={},
+        required=[],
+    )
+
     # ── Write tools (per ADR 009) ──
     # All writes route through the MCP server. The MCP server enforces
     # dry-run-by-default: call with confirm=false to get a preview, then
@@ -875,12 +916,21 @@ async def _run_voice_pipeline(
             get_waste_stats_schema,
             list_recipes_schema,
             get_recipe_schema,
+            get_current_view_schema,
             add_to_shopping_list_schema,
             mark_as_consumed_schema,
             remove_from_shopping_list_schema,
             update_shopping_item_schema,
         ]
     )
+
+    # ── Per-session client-pushed state ──
+    # Holds the latest page_context message sent by the browser via RTVI
+    # `sendClientMessage("page_context", {path, search_params})`. The
+    # on_client_message handler (registered with `rtvi` further down)
+    # mutates this dict; the get_current_view tool handler reads from it.
+    # Mutable dict (not just a variable) so closures see the live value.
+    session_state: dict[str, object] = {"page_context": None}
 
     # ── Tool handlers ──
     # Closures over user_token (for RLS) + logging context. Each handler
@@ -981,6 +1031,29 @@ async def _run_voice_pipeline(
             "get_recipe",
             lambda a: tool_reads.get_recipe(user_token, recipe_id=a.get("recipe_id", "")),
         ),
+    )
+
+    # ── get_current_view — reads browser-pushed page context (Slice 3 S2) ──
+    # No HTTP / DB hit; just reads session_state which the on_client_message
+    # handler keeps fresh. Wrapped in _make_tool_handler for free latency
+    # logging — the latency will be ~0ms, which is itself useful signal
+    # that the LLM is asking for cheap context, not a real read.
+    async def _get_current_view(_args):
+        ctx = session_state.get("page_context")
+        if not ctx:
+            # No page_context received yet (cold start race, or client
+            # disconnected before sending). Tell the LLM plainly so it
+            # can apologize naturally rather than guess.
+            return {
+                "path": None,
+                "search_params": {},
+                "note": "no page context received yet",
+            }
+        return ctx
+
+    llm.register_function(
+        "get_current_view",
+        _make_tool_handler("get_current_view", _get_current_view),
     )
 
     # ── Write tool handlers (route through MCP per ADR 006) ──
@@ -1216,6 +1289,31 @@ async def _run_voice_pipeline(
     # ambiguity that plagues early voice UX. Direct TTSSpeakFrame bypasses
     # the LLM — cheaper and deterministic for a fixed greeting.
     GREETING = "Hi! I'm Kitchen Mate. What can I help you with?"
+
+    @rtvi.event_handler("on_client_message")
+    async def on_client_message(rtvi_processor, msg):
+        """Handle arbitrary client → server RTVI messages.
+
+        Currently the only message type is `page_context`, sent by the
+        browser on connect + every route change (see use-voice-session
+        sendClientMessage wrapper + voice-mic-button effect). We stash
+        the latest payload in session_state for get_current_view to read.
+
+        msg shape: pipecat.processors.frameworks.rtvi.models.ClientMessage
+        with `.type: str` and `.data: Any | None`. Anything other than
+        `page_context` is ignored — future message types (Stage 3+) plug
+        in by adding branches here.
+        """
+        try:
+            if msg.type == "page_context" and isinstance(msg.data, dict):
+                session_state["page_context"] = msg.data
+                # One-line log so we can sanity-check from `modal app logs`
+                # that updates are flowing. Don't log full payload — paths
+                # can carry id-shaped segments we'd rather not echo.
+                path = msg.data.get("path")
+                print(f"voice-context: page_context updated path={path}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"voice-context: on_client_message error: {e}", flush=True)
 
     @rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi_processor):

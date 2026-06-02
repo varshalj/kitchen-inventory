@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import {
   Mic,
   Loader2,
@@ -79,11 +79,16 @@ function preloadPipecatSdk() {
 }
 
 export function VoiceMicButton() {
-  const { status, transcript, error, connect, disconnect } = useVoiceSession()
+  const { status, transcript, error, connect, disconnect, sendClientMessage } =
+    useVoiceSession()
   const [expanded, setExpanded] = useState(false)
   const overlayActive = useOverlayActive()
   const { chipVisible } = useReview()
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  // Stable string for effect deps — URLSearchParams identity churns on
+  // every render in app-router. toString() gives a deterministic key.
+  const searchParamsKey = searchParams?.toString() ?? ""
   const { toast } = useToast()
 
   // Pre-warm the Pipecat SDK chunks on mount so the first connect tap
@@ -115,6 +120,35 @@ export function VoiceMicButton() {
       })
     }
   }, [overlayActive, isSessionAlive, disconnect, toast])
+
+  // Slice 3 Stage 2: push the user's current page context into the
+  // voice session so the agent can answer "what page am I on?" and
+  // ground references like "this list" / "this item". We send:
+  //   - once when the session becomes ready (status flips to "speaking"
+  //     for the greeting or "connected" thereafter)
+  //   - again on any pathname / search-params change while the session
+  //     is alive (route navigation, filter changes, etc.)
+  //
+  // We deliberately skip "connecting" — the RTVI client only allows
+  // sendClientMessage after handshake (transportReady), which the hook
+  // tracks via clientReadyRef. Status reaching "speaking"/"connected"
+  // guarantees the handshake has completed. The hook also silently
+  // drops sends before ready, so calls during status churn are safe.
+  const sessionReady = status === "connected" || status === "speaking"
+  useEffect(() => {
+    if (!sessionReady) return
+    const params: Record<string, string> = {}
+    if (searchParams) {
+      for (const [k, v] of searchParams.entries()) params[k] = v
+    }
+    sendClientMessage("page_context", {
+      path: pathname || "/",
+      search_params: params,
+    })
+    // searchParamsKey is the stable string surrogate for the
+    // URLSearchParams object whose identity changes each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, searchParamsKey, sessionReady, sendClientMessage])
 
   // Hide on non-main pages (auth flow, /add-item, marketing pages, etc.)
   // and whenever an overlay or the review chip is visible. Each of these

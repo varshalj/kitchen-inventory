@@ -15,6 +15,7 @@
  * and the marketing/onboarding pages don't have authenticated sessions.
  */
 
+import { Suspense } from "react"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { VoiceMicButton } from "./voice-mic-button"
 
@@ -38,7 +39,18 @@ export async function VoiceMicGated() {
 
     if (error || !data?.voice_agent_enabled) return null
 
-    return <VoiceMicButton />
+    // Suspense boundary: VoiceMicButton uses `useSearchParams()` (Slice 3
+    // Stage 2 — pushes URL to the voice agent so it knows what page the
+    // user is on). In Next.js 16, a client component using
+    // useSearchParams without an enclosing Suspense boundary opts every
+    // page below this layout into fully dynamic rendering. The button is
+    // optional UI; null fallback keeps the page render cost flat while
+    // the param hook hydrates client-side.
+    return (
+      <Suspense fallback={null}>
+        <VoiceMicButton />
+      </Suspense>
+    )
   } catch {
     return null
   }

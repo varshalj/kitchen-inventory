@@ -58,6 +58,17 @@ export interface UseVoiceSessionReturn {
   error: string | null
   connect: () => Promise<void>
   disconnect: () => Promise<void>
+  /**
+   * Fire-and-forget custom message to the voice agent (RTVI
+   * `sendClientMessage`). Used to push browser-side context — currently
+   * the page the user is viewing — so the agent can answer "where am I?"
+   * and ground "this list" / "this item" references.
+   *
+   * Silently no-ops if the client isn't ready yet (pre-handshake) or has
+   * been disconnected. Callers don't need to gate on `status`; the hook
+   * tracks readiness internally via a ref set in `onConnected`.
+   */
+  sendClientMessage: (type: string, data?: unknown) => void
 }
 
 function generateTurnId(): string {
@@ -80,6 +91,14 @@ export function useVoiceSession(): UseVoiceSessionReturn {
   // hold the status at "connecting" through the greeting so we don't
   // briefly flash "Listening" before the agent has stopped speaking.
   const greetingDoneRef = useRef(false)
+  // Tracks whether the Pipecat client has completed its handshake and is
+  // ready to receive `sendClientMessage` calls. RTVI's sendClientMessage
+  // is gated by an internal `transportReady` decorator — calling it
+  // before the client reaches that state is dropped/rejected. We flip
+  // this in `onConnected` (after the WS + RTVI handshake) and reset in
+  // `onDisconnected`. The `sendClientMessage` wrapper below checks this
+  // ref so callers don't have to gate on status themselves.
+  const clientReadyRef = useRef(false)
 
   const safeSetStatus = useCallback((next: VoiceStatus) => {
     if (mountedRef.current) setStatus(next)
@@ -110,6 +129,7 @@ export function useVoiceSession(): UseVoiceSessionReturn {
     setError(null)
     setTranscript([])
     greetingDoneRef.current = false
+    clientReadyRef.current = false
 
     try {
       // 1. Get user JWT from existing Supabase session — no manual paste.
@@ -155,6 +175,12 @@ export function useVoiceSession(): UseVoiceSessionReturn {
             // greeting, not yet listening. We'll flip to "connected"
             // only after the first onBotStoppedSpeaking fires (greeting
             // finished, now actually listening for user input).
+            //
+            // Mark the client ready so sendClientMessage() calls
+            // (page_context updates) can flow through. RTVI gates
+            // sendClientMessage on internal transportReady — this
+            // callback fires after handshake, so it's safe from here.
+            clientReadyRef.current = true
           },
           onDisconnected: () => {
             if (mountedRef.current) {
@@ -162,6 +188,7 @@ export function useVoiceSession(): UseVoiceSessionReturn {
             }
             clientRef.current = null
             greetingDoneRef.current = false
+            clientReadyRef.current = false
           },
           onError: (err: unknown) => {
             if (!mountedRef.current) return
@@ -210,6 +237,28 @@ export function useVoiceSession(): UseVoiceSessionReturn {
     }
   }, [status, appendTurn, safeSetStatus])
 
+  const sendClientMessage = useCallback(
+    (type: string, data?: unknown) => {
+      // Silently no-op when no client or before handshake completes —
+      // callers (e.g. the page_context effect in voice-mic-button) can
+      // call this eagerly without gating on status. Per Pipecat JS
+      // client source, sendClientMessage is fire-and-forget at the
+      // RTVI layer (wraps as RTVIMessage(CLIENT_MESSAGE, {t, d})).
+      const client = clientRef.current as
+        | { sendClientMessage?: (type: string, data?: unknown) => void }
+        | null
+      if (!client?.sendClientMessage) return
+      if (!clientReadyRef.current) return
+      try {
+        client.sendClientMessage(type, data)
+      } catch {
+        // Best-effort. A failed send (e.g. transport tore down between
+        // the ready check and the call) shouldn't crash the consumer.
+      }
+    },
+    [],
+  )
+
   const disconnect = useCallback(async () => {
     const client = clientRef.current as {
       disconnect?: () => Promise<void>
@@ -244,5 +293,5 @@ export function useVoiceSession(): UseVoiceSessionReturn {
     }
   }, [])
 
-  return { status, transcript, error, connect, disconnect }
+  return { status, transcript, error, connect, disconnect, sendClientMessage }
 }
