@@ -231,6 +231,33 @@ So **the action visibly completes ~1-2 seconds before the user hears the agent c
 - Toast notifications for writes have the inverse problem — the write completes BEFORE the toast renders (server pushes the toast RTVI message after the MCP returns). Same neutral phrasing works ("Done — added to your list" reads correctly whether the toast appears slightly before or after the audio).
 - The 1-2 second TTS lag is the more durable signal here: voice-driven UX should assume the verbal output is the SLOWEST channel and write text that's robust to that.
 
+### Voice-agent prompt path mappings need to match actual Next.js routes (Slice 3 Stage 4)
+
+**Symptom:** user said "take me to inventory and filter for vegetables". Agent verbally said "Done" but the user ended up on a different page than expected. Modal logs showed `voice-context: page_context updated path=/`, then `path=/auth`, then `path=/dashboard` — a multi-hop bounce. Subsequent `apply_filter` calls fired against the wrong intermediate page state.
+
+**Root cause:** I had written into the system prompt's Navigation section that `/` maps to "home / inventory / dashboard / main screen". But the app's actual inventory page is at `/dashboard`. The bare `/` is the unauthenticated marketing landing page (`app/page.tsx` returns `<LandingPage />`). When the agent called `navigate_to("/")`, the LandingPage rendered briefly, then app-level auth logic bounced the signed-in user through `/auth` → `/dashboard`. The intermediate transitions were visible to the user as flicker, and any back-to-back `apply_filter` got applied against the wrong path.
+
+**Fix:** updated the prompt to map "home / inventory / dashboard" → `/dashboard`, added `/` to both the server-side `_NAVIGATE_BLOCKED_PATHS` and the browser-side `HIDDEN_PATHS` set as defense in depth, and wrote a CRITICAL note in the prompt about why `/` is wrong for signed-in users.
+
+**Apply this lesson by:**
+- When writing a path-mapping table into a voice agent's prompt, **always grep the actual `app/` directory** (`find app -name page.tsx`) first and verify each target route exists AND is the intended destination for an authenticated user. Don't infer routes from feature names.
+- For Next.js apps that have a separate landing page at `/`, signed-in users live at a *different* root (here: `/dashboard`). Bake this into the prompt as an explicit "DO NOT navigate to `/`" instruction — relying on the LLM to figure it out from context fails the first time it tries.
+- A multi-hop URL bounce (`/` → `/auth` → `/dashboard` in the page_context logs) is a strong signal the agent navigated to a path that triggers an auth/redirect chain rather than landing where the user expected.
+
+### URL-param tools need both a writer (server message) AND a reader (component `useSearchParams`) — Slice 3 Stage 4
+
+**Symptom:** voice agent successfully called `apply_filter("filter", "expired")`. Server logs confirmed `rtvi.send_server_message` succeeded. Browser handler in `voice-mic-button.tsx` correctly ran `router.push("/dashboard?filter=expired")`. URL bar updated. **But the UI didn't filter.** Same problem on `/analytics` (`?timeframe=`) and `/archived` (`?tab=`).
+
+**Root cause:** the consuming page components (`inventory-dashboard.tsx`, `waste-analytics.tsx`, `archived-items.tsx`) kept their filter state in local `useState` and never read from URL search params. The Explore agent's earlier reconnaissance reported "valid values for `?filter=` are 'all', 'expired', 'expiring-soon'…" — but those were the *internal state enums*, not URL bindings. I read that report and assumed `useSearchParams` wiring already existed. It didn't.
+
+**Fix:** added a small `useEffect` to each of the three consuming components: read the relevant URL param via `useSearchParams`, validate it (where the state type is a union), call the existing `setActive...` setter. One-way URL → state sync; UI taps continue to update local state without writing back to URL (asymmetric but minimal scope; full URL-as-source-of-truth refactor remains as backlog).
+
+**Apply this lesson by:**
+- A voice tool that drives the UI via URL params is **two halves**: (1) server emits a message + browser pushes the URL change, AND (2) the consuming page component reactively reads the URL. Forgetting half-two is silent — URL updates but nothing renders differently, which looks identical to "voice didn't do anything."
+- When planning a new URL-driven voice tool, the very first verification step should be `grep -rn "useSearchParams" components/<consuming-page>.tsx`. If empty, the page needs URL-reading wired up *before* the voice tool is worth building.
+- The Explore agent will happily describe "values that go in `?filter=`" without verifying anything actually reads from `?filter=`. Treat its output as a hypothesis to verify, not a contract. The cheap verification: open the consuming component and check for `useSearchParams` / `searchParams.get(...)` for that exact param name.
+- Once you accept URL-driven state as the design, the natural next step is to make the URL *the* source of truth (no `useState` for filter/sort, derive directly from `useSearchParams`, and have UI taps write to URL via `router.replace`). That's a bigger refactor — for an MVP voice slice, one-way sync (URL → state, useEffect) is sufficient and keeps the existing UI-tap code path unchanged.
+
 ### BotReady's `version` field is the RTVI protocol version, not the `pipecat-ai` package version (Slice 3 Stage 3 footnote)
 
 The JS client logs `[Pipecat Client] Bot is ready. Version: 1.4.0` at session start. We briefly thought this meant the Python `pipecat-ai` package was upgraded to 1.4.0 and pinned to 1.3.0 to "fix" wire drift. It wasn't — PyPI's latest `pipecat-ai` is 1.3.0 as of this writing; the "1.4.0" is the RTVI protocol revision that pipecat-ai 1.3.0 implements.
