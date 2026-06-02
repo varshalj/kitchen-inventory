@@ -1,5 +1,7 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
+import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Providers } from "./providers"
 import { VoiceMicGated } from "@/components/voice-mic-gated"
 import "./globals.css"
@@ -92,6 +94,8 @@ export default function RootLayout({
               cost. Auto-hides when any overlay/sheet is open (Policy A, ADR 010). */}
           <VoiceMicGated />
         </Providers>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
