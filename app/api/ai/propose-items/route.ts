@@ -19,7 +19,11 @@ const requestSchema = z.object({
 
 const proposalSchema = z.object({
   name: z.string().min(1),
-  brand: z.string().optional(),
+  // .nullable() so we tolerate the model occasionally returning brand: null
+  // instead of omitting the field (it sees brand_raw documented as
+  // "string|null" nearby and generalises). normalizeModelOutput converts the
+  // null to undefined so downstream consumers continue to see string | undefined.
+  brand: z.string().nullable().optional(),
   category: z.string().min(1),
   expiryDate: z.string().min(1),
   quantity: z.number().min(0.001),
@@ -147,6 +151,10 @@ function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unkn
       if (typeof out.quantity !== "number" || (out.quantity as number) <= 0) out.quantity = 1
 
       if (!out.unit || typeof out.unit !== "string" || !(out.unit as string).trim()) out.unit = "pcs"
+
+      // Model sometimes returns brand: null when it should omit the field.
+      // Strip nulls so the downstream type stays string | undefined.
+      if (out.brand === null) delete out.brand
 
       if (typeof out.price === "number") out.price = String(out.price)
 
