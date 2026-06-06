@@ -18,6 +18,57 @@ const SHOPPING_ITEM_OUTPUT = {
   },
 }
 
+// Core inventory item shape returned by read tools. Nullable on most fields
+// because the DB row is sparse: many items lack brand/price/orderedFrom/etc.
+const INVENTORY_ITEM_OUTPUT = {
+  type: "object",
+  required: ["id", "name", "category", "expiryDate"],
+  properties: {
+    id: { type: "string" },
+    name: { type: "string" },
+    category: { type: "string" },
+    quantity: { type: "number" },
+    unit: { type: "string" },
+    expiryDate: { type: "string" },
+    location: { type: ["string", "null"] },
+    brand: { type: ["string", "null"] },
+    price: { type: ["string", "null"], description: "Original purchase price, stored as a string (currency-stripped)." },
+    orderedFrom: { type: ["string", "null"], description: "Platform/vendor: 'Blinkit', 'Zepto', 'DMart', 'Local store', etc." },
+    priceSource: {
+      type: ["string", "null"],
+      enum: ["receipt_line", "mrp", "order_total", "unknown", null],
+      description: "Where the price was read from on the source artifact.",
+    },
+    quantityRaw: { type: ["string", "null"], description: "Literal as-printed quantity, e.g. '500g', '1 kg', '6 nos'." },
+    addedOn: { type: ["string", "null"], description: "ISO timestamp when the item was first added to inventory (≈ purchase date)." },
+    consumedOn: { type: ["string", "null"] },
+    wastedOn: { type: ["string", "null"] },
+    notes: { type: ["string", "null"] },
+    archived: { type: "boolean" },
+    archiveReason: {
+      type: ["string", "null"],
+      enum: ["consumed", "wasted", "other", null],
+    },
+  },
+}
+
+const RECIPE_SUMMARY_OUTPUT = {
+  type: "object",
+  required: ["id", "title"],
+  properties: {
+    id: { type: "string" },
+    title: { type: "string" },
+    sourceUrl: { type: ["string", "null"] },
+    sourcePlatform: { type: ["string", "null"] },
+    servings: { type: ["number", "null"] },
+    prepTimeMinutes: { type: ["number", "null"] },
+    cookTimeMinutes: { type: ["number", "null"] },
+    totalTimeMinutes: { type: ["number", "null"] },
+    pantryScore: { type: ["number", "null"], description: "0–1 fraction of recipe ingredients available in inventory." },
+    isBookmark: { type: "boolean" },
+  },
+}
+
 // Plain JSON Schema tool definitions — no Zod anywhere, zero bundling risk.
 const TOOL_DEFINITIONS = [
   {
@@ -32,6 +83,14 @@ const TOOL_DEFINITIONS = [
         location: { type: "string", description: "Filter by location (e.g. fridge, pantry)" },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["count", "items"],
+      properties: {
+        count: { type: "number" },
+        items: { type: "array", items: INVENTORY_ITEM_OUTPUT },
+      },
+    },
   },
   {
     name: "get_expiring_soon",
@@ -41,6 +100,25 @@ const TOOL_DEFINITIONS = [
       type: "object",
       properties: {
         days: { type: "number", description: "Number of days to look ahead (default 3)" },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      required: ["days", "count", "items"],
+      properties: {
+        days: { type: "number" },
+        count: { type: "number" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "name", "expiryDate", "daysLeft"],
+            properties: {
+              ...INVENTORY_ITEM_OUTPUT.properties,
+              daysLeft: { type: "number", description: "Days until expiry, may be negative if past." },
+            },
+          },
+        },
       },
     },
   },
@@ -58,13 +136,55 @@ const TOOL_DEFINITIONS = [
         },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["status", "count", "items"],
+      properties: {
+        status: { type: "string" },
+        count: { type: "number" },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "name", "quantity"],
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              quantity: { type: "number" },
+              unit: { type: "string" },
+              category: { type: ["string", "null"] },
+              completed: { type: "boolean" },
+              addedFrom: { type: ["string", "null"], enum: ["consumed", "manual", "voice", "agent", null] },
+              brand: { type: ["string", "null"] },
+              notes: { type: ["string", "null"] },
+            },
+          },
+        },
+      },
+    },
   },
   {
     name: "list_recipes",
     title: "List Recipes",
     description:
-      "List saved recipes with title, source, servings, prep/cook time, and pantry compatibility score.",
-    inputSchema: { type: "object", properties: {} },
+      "List saved recipes with title, source, servings, prep/cook time, and pantry compatibility score. Use bookmarked_only:true to filter to recipes the user has explicitly bookmarked.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bookmarked_only: {
+          type: "boolean",
+          description: "If true, only return recipes the user bookmarked. Default false returns all saved recipes.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      required: ["count", "recipes"],
+      properties: {
+        count: { type: "number" },
+        recipes: { type: "array", items: RECIPE_SUMMARY_OUTPUT },
+      },
+    },
   },
   {
     name: "get_recipe",
@@ -75,6 +195,44 @@ const TOOL_DEFINITIONS = [
       required: ["recipe_id"],
       properties: {
         recipe_id: { type: "string", description: "The recipe UUID" },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      description: "Recipe with full ingredients. Returns { error } when recipe_id is missing or not found.",
+      properties: {
+        error: { type: "string" },
+        recipe: {
+          type: "object",
+          required: ["id", "title"],
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            sourceUrl: { type: ["string", "null"] },
+            servings: { type: ["number", "null"] },
+            prepTimeMinutes: { type: ["number", "null"] },
+            cookTimeMinutes: { type: ["number", "null"] },
+            totalTimeMinutes: { type: ["number", "null"] },
+            instructions: { type: ["array", "null"], items: { type: "string" } },
+            notes: { type: ["string", "null"] },
+            imageUrl: { type: ["string", "null"] },
+          },
+        },
+        ingredients: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string" },
+              quantity: { type: ["number", "null"] },
+              unit: { type: ["string", "null"] },
+              optional: { type: ["boolean", "null"] },
+              preparation: { type: ["string", "null"] },
+              group: { type: ["string", "null"] },
+            },
+          },
+        },
       },
     },
   },
@@ -89,6 +247,28 @@ const TOOL_DEFINITIONS = [
         limit: { type: "number", description: "Max number of suggestions (default 5)" },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["count", "suggestions"],
+      properties: {
+        count: { type: "number" },
+        suggestions: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["id", "title"],
+            properties: {
+              id: { type: "string" },
+              title: { type: "string" },
+              pantryScore: { type: ["number", "null"] },
+              servings: { type: ["number", "null"] },
+              totalTimeMinutes: { type: ["number", "null"] },
+              sourceUrl: { type: ["string", "null"] },
+            },
+          },
+        },
+      },
+    },
   },
   {
     name: "get_waste_stats",
@@ -101,17 +281,192 @@ const TOOL_DEFINITIONS = [
         days: { type: "number", description: "Days to look back (default 30)" },
       },
     },
+    outputSchema: {
+      type: "object",
+      required: ["periodDays", "totalWasted", "byCategory", "byReason", "recentItems"],
+      properties: {
+        periodDays: { type: "number" },
+        totalWasted: { type: "number" },
+        byCategory: { type: "object", additionalProperties: { type: "number" }, description: "Map of category → count." },
+        byReason: { type: "object", additionalProperties: { type: "number" }, description: "Map of wastageReason → count." },
+        recentItems: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name"],
+            properties: {
+              name: { type: "string" },
+              category: { type: ["string", "null"] },
+              reason: { type: ["string", "null"] },
+              wastedOn: { type: ["string", "null"] },
+              price: { type: ["string", "null"] },
+            },
+          },
+        },
+      },
+    },
   },
   {
     name: "search_inventory",
     title: "Search Inventory",
     description:
-      "Fuzzy search inventory items by name across current and archived items. Requires query string.",
+      "Fuzzy search inventory items by name across current and archived items. Use this when looking up purchase metadata (price, vendor, dates) for a specific item — including ones the user already consumed or wasted. For multi-purchase aggregation across platforms, prefer get_purchase_history instead.",
     inputSchema: {
       type: "object",
       required: ["query"],
       properties: {
         query: { type: "string", description: "Search term" },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      required: ["query", "count", "items"],
+      properties: {
+        query: { type: "string" },
+        count: { type: "number" },
+        items: { type: "array", items: INVENTORY_ITEM_OUTPUT },
+      },
+    },
+  },
+  {
+    name: "get_purchase_history",
+    title: "Get Purchase History",
+    description:
+      "Get every recorded purchase of a given item (current AND archived), grouped by vendor/platform. Use this to answer 'where should I buy X next time' or 'how much have I spent on X'. Includes per-platform purchase count, avg price (across rows where price is parseable), and the raw per-purchase records with addedOn / orderedFrom / quantityRaw / priceSource. Per-platform avg does NOT normalize by quantity — consult quantityRaw + unit for accurate per-unit comparison.",
+    inputSchema: {
+      type: "object",
+      required: ["item_name"],
+      properties: {
+        item_name: {
+          type: "string",
+          description: "Item to search for. Uses case-insensitive substring match on the inventory name (e.g. 'onion' matches both 'Onion' and 'Spring Onion').",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      required: ["query", "count", "byPlatform", "purchases"],
+      properties: {
+        query: { type: "string" },
+        count: { type: "number" },
+        byPlatform: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["platform", "purchaseCount"],
+            properties: {
+              platform: { type: "string", description: "orderedFrom value, or 'unknown' for rows without one." },
+              purchaseCount: { type: "number" },
+              avgPrice: { type: ["number", "null"], description: "Simple mean across rows with parseable price. Null if no priced rows." },
+              pricedCount: { type: "number", description: "Rows from this platform that had a parseable price." },
+              lastPurchaseOn: { type: ["string", "null"] },
+            },
+          },
+        },
+        purchases: {
+          type: "array",
+          description: "Per-row purchase records, most recent first.",
+          items: {
+            type: "object",
+            required: ["id", "name"],
+            properties: {
+              id: { type: "string" },
+              name: { type: "string" },
+              brand: { type: ["string", "null"] },
+              price: { type: ["string", "null"] },
+              priceSource: { type: ["string", "null"] },
+              quantity: { type: ["number", "null"] },
+              unit: { type: ["string", "null"] },
+              quantityRaw: { type: ["string", "null"] },
+              orderedFrom: { type: ["string", "null"] },
+              addedOn: { type: ["string", "null"] },
+              consumedOn: { type: ["string", "null"] },
+              wastedOn: { type: ["string", "null"] },
+              archived: { type: "boolean" },
+              archiveReason: { type: ["string", "null"] },
+            },
+          },
+        },
+        notes: { type: "string", description: "Caveats about the aggregation. Read this before forming conclusions." },
+      },
+    },
+  },
+  {
+    name: "get_spend_by_category",
+    title: "Get Spend By Category",
+    description:
+      "Get total spend by category over a lookback window. Sums the price column across inventory rows whose addedOn falls within the window. Use this for 'how much did I spend on dairy last month' or 'what's my biggest spend category'. Rows without a parseable price are counted in itemCount but excluded from spend.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "Lookback window in days (default 30)." },
+        category: {
+          type: "string",
+          description: "Optional: restrict to a single category (case-insensitive). When omitted, all categories are returned.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      required: ["periodDays", "category", "totalSpend", "byCategory"],
+      properties: {
+        periodDays: { type: "number" },
+        category: { type: "string", description: "Echoed filter; 'all' when no filter was applied." },
+        totalSpend: { type: "number" },
+        totalItemsWithPrice: { type: "number" },
+        totalItemsInWindow: { type: "number" },
+        byCategory: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["category", "spend", "itemCount"],
+            properties: {
+              category: { type: "string" },
+              spend: { type: "number" },
+              itemCount: { type: "number" },
+              pricedCount: { type: "number" },
+            },
+          },
+        },
+        notes: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "get_brand_usage",
+    title: "Get Brand Usage",
+    description:
+      "Get a ranked list of brands the user buys, with purchase count, last-purchase date, categories covered, and average price. Use this for 'what brands do I usually buy' or 'when did I last buy Amul'. Filter by category to limit the scope (e.g. only dairy brands).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        category: {
+          type: "string",
+          description: "Optional category filter (case-insensitive). When omitted, includes brands across all categories.",
+        },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      required: ["category", "totalUniqueBrands", "brands"],
+      properties: {
+        category: { type: "string" },
+        totalUniqueBrands: { type: "number" },
+        brands: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["brand", "purchaseCount"],
+            properties: {
+              brand: { type: "string" },
+              purchaseCount: { type: "number" },
+              lastPurchaseOn: { type: ["string", "null"] },
+              categories: { type: "array", items: { type: "string" } },
+              avgPrice: { type: ["number", "null"] },
+            },
+          },
+        },
+        notes: { type: "string" },
       },
     },
   },

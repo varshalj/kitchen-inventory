@@ -46,7 +46,7 @@ export async function handleToolCall(
     case "list_shopping":
       return handleListShopping(args, supabase)
     case "list_recipes":
-      return handleListRecipes(supabase)
+      return handleListRecipes(args, supabase)
     case "get_recipe":
       return handleGetRecipe(args, supabase)
     case "suggest_meals":
@@ -55,6 +55,12 @@ export async function handleToolCall(
       return handleGetWasteStats(args, supabase)
     case "search_inventory":
       return handleSearchInventory(args, supabase)
+    case "get_purchase_history":
+      return handleGetPurchaseHistory(args, supabase)
+    case "get_spend_by_category":
+      return handleGetSpendByCategory(args, supabase)
+    case "get_brand_usage":
+      return handleGetBrandUsage(args, supabase)
     case "add_to_shopping_list":
       return handleAddToShoppingList(args, supabase)
     case "mark_as_consumed":
@@ -95,6 +101,9 @@ async function handleListInventory(
       location: i.location,
       brand: i.brand,
       price: i.price,
+      orderedFrom: i.orderedFrom,
+      priceSource: i.priceSource,
+      quantityRaw: i.quantityRaw,
       addedOn: i.addedOn,
       notes: i.notes,
     })),
@@ -132,6 +141,7 @@ async function handleGetExpiringSoon(
         location: i.location,
         brand: i.brand,
         price: i.price,
+        orderedFrom: i.orderedFrom,
       }
     })
 
@@ -168,12 +178,18 @@ async function handleListShopping(
   })
 }
 
-async function handleListRecipes(supabase: SupabaseClient): Promise<ToolResult> {
+async function handleListRecipes(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
   const recipes = await recipeRepo.list(supabase)
+  const bookmarkedOnly = args.bookmarked_only === true
+
+  const filtered = bookmarkedOnly ? recipes.filter((r) => r.isBookmark) : recipes
 
   return textResult({
-    count: recipes.length,
-    recipes: recipes.map((r) => ({
+    count: filtered.length,
+    recipes: filtered.map((r) => ({
       id: r.id,
       title: r.title,
       sourceUrl: r.sourceUrl,
@@ -319,6 +335,12 @@ async function handleSearchInventory(
       location: i.location,
       brand: i.brand,
       price: i.price,
+      orderedFrom: i.orderedFrom,
+      priceSource: i.priceSource,
+      quantityRaw: i.quantityRaw,
+      addedOn: i.addedOn,
+      consumedOn: i.consumedOn,
+      wastedOn: i.wastedOn,
       notes: i.notes,
       archived: i.archived,
       archiveReason: i.archiveReason,
@@ -712,5 +734,226 @@ async function handleUpdateShoppingItem(
       completed: updated.completed,
       notes: updated.notes,
     },
+  })
+}
+
+// ─── Analytics tools (read-only) ─────────────────────────────────────────────
+
+/**
+ * Parse the `price` string column into a number for aggregation. Prices are
+ * stored as strings (often with currency symbols stripped, but defensively
+ * strips non-numeric except dot/minus). Returns null when unparseable so
+ * aggregations can skip cleanly.
+ */
+function parsePrice(raw: string | undefined | null): number | null {
+  if (raw === undefined || raw === null) return null
+  const trimmed = String(raw).replace(/[^0-9.\-]/g, "")
+  if (!trimmed) return null
+  const n = parseFloat(trimmed)
+  return Number.isFinite(n) ? n : null
+}
+
+async function handleGetPurchaseHistory(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
+  const itemName = typeof args.item_name === "string" ? args.item_name.trim().toLowerCase() : ""
+  if (!itemName) return errorResult({ error: "invalid_input", message: "item_name is required" })
+
+  const [current, archived] = await Promise.all([
+    inventoryRepo.list(supabase, false),
+    inventoryRepo.list(supabase, true),
+  ])
+  const all = [...current, ...archived]
+  const matches = all
+    .filter((i) => i.name.toLowerCase().includes(itemName))
+    // Most recent purchase first
+    .sort((a, b) => (b.addedOn ?? "").localeCompare(a.addedOn ?? ""))
+
+  // ── Per-platform rollup ────────────────────────────────────────────────────
+  const platformAgg = new Map<
+    string,
+    { purchaseCount: number; priceSum: number; pricedCount: number; lastPurchaseOn: string | null }
+  >()
+  for (const item of matches) {
+    const platform = item.orderedFrom?.trim() || "unknown"
+    const price = parsePrice(item.price)
+    const prev = platformAgg.get(platform) ?? {
+      purchaseCount: 0,
+      priceSum: 0,
+      pricedCount: 0,
+      lastPurchaseOn: null,
+    }
+    prev.purchaseCount += 1
+    if (price !== null) {
+      prev.priceSum += price
+      prev.pricedCount += 1
+    }
+    if (item.addedOn && (!prev.lastPurchaseOn || item.addedOn > prev.lastPurchaseOn)) {
+      prev.lastPurchaseOn = item.addedOn
+    }
+    platformAgg.set(platform, prev)
+  }
+  const byPlatform = Array.from(platformAgg.entries())
+    .map(([platform, agg]) => ({
+      platform,
+      purchaseCount: agg.purchaseCount,
+      avgPrice: agg.pricedCount > 0 ? +(agg.priceSum / agg.pricedCount).toFixed(2) : null,
+      pricedCount: agg.pricedCount,
+      lastPurchaseOn: agg.lastPurchaseOn,
+    }))
+    .sort((a, b) => b.purchaseCount - a.purchaseCount)
+
+  return textResult({
+    query: itemName,
+    count: matches.length,
+    byPlatform,
+    purchases: matches.map((i) => ({
+      id: i.id,
+      name: i.name,
+      brand: i.brand,
+      price: i.price,
+      priceSource: i.priceSource,
+      quantity: i.quantity,
+      unit: i.unit,
+      quantityRaw: i.quantityRaw,
+      orderedFrom: i.orderedFrom,
+      addedOn: i.addedOn,
+      consumedOn: i.consumedOn,
+      wastedOn: i.wastedOn,
+      archived: i.archived,
+      archiveReason: i.archiveReason,
+    })),
+    notes:
+      "Prices are stored as strings; avgPrice ignores rows where price isn't parseable. " +
+      "Per-platform avg does NOT normalize by quantity/unit — consult quantityRaw + unit per row for accurate per-unit comparison.",
+  })
+}
+
+async function handleGetSpendByCategory(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
+  const days = typeof args.days === "number" && args.days > 0 ? args.days : 30
+  const categoryFilter =
+    typeof args.category === "string" && args.category.trim() ? args.category.trim().toLowerCase() : null
+
+  const [current, archived] = await Promise.all([
+    inventoryRepo.list(supabase, false),
+    inventoryRepo.list(supabase, true),
+  ])
+  const cutoff = new Date(Date.now() - days * 86400000)
+
+  const inWindow = [...current, ...archived].filter((i) => {
+    if (!i.addedOn) return false
+    if (new Date(i.addedOn) < cutoff) return false
+    if (categoryFilter && (i.category ?? "").toLowerCase() !== categoryFilter) return false
+    return true
+  })
+
+  type Agg = { spend: number; itemCount: number; pricedCount: number }
+  const buckets = new Map<string, Agg>()
+  let totalSpend = 0
+  let totalPriced = 0
+
+  for (const item of inWindow) {
+    const cat = item.category?.trim() || "uncategorized"
+    const price = parsePrice(item.price)
+    const prev = buckets.get(cat) ?? { spend: 0, itemCount: 0, pricedCount: 0 }
+    prev.itemCount += 1
+    if (price !== null) {
+      prev.spend += price
+      prev.pricedCount += 1
+      totalSpend += price
+      totalPriced += 1
+    }
+    buckets.set(cat, prev)
+  }
+
+  const byCategory = Array.from(buckets.entries())
+    .map(([category, agg]) => ({
+      category,
+      spend: +agg.spend.toFixed(2),
+      itemCount: agg.itemCount,
+      pricedCount: agg.pricedCount,
+    }))
+    .sort((a, b) => b.spend - a.spend)
+
+  return textResult({
+    periodDays: days,
+    category: categoryFilter ?? "all",
+    totalSpend: +totalSpend.toFixed(2),
+    totalItemsWithPrice: totalPriced,
+    totalItemsInWindow: inWindow.length,
+    byCategory,
+    notes:
+      "Spend is summed over inventory rows added in the window (addedOn). Rows without a parseable price are counted in itemCount but excluded from spend. Item-level price is the original purchase price, not per-unit.",
+  })
+}
+
+async function handleGetBrandUsage(
+  args: Record<string, unknown>,
+  supabase: SupabaseClient,
+): Promise<ToolResult> {
+  const categoryFilter =
+    typeof args.category === "string" && args.category.trim() ? args.category.trim().toLowerCase() : null
+
+  const [current, archived] = await Promise.all([
+    inventoryRepo.list(supabase, false),
+    inventoryRepo.list(supabase, true),
+  ])
+
+  const items = [...current, ...archived].filter((i) => {
+    if (categoryFilter && (i.category ?? "").toLowerCase() !== categoryFilter) return false
+    return !!i.brand?.trim()
+  })
+
+  type Agg = {
+    purchaseCount: number
+    lastPurchaseOn: string | null
+    categories: Set<string>
+    priceSum: number
+    pricedCount: number
+  }
+  const brands = new Map<string, Agg>()
+
+  for (const item of items) {
+    const brand = item.brand!.trim()
+    const price = parsePrice(item.price)
+    const prev = brands.get(brand) ?? {
+      purchaseCount: 0,
+      lastPurchaseOn: null,
+      categories: new Set<string>(),
+      priceSum: 0,
+      pricedCount: 0,
+    }
+    prev.purchaseCount += 1
+    if (item.category) prev.categories.add(item.category)
+    if (item.addedOn && (!prev.lastPurchaseOn || item.addedOn > prev.lastPurchaseOn)) {
+      prev.lastPurchaseOn = item.addedOn
+    }
+    if (price !== null) {
+      prev.priceSum += price
+      prev.pricedCount += 1
+    }
+    brands.set(brand, prev)
+  }
+
+  const ranked = Array.from(brands.entries())
+    .map(([brand, agg]) => ({
+      brand,
+      purchaseCount: agg.purchaseCount,
+      lastPurchaseOn: agg.lastPurchaseOn,
+      categories: Array.from(agg.categories).sort(),
+      avgPrice: agg.pricedCount > 0 ? +(agg.priceSum / agg.pricedCount).toFixed(2) : null,
+    }))
+    .sort((a, b) => b.purchaseCount - a.purchaseCount)
+
+  return textResult({
+    category: categoryFilter ?? "all",
+    totalUniqueBrands: ranked.length,
+    brands: ranked,
+    notes:
+      "Aggregates across current AND archived inventory. Items without a brand field are excluded. avgPrice is the simple mean of the price column across this brand's rows — no per-unit normalization.",
   })
 }
