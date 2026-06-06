@@ -94,6 +94,7 @@ async function handleListInventory(
       expiryDate: i.expiryDate,
       location: i.location,
       brand: i.brand,
+      price: i.price,
       addedOn: i.addedOn,
       notes: i.notes,
     })),
@@ -129,6 +130,8 @@ async function handleGetExpiringSoon(
         quantity: i.quantity,
         unit: i.unit,
         location: i.location,
+        brand: i.brand,
+        price: i.price,
       }
     })
 
@@ -314,6 +317,9 @@ async function handleSearchInventory(
       unit: i.unit,
       expiryDate: i.expiryDate,
       location: i.location,
+      brand: i.brand,
+      price: i.price,
+      notes: i.notes,
       archived: i.archived,
       archiveReason: i.archiveReason,
     })),
