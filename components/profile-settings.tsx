@@ -39,6 +39,7 @@ import { FEATURE_FLAGS } from "@/lib/feature-flags"
 import { fetchWithAuth } from "@/lib/api-client"
 import { GROCERY_PLATFORMS } from "@/lib/grocery-platforms"
 import { BugReportDialog } from "@/components/bug-report-dialog"
+import { SwiggyIntegrationCard } from "@/components/swiggy-integration-card"
 import { useOnboarding } from "@/hooks/use-onboarding"
 
 interface EmailAccount {
@@ -579,6 +580,8 @@ export function ProfileSettings() {
       </Card>
 
       )}
+
+      <SwiggyIntegrationCard />
 
       <Card className="mb-6">
         <CardHeader className="pb-2">
