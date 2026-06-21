@@ -45,6 +45,7 @@ import { fetchWithAuth } from "@/lib/api-client"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import { cn, normalizeName } from "@/lib/utils"
 import { ItemDetailSheet } from "@/components/item-detail-sheet"
+import { formatQuantityUnit } from "@/components/quantity-with-units"
 import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useBugReportNudge } from "@/hooks/use-bug-report-nudge"
 import { RecipeImportSheet } from "@/components/recipe-import-sheet"
@@ -630,6 +631,114 @@ useEffect(() => {
       })
     } catch (error) {
       setItems((prev) => [item, ...prev])
+      const message = error instanceof Error ? error.message : "Consume operation failed"
+      triggerHaptic(HAPTIC_ERROR)
+      toastWithNudge({ title: "Consume Failed", description: message, variant: "destructive" })
+    }
+  }
+
+  // Partial consume/waste from the detail sheet. Splits the item into a consumed
+  // portion (decrements stock) and a wasted portion (server creates a prorated
+  // archived row that flows into waste analytics). Leaves a remainder in
+  // inventory when the two don't add up to the full quantity.
+  const handlePartialConsume = async (
+    item: InventoryItem,
+    spec: { quantityConsumed: number; quantityWasted: number; wastageReason: string | null },
+  ) => {
+    const { quantityConsumed, quantityWasted, wastageReason } = spec
+    const remaining = Number((Number(item.quantity) - quantityConsumed - quantityWasted).toFixed(3))
+    const depleted = remaining <= 1e-6
+
+    // Optimistic: decrement in place, or remove the row if nothing is left.
+    setItems((prev) =>
+      depleted
+        ? prev.filter((i) => i.id !== item.id)
+        : prev.map((i) => (i.id === item.id ? { ...i, quantity: remaining } : i)),
+    )
+    triggerHaptic(HAPTIC_SUCCESS)
+
+    const restore = () => setItems((prev) => [item, ...prev.filter((i) => i.id !== item.id)])
+
+    try {
+      const response = await fetchWithAuth("/api/inventory/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemId: item.id,
+          action: "consume",
+          addToShoppingList: depleted,
+          originalQuantity: item.quantity,
+          originalUnit: item.unit,
+          quantityConsumed,
+          quantityWasted,
+          wastageReason,
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || payload.status === "error") {
+        throw new Error(payload.error || "Consume operation failed")
+      }
+
+      const wasteRecordId: string | undefined = payload.wasteRecordId
+      const shoppingItemId: string | undefined = payload.shoppingItemId
+      const wasNewInsert: boolean = payload.wasNewInsert ?? true
+      const previousShoppingQuantity: number | undefined = payload.previousShoppingQuantity
+
+      if (depleted) queueForReview(item, "consumed")
+
+      const undo = async () => {
+        cancelPendingReview(item.id)
+        try {
+          await fetchWithAuth(`/api/inventory/${item.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ archived: false, archiveReason: null, consumedOn: null, quantity: item.quantity }),
+          })
+          if (wasteRecordId) {
+            await fetchWithAuth(`/api/inventory/${wasteRecordId}`, { method: "DELETE" })
+          }
+          if (shoppingItemId) {
+            if (wasNewInsert) {
+              await fetchWithAuth(`/api/shopping/${shoppingItemId}`, { method: "DELETE" })
+            } else {
+              await fetchWithAuth(`/api/shopping/${shoppingItemId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ quantity: previousShoppingQuantity ?? 1 }),
+              })
+            }
+          }
+          restore()
+        } catch {
+          toastWithNudge({ title: "Undo Failed", description: "Could not restore item.", variant: "destructive" })
+        }
+      }
+
+      const parts: string[] = []
+      if (quantityConsumed > 0) parts.push(`${formatQuantityUnit(quantityConsumed, item.unit)} used`)
+      if (quantityWasted > 0) parts.push(`${formatQuantityUnit(quantityWasted, item.unit)} wasted`)
+
+      toast({
+        title: depleted ? "Item used up" : "Inventory updated",
+        duration: 5000,
+        description: (
+          <div>
+            <span>
+              {item.name}: {parts.join(", ")}.
+              {!depleted && ` ${formatQuantityUnit(remaining, item.unit)} left.`}
+            </span>
+            {progressBar}
+          </div>
+        ),
+        action: (
+          <ToastAction altText="Undo" onClick={undo}>
+            Undo
+          </ToastAction>
+        ),
+      })
+    } catch (error) {
+      restore()
       const message = error instanceof Error ? error.message : "Consume operation failed"
       triggerHaptic(HAPTIC_ERROR)
       toastWithNudge({ title: "Consume Failed", description: message, variant: "destructive" })
@@ -1362,6 +1471,7 @@ useEffect(() => {
         onOpenChange={(open) => !open && setDetailItem(null)}
         onEdit={(item) => setEditItem(item)}
         onDelete={(item) => { setDetailItem(null); handleDeleteItem(item) }}
+        onPartialConsume={(item, spec) => { setDetailItem(null); void handlePartialConsume(item, spec) }}
       />
 
       {/* Bug Report Dialog (opened contextually after errors) */}
