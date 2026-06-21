@@ -1,7 +1,9 @@
 "use client"
 
-import { Edit, Trash2, MapPin, Tag, Calendar, Package, DollarSign, StickyNote, Store } from "lucide-react"
+import { useState } from "react"
+import { Edit, Trash2, MapPin, Tag, Calendar, Package, DollarSign, StickyNote, Store, Minus, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { unitInput } from "@/lib/constants"
 import { Badge } from "@/components/ui/badge"
 import {
   Sheet,
@@ -21,15 +23,22 @@ function formatPrice(price: string | undefined): string {
   return isNaN(n) ? (price ?? "") : n.toFixed(2)
 }
 
+export interface PartialUseSpec {
+  quantityConsumed: number
+  quantityWasted: number
+  wastageReason: string | null
+}
+
 interface ItemDetailSheetProps {
   item: InventoryItem | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onEdit: (item: InventoryItem) => void
   onDelete: (item: InventoryItem) => void
+  onPartialConsume: (item: InventoryItem, spec: PartialUseSpec) => void
 }
 
-export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: ItemDetailSheetProps) {
+export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete, onPartialConsume }: ItemDetailSheetProps) {
   const { settings } = useUserSettings()
   const currencySymbol = (CURRENCIES.find((c) => c.code === (settings?.currency || "INR")) || CURRENCIES[0]).symbol
 
@@ -117,6 +126,14 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete }: 
             </p>
           )}
 
+          {!item.archived && Number(item.quantity) > 0 && (
+            <PartialUsePanel
+              key={item.id}
+              item={item}
+              onApply={(spec) => onPartialConsume(item, spec)}
+            />
+          )}
+
           <div className="flex gap-3 pt-2">
             <Button
               variant="outline"
@@ -155,6 +172,149 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
       <div>
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="font-medium">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+const PARTIAL_WASTE_REASONS = [
+  { key: "expired", label: "Expired" },
+  { key: "spoiled", label: "Spoiled" },
+  { key: "unused", label: "Unused" },
+  { key: "excess", label: "Too much" },
+] as const
+
+function PartialUsePanel({ item, onApply }: { item: InventoryItem; onApply: (spec: PartialUseSpec) => void }) {
+  const cfg = unitInput(item.unit)
+  const max = Number(item.quantity) || 0
+  const round = (n: number) => {
+    const f = 10 ** cfg.decimals
+    return Math.max(0, Math.round(n * f) / f)
+  }
+
+  // Default: consume the whole item, waste nothing — one tap "Apply" = consume all.
+  const [consumed, setConsumed] = useState(() => round(max))
+  const [wasted, setWasted] = useState(0)
+  const [reason, setReason] = useState<string | null>(null)
+
+  const remaining = round(max - consumed - wasted)
+  const fmt = (n: number) => formatQuantityUnit(round(n), item.unit)
+  const pct = (n: number) => (max > 0 ? Math.max(0, Math.min(100, (n / max) * 100)) : 0)
+
+  const setC = (n: number) => setConsumed(round(Math.min(Math.max(0, n), max - wasted)))
+  const setW = (n: number) => setWasted(round(Math.min(Math.max(0, n), max - consumed)))
+
+  const canApply = consumed + wasted > 1e-6 && consumed + wasted <= max + 1e-6 && (wasted <= 1e-6 || !!reason)
+
+  return (
+    <div className="rounded-lg border p-3 space-y-3">
+      <p className="text-sm font-medium">How much did you use?</p>
+
+      <StepRow label="Consumed" tone="consume" value={consumed} unit={item.unit} cfg={cfg} max={round(max - wasted)} onChange={setC} />
+      <StepRow label="Wasted" tone="waste" value={wasted} unit={item.unit} cfg={cfg} max={round(max - consumed)} onChange={setW} />
+
+      {wasted > 1e-6 && (
+        <div className="space-y-1.5">
+          <p className="text-xs text-muted-foreground">Why was it wasted?</p>
+          <div className="flex flex-wrap gap-1.5">
+            {PARTIAL_WASTE_REASONS.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setReason(r.key)}
+                className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                  reason === r.key ? "border-primary bg-primary/10 text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+        <div className="bg-emerald-500" style={{ width: `${pct(consumed)}%` }} />
+        <div className="bg-red-500" style={{ width: `${pct(wasted)}%` }} />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {remaining > 1e-6 ? `${fmt(remaining)} will stay in inventory.` : "Nothing left — item will be archived."}
+      </p>
+
+      <Button
+        className="w-full active:scale-95 transition-transform"
+        disabled={!canApply}
+        onClick={() => onApply({ quantityConsumed: consumed, quantityWasted: wasted, wastageReason: wasted > 1e-6 ? reason : null })}
+      >
+        Apply
+      </Button>
+    </div>
+  )
+}
+
+function StepRow({
+  label,
+  tone,
+  value,
+  unit,
+  cfg,
+  max,
+  onChange,
+}: {
+  label: string
+  tone: "consume" | "waste"
+  value: number
+  unit?: string
+  cfg: { discrete: boolean; step: number; decimals: number }
+  max: number
+  onChange: (n: number) => void
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className={`text-sm ${tone === "waste" ? "text-red-600 dark:text-red-400" : ""}`}>{label}</span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-7 w-7"
+          aria-label={`Decrease ${label.toLowerCase()}`}
+          disabled={value <= 0}
+          onClick={() => onChange(value - cfg.step)}
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </Button>
+        {cfg.discrete ? (
+          <span className="w-20 text-center text-sm font-medium tabular-nums">
+            {formatQuantityUnit(value, unit)}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              inputMode="decimal"
+              value={value}
+              min={0}
+              max={max}
+              step={cfg.step}
+              aria-label={label}
+              onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+              className="h-7 w-16 rounded-md border bg-background text-center text-sm tabular-nums"
+            />
+            <span className="w-7 text-xs text-muted-foreground">{unit ?? "pcs"}</span>
+          </div>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-7 w-7"
+          aria-label={`Increase ${label.toLowerCase()}`}
+          disabled={value >= max}
+          onClick={() => onChange(value + cfg.step)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
       </div>
     </div>
   )
