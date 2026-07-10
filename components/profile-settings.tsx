@@ -62,7 +62,7 @@ function CopyButton({ text }: { text: string }) {
         setTimeout(() => setCopied(false), 2000)
       }}
     >
-      {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
     </Button>
   )
 }
@@ -126,9 +126,9 @@ function ConnectToAISection() {
           <CopyButton text={mcpUrl} />
         </div>
 
-        <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-2.5">
-          <ShieldCheck className="h-4 w-4 text-green-700 mt-0.5 shrink-0" />
-          <p className="text-xs text-green-800">
+        <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 p-2.5">
+          <ShieldCheck className="h-4 w-4 text-success mt-0.5 shrink-0" />
+          <p className="text-xs text-success">
             Uses your existing login via OAuth. AI assistants can only read your data (read-only access).
           </p>
         </div>
@@ -463,9 +463,9 @@ export function ProfileSettings() {
               </div>
 
               {/* Step 3 */}
-              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 space-y-0.5">
-                <p className="text-xs font-semibold text-amber-800">Step 3 — Wait for activation (up to 24h)</p>
-                <p className="text-xs text-amber-700">
+              <div className="rounded-lg bg-warning/10 border border-warning/30 px-3 py-2.5 space-y-0.5">
+                <p className="text-xs font-semibold text-warning">Step 3 — Wait for activation (up to 24h)</p>
+                <p className="text-xs text-warning">
                   After you add the forwarding address, Gmail sends us a confirmation. We'll verify it shortly. Once confirmed, all future order emails forward automatically.
                 </p>
               </div>

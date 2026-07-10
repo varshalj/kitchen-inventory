@@ -116,7 +116,7 @@ const handleGoogleSignIn = async () => {
                 {isLoadingGoogle ? "Redirecting..." : "Continue with Google"}
               </Button>
 
-              {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
+              {message ? <p className="text-sm text-success">{message}</p> : null}
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
             </CardContent>
           </Card>

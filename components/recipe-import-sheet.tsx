@@ -302,8 +302,8 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
                 onClick={() => setPhase("text-input")}
                 className="w-full flex items-center gap-4 rounded-xl border bg-card p-4 text-left hover:bg-muted/50 transition-colors active:scale-[0.99]"
               >
-                <div className="shrink-0 h-12 w-12 rounded-xl bg-green-500/10 flex items-center justify-center">
-                  <FileText className="h-5 w-5 text-green-600" />
+                <div className="shrink-0 h-12 w-12 rounded-xl bg-success/10 flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-success" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm">Paste recipe text</p>
@@ -387,13 +387,13 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
                   return (
                     <div key={label} className="flex items-center gap-3">
                       {isComplete ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                        <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
                       ) : isActive ? (
                         <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
                       ) : (
                         <div className="h-5 w-5 rounded-full border-2 border-muted shrink-0" />
                       )}
-                      <span className={`text-sm ${isComplete ? "text-green-600 font-medium" : isActive ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                      <span className={`text-sm ${isComplete ? "text-success font-medium" : isActive ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                         {label}
                       </span>
                     </div>

@@ -126,9 +126,9 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
 
         <div className="space-y-6 mb-20">
           {suggestions.expiredItems.length > 0 && (
-            <Card className="border-red-200">
+            <Card className="border-destructive/30">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center text-red-500">
+                <CardTitle className="text-lg flex items-center text-destructive">
                   <Info className="mr-2 h-4 w-4" />
                   Expired Items
                 </CardTitle>
@@ -136,7 +136,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {suggestions.expiredItems.map((item) => (
-                    <Badge key={item.id} variant="outline" className="bg-red-50 text-red-600 border-red-200">
+                    <Badge key={item.id} variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">
                       {item.name} ({new Date(item.expiryDate).toLocaleDateString()})
                     </Badge>
                   ))}
@@ -146,9 +146,9 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
           )}
 
           {suggestions.expiringItems.length > 0 && (
-            <Card className="border-amber-200">
+            <Card className="border-warning/30">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center text-amber-500">
+                <CardTitle className="text-lg flex items-center text-warning">
                   <Info className="mr-2 h-4 w-4" />
                   Use Soon
                 </CardTitle>
@@ -156,7 +156,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
                   {suggestions.expiringItems.map((item) => (
-                    <Badge key={item.id} variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">
+                    <Badge key={item.id} variant="outline" className="bg-warning/10 text-warning border-warning/30">
                       {item.name} ({new Date(item.expiryDate).toLocaleDateString()})
                     </Badge>
                   ))}
@@ -275,7 +275,7 @@ export function SmartSuggestions({ items, standalone = false }: SmartSuggestions
             <h3 className="text-sm font-medium mb-2">Use Soon</h3>
             <div className="flex flex-wrap gap-2">
               {suggestions.expiringItems.map((item) => (
-                <Badge key={item.id} variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">
+                <Badge key={item.id} variant="outline" className="bg-warning/10 text-warning border-warning/30">
                   {item.name} ({new Date(item.expiryDate).toLocaleDateString()})
                 </Badge>
               ))}

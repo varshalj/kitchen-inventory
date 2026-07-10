@@ -50,9 +50,9 @@ interface EditableIngredient extends ParsedIngredient {
 }
 
 const STATUS_CONFIG: Record<PantryMatchStatus, { label: string; color: string; icon: typeof Check }> = {
-  available: { label: "In pantry", color: "bg-green-100 text-green-800 border-green-200", icon: Check },
-  expiring: { label: "Expiring soon", color: "bg-amber-100 text-amber-800 border-amber-200", icon: AlertTriangle },
-  expired: { label: "Expired", color: "bg-red-100 text-red-800 border-red-200", icon: X },
+  available: { label: "In pantry", color: "bg-success/15 text-success border-success/30", icon: Check },
+  expiring: { label: "Expiring soon", color: "bg-warning/15 text-warning border-warning/30", icon: AlertTriangle },
+  expired: { label: "Expired", color: "bg-destructive/15 text-destructive border-destructive/30", icon: X },
   missing: { label: "Missing", color: "bg-muted text-muted-foreground border-border", icon: ShoppingCart },
 }
 
@@ -250,10 +250,10 @@ export function RecipeReviewScreen({
 
   const scoreColor =
     compatibilityScore >= 70
-      ? "text-green-600"
+      ? "text-success"
       : compatibilityScore >= 40
-        ? "text-amber-600"
-        : "text-red-600"
+        ? "text-warning"
+        : "text-destructive"
 
   return (
     <div className="min-h-screen bg-background pb-28">
@@ -298,10 +298,10 @@ export function RecipeReviewScreen({
               <div
                 className={`h-full rounded-full transition-all ${
                   compatibilityScore >= 70
-                    ? "bg-green-500"
+                    ? "bg-success"
                     : compatibilityScore >= 40
-                      ? "bg-amber-500"
-                      : "bg-red-500"
+                      ? "bg-warning"
+                      : "bg-destructive"
                 }`}
                 style={{ width: `${compatibilityScore}%` }}
               />

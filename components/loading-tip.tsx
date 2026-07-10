@@ -28,9 +28,9 @@ export function LoadingTip() {
   const tip = useMemo(() => TIPS[Math.floor(Math.random() * TIPS.length)], [])
 
   return (
-    <div className="flex items-start gap-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2.5">
-      <Lightbulb className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-      <p className="text-sm text-amber-900 dark:text-amber-200">{tip}</p>
+    <div className="flex items-start gap-2.5 rounded-lg bg-warning/10 border border-warning/30 px-3 py-2.5">
+      <Lightbulb className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+      <p className="text-sm text-warning">{tip}</p>
     </div>
   )
 }
