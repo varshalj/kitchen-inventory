@@ -1,6 +1,6 @@
 "use client"
 
-import { motion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import type { ReactNode } from "react"
 
 const itemVariants = {
@@ -17,16 +17,19 @@ export function AnimatedItem({
   index: number
   className?: string
 }) {
+  const reduceMotion = useReducedMotion()
+
   return (
     <motion.div
       variants={itemVariants}
-      initial="hidden"
+      // Skip the slide-in entirely under reduced motion — render at rest.
+      initial={reduceMotion ? false : "hidden"}
       animate="show"
-      transition={{
-        delay: Math.min(index, 15) * 0.04,
-        duration: 0.3,
-        ease: "easeOut",
-      }}
+      transition={
+        reduceMotion
+          ? { duration: 0 }
+          : { delay: Math.min(index, 15) * 0.04, duration: 0.3, ease: "easeOut" }
+      }
       className={className}
     >
       {children}
