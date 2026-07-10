@@ -28,9 +28,12 @@ const defaultSettings: UserSettings = {
   storageLocations: DEFAULT_STORAGE_LOCATIONS,
   country: "IN",
   deliveryPlatforms: GROCERY_PLATFORMS.map((p) => p.id),
-  // On by default so the feature is discoverable; the setting exists to switch
-  // provider or turn it off. mergeWithDefaults backfills this for existing users.
-  priceComparison: "quickcompare",
+  // Off by default: gated until it works reliably from an installed PWA. The
+  // aggregators read the user's location from their own localStorage, which the
+  // standalone web view can't share — so it's opt-in and also hidden in
+  // standalone mode (see useIsStandalonePWA + the Buy sheet). Flip to a provider
+  // once location can be passed through. mergeWithDefaults backfills existing users.
+  priceComparison: "off",
 }
 
 // Merge saved settings with defaults so new keys introduced in future deploys

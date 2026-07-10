@@ -393,7 +393,10 @@ export function ProfileSettings() {
               <ShoppingBag className="mr-2 h-4 w-4" />
               Price comparison
             </CardTitle>
-            <CardDescription>Compare prices across quick-commerce apps before you buy</CardDescription>
+            <CardDescription>
+              Compare prices across quick-commerce apps before you buy. Opens in a browser tab;
+              hidden in the installed app for now, where saved location isn&apos;t available.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
