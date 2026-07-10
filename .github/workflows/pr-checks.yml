@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so design-lint can diff against the PR base
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -34,6 +36,12 @@ jobs:
 
       - name: Lint
         run: pnpm run lint
+
+      - name: Design lint (UI conventions)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: pnpm run design:lint
 
       - name: Test
         run: pnpm run test
