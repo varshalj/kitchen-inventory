@@ -9,6 +9,7 @@
     "lint": "pnpm exec tsc --noEmit --pretty false",
     "typecheck": "pnpm exec tsc --noEmit",
     "test": "pnpm run typecheck",
+    "design:lint": "node scripts/design-lint.mjs",
     "audit:deps": "pnpm audit --audit-level=high"
   },
   "dependencies": {
