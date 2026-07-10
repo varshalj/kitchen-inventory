@@ -75,9 +75,9 @@ export function SearchAndFilter() {
   const getExpiryColor = (expiryDate: string) => {
     const daysUntilExpiry = Math.ceil((new Date(expiryDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))
 
-    if (daysUntilExpiry <= 3) return "border-red-500"
-    if (daysUntilExpiry <= 7) return "border-amber-500"
-    return "border-green-500"
+    if (daysUntilExpiry <= 3) return "border-destructive"
+    if (daysUntilExpiry <= 7) return "border-warning"
+    return "border-success"
   }
 
   return (

@@ -234,8 +234,8 @@ function PartialUsePanel({ item, onApply }: { item: InventoryItem; onApply: (spe
       )}
 
       <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-        <div className="bg-emerald-500" style={{ width: `${pct(consumed)}%` }} />
-        <div className="bg-red-500" style={{ width: `${pct(wasted)}%` }} />
+        <div className="bg-success" style={{ width: `${pct(consumed)}%` }} />
+        <div className="bg-destructive" style={{ width: `${pct(wasted)}%` }} />
       </div>
       <p className="text-xs text-muted-foreground">
         {remaining > 1e-6 ? `${fmt(remaining)} will stay in inventory.` : "Nothing left — item will be archived."}
@@ -271,7 +271,7 @@ function StepRow({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <span className={`text-sm ${tone === "waste" ? "text-red-600 dark:text-red-400" : ""}`}>{label}</span>
+      <span className={`text-sm ${tone === "waste" ? "text-destructive" : ""}`}>{label}</span>
       <div className="flex items-center gap-2">
         <Button
           type="button"

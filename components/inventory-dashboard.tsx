@@ -381,7 +381,7 @@ useEffect(() => {
   const getExpiryColor = (expiryDate: string) => {
     // Check if expiry date is missing or invalid
     if (!expiryDate || isNaN(new Date(expiryDate).getTime())) {
-      return "border-yellow-500 bg-yellow-50"
+      return "border-warning/60 bg-warning/10"
     }
 
     const currentDate = new Date()
@@ -389,14 +389,14 @@ useEffect(() => {
 
     // If already expired
     if (expDate < currentDate) {
-      return "border-red-500 bg-red-50"
+      return "border-destructive/60 bg-destructive/10"
     }
 
     const daysUntilExpiry = Math.ceil((expDate.getTime() - currentDate.getTime()) / (1000 * 3600 * 24))
 
-    if (daysUntilExpiry <= 3) return "border-amber-500"
-    if (daysUntilExpiry <= 7) return "border-yellow-500"
-    return "border-green-500"
+    if (daysUntilExpiry <= 3) return "border-warning"
+    if (daysUntilExpiry <= 7) return "border-warning/60"
+    return "border-success/50"
   }
 
   const handleTouchStart = (e: React.TouchEvent, id: string) => {
@@ -1042,20 +1042,20 @@ useEffect(() => {
                 <DropdownMenuRadioItem value="all">All Items</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="expired">
                   <span className="flex items-center">
-                    <AlertCircle className="mr-1 h-3.5 w-3.5 text-red-500" />
+                    <AlertCircle className="mr-1 h-3.5 w-3.5 text-destructive" />
                     Expired Items
                   </span>
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="expiring-soon">
                   <span className="flex items-center">
-                    <AlertCircle className="mr-1 h-3.5 w-3.5 text-amber-500" />
+                    <AlertCircle className="mr-1 h-3.5 w-3.5 text-warning" />
                     Expiring Soon
                   </span>
                 </DropdownMenuRadioItem>
                 {hasMissingExpiryItems && (
                   <DropdownMenuRadioItem value="missing-expiry">
                     <span className="flex items-center">
-                      <Clock className="mr-1 h-3.5 w-3.5 text-yellow-500" />
+                      <Clock className="mr-1 h-3.5 w-3.5 text-warning" />
                       Missing Expiry Date
                     </span>
                   </DropdownMenuRadioItem>
@@ -1102,7 +1102,7 @@ useEffect(() => {
                 variant={activeFilter === "expired" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveFilter("expired")}
-                className="min-w-fit text-red-500 border-red-200"
+                className="min-w-fit text-destructive border-destructive/30"
               >
                 <AlertCircle className="mr-1 h-3.5 w-3.5" />
                 Expired
@@ -1114,7 +1114,7 @@ useEffect(() => {
               variant={activeFilter === "expiring-soon" ? "default" : "outline"}
               size="sm"
               onClick={() => setActiveFilter("expiring-soon")}
-              className="min-w-fit text-amber-500 border-amber-200"
+              className="min-w-fit text-warning border-warning/30"
             >
               <AlertCircle className="mr-1 h-3.5 w-3.5" />
               Expiring Soon
@@ -1128,7 +1128,7 @@ useEffect(() => {
                 variant={activeFilter === "missing-expiry" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveFilter("missing-expiry")}
-                className="min-w-fit text-yellow-500 border-yellow-200"
+                className="min-w-fit text-warning border-warning/30"
               >
                 <Clock className="mr-1 h-3.5 w-3.5" />
                 Set Expiry
@@ -1277,7 +1277,7 @@ useEffect(() => {
                 <div className="absolute inset-y-0 right-0 flex z-0">
                   <button
                     type="button"
-                    className="flex flex-col items-center justify-center gap-1 w-24 bg-amber-500 text-white active:brightness-90"
+                    className="flex flex-col items-center justify-center gap-1 w-24 bg-warning text-warning-foreground active:brightness-90"
                     onTouchStart={(e) => e.stopPropagation()}
                     onClick={() => handleSwipeAction(item.id, "waste")}
                   >
@@ -1286,7 +1286,7 @@ useEffect(() => {
                   </button>
                   <button
                     type="button"
-                    className="flex flex-col items-center justify-center gap-1 w-24 bg-red-500 text-white active:brightness-90"
+                    className="flex flex-col items-center justify-center gap-1 w-24 bg-destructive text-destructive-foreground active:brightness-90"
                     onTouchStart={(e) => e.stopPropagation()}
                     onClick={() => handleSwipeAction(item.id, "delete")}
                   >
@@ -1299,7 +1299,7 @@ useEffect(() => {
                 <div className="absolute inset-y-0 left-0 z-0">
                   <button
                     type="button"
-                    className="flex flex-col items-center justify-center gap-1 h-full w-28 bg-green-500 text-white active:brightness-90"
+                    className="flex flex-col items-center justify-center gap-1 h-full w-28 bg-success text-success-foreground active:brightness-90"
                     onTouchStart={(e) => e.stopPropagation()}
                     onClick={() => handleSwipeAction(item.id, "consumed")}
                   >
@@ -1331,11 +1331,11 @@ useEffect(() => {
                   {(isExpired || (!isMissingExpiry && daysUntilExpiry <= 3)) && (
                     <span className={cn(
                       "absolute top-3 right-3 h-2.5 w-2.5 rounded-full z-10",
-                      isExpired ? "bg-red-500" : "bg-amber-500",
+                      isExpired ? "bg-destructive" : "bg-warning",
                     )}>
                       <span className={cn(
                         "absolute inset-0 rounded-full animate-ping",
-                        isExpired ? "bg-red-400" : "bg-amber-400",
+                        isExpired ? "bg-destructive" : "bg-warning",
                       )} />
                     </span>
                   )}
@@ -1415,13 +1415,13 @@ useEffect(() => {
                       </div>
                     </div>
                     {isExpired && (
-                      <div className="mt-1.5 text-red-500 text-xs flex items-center">
+                      <div className="mt-1.5 text-destructive text-xs flex items-center">
                         <AlertCircle className="h-3.5 w-3.5 mr-1 shrink-0" />
                         {formatDaysLeft(item.expiryDate)}
                       </div>
                     )}
                     {isMissingExpiry && (
-                      <div className="mt-1.5 text-yellow-500 text-xs flex items-center">
+                      <div className="mt-1.5 text-warning text-xs flex items-center">
                         <Clock className="h-3.5 w-3.5 mr-1 shrink-0" />
                         <span>Set expiry date</span>
                         <Button

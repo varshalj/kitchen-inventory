@@ -147,7 +147,7 @@ export function WasteAnalytics() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center">
-                  <AlertTriangle className="mr-2 h-4 w-4 text-amber-500" />
+                  <AlertTriangle className="mr-2 h-4 w-4 text-warning" />
                   Wasted Items
                 </CardTitle>
               </CardHeader>
@@ -162,7 +162,7 @@ export function WasteAnalytics() {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center">
-                  <DollarSign className="mr-2 h-4 w-4 text-amber-500" />
+                  <DollarSign className="mr-2 h-4 w-4 text-warning" />
                   Potential Waste
                 </CardTitle>
               </CardHeader>

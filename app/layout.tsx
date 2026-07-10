@@ -82,6 +82,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Apply the persisted (or system) colour scheme before first paint so
+            there is no light→dark flash on load. Mirrors ThemeProvider's logic. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.classList.add('dark');}catch(e){}})();",
+          }}
+        />
         {/* First-paint background — matches splash so there is no white flash
             between the launch image and the React render. */}
         <style>{`html,body{background-color:#f97316}`}</style>
