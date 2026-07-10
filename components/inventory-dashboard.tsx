@@ -1401,7 +1401,10 @@ useEffect(() => {
                     if (el) cardSliderRefs.current.set(item.id, el)
                     else cardSliderRefs.current.delete(item.id)
                   }}
-                  className="relative z-10"
+                  // Opaque base so the action panels underneath never bleed through
+                  // — expiry-state cards use a translucent tint (bg-*/10) which alone
+                  // would let the panels show at rest (see getExpiryColor).
+                  className="relative z-10 bg-card"
                 >
                 <Card
                   className={`rounded-none border-0 border-l-4 ${getExpiryColor(item.expiryDate)} relative cursor-pointer ${
