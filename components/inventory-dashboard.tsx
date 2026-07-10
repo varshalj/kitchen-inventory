@@ -215,29 +215,113 @@ export function InventoryDashboard() {
   const [emailIngestions, setEmailIngestions] = useState<EmailIngestionRow[]>([])
   const { setPendingEmailIngestionCount } = useEmailIngestionCount()
 
-  // iOS-style swipe-to-reveal state
+  // iOS-style swipe-to-reveal — velocity-aware, interruptible spring physics
+  // (Apple "Designing Fluid Interfaces": momentum projection, velocity handoff,
+  // interruptible animation, rubber-banding). Ported from the reviewed prototype.
   const cardSliderRefs = useRef<Map<string, HTMLDivElement>>(new Map())
-  const touchTrackRef = useRef<{
-    id: string
-    startX: number
-    startY: number
-    gestureDecided: boolean
-    isHorizontal: boolean
-    currentDelta: number
-  } | null>(null)
   const openSwipesRef = useRef<{ [id: string]: "left" | "right" }>({})
   const justClosedSwipeRef = useRef(false)
 
-  const SWIPE_THRESHOLD = 72
-  const LEFT_PANEL_W = 192  // 2 × 96px (Wasted + Delete)
-  const RIGHT_PANEL_W = 112 // Consumed
+  const LEFT_PANEL_W = 192  // 2 × 96px (Wasted + Delete) — open at -192
+  const RIGHT_PANEL_W = 112 // Consumed — open at +112
+  const SNAP_POINTS = [-LEFT_PANEL_W, 0, RIGHT_PANEL_W]
+  const SPRING_K = 322          // ≈ response 0.35s
+  const FLICK_VELOCITY = 350    // px/s above which the settle gets a little bounce
+  const PROJECT_FACTOR = 0.499  // (v/1000)·d/(1−d), d=0.998 — scroll-style momentum projection
 
-  const applyCardTransform = (id: string, x: number, animated: boolean) => {
-    const el = cardSliderRefs.current.get(id)
-    if (!el) return
-    el.style.transition = animated ? "transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)" : "none"
-    el.style.transform = x !== 0 ? `translateX(${x}px)` : ""
+  // Per-row physics: live position, velocity, and any running rAF handle.
+  const swipeRows = useRef<Map<string, { x: number; v: number; raf: number | null }>>(new Map())
+  // The single in-flight pointer gesture (only one row is draggable at a time).
+  const swipeDrag = useRef<{
+    id: string
+    pointerId: number
+    startX: number
+    startY: number
+    grabX: number
+    decided: boolean
+    horizontal: boolean
+    captured: boolean
+    hist: { x: number; t: number }[]
+  } | null>(null)
+
+  const swipeRow = (id: string) => {
+    let r = swipeRows.current.get(id)
+    if (!r) { r = { x: 0, v: 0, raf: null }; swipeRows.current.set(id, r) }
+    return r
   }
+  const swipeReduceMotion = () =>
+    typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+
+  const paintCard = (id: string, x: number) => {
+    const el = cardSliderRefs.current.get(id)
+    if (el) { el.style.transition = "none"; el.style.transform = x !== 0 ? `translateX(${x}px)` : "" }
+  }
+  const setCardX = (id: string, x: number) => { swipeRow(id).x = x; paintCard(id, x) }
+
+  const nearestSnap = (p: number) =>
+    SNAP_POINTS.reduce((best, s) => (Math.abs(p - s) < Math.abs(p - best) ? s : best), SNAP_POINTS[0])
+
+  const rubberband = (over: number, dim: number) => (over * dim * 0.55) / (dim + 0.55 * Math.abs(over))
+  const clampWithRubber = (id: string, x: number) => {
+    const dim = cardSliderRefs.current.get(id)?.offsetWidth || 360
+    if (x > RIGHT_PANEL_W) return RIGHT_PANEL_W + rubberband(x - RIGHT_PANEL_W, dim)
+    if (x < -LEFT_PANEL_W) return -LEFT_PANEL_W - rubberband(-LEFT_PANEL_W - x, dim)
+    return x
+  }
+
+  const setSwipeOpenState = (id: string, target: number) => {
+    const next = { ...openSwipesRef.current }
+    if (target < 0) next[id] = "left"
+    else if (target > 0) next[id] = "right"
+    else delete next[id]
+    openSwipesRef.current = next
+  }
+
+  // Spring the row to a target, seeded with the release velocity. Animates from
+  // the live value and is cancelled/re-seeded on interrupt (grab mid-flight).
+  const springCardTo = (id: string, target: number, initialV = 0) => {
+    const r = swipeRow(id)
+    if (r.raf != null) { cancelAnimationFrame(r.raf); r.raf = null }
+    if (swipeReduceMotion()) { setCardX(id, target); r.v = 0; return }
+    r.v = initialV
+    const zeta = Math.abs(initialV) > FLICK_VELOCITY ? 0.72 : 1.0
+    const c = 2 * zeta * Math.sqrt(SPRING_K)
+    let last = 0
+    const step = (ts: number) => {
+      if (last === 0) last = ts
+      let dt = (ts - last) / 1000
+      last = ts
+      if (dt > 0.032) dt = 0.032
+      const subs = Math.max(1, Math.ceil(dt / 0.004))
+      const h = dt / subs
+      for (let i = 0; i < subs; i++) {
+        const a = -SPRING_K * (r.x - target) - c * r.v
+        r.v += a * h
+        r.x += r.v * h
+      }
+      paintCard(id, r.x)
+      if (Math.abs(r.x - target) < 0.5 && Math.abs(r.v) < 8) {
+        r.x = target; r.v = 0; paintCard(id, target); r.raf = null; return
+      }
+      r.raf = requestAnimationFrame(step)
+    }
+    r.raf = requestAnimationFrame(step)
+  }
+
+  const swipeReleaseVelocity = (hist: { x: number; t: number }[]) => {
+    if (hist.length < 2) return 0
+    const last = hist[hist.length - 1]
+    let i = hist.length - 2
+    while (i > 0 && last.t - hist[i].t < 90) i--
+    const dt = (last.t - hist[i].t) / 1000
+    return dt > 0 ? (last.x - hist[i].x) / dt : 0
+  }
+
+  // Cancel any in-flight row springs on unmount so rAF callbacks don't leak.
+  useEffect(() => {
+    const rows = swipeRows.current
+    return () => rows.forEach((r) => { if (r.raf != null) cancelAnimationFrame(r.raf) })
+  }, [])
 
   const pendingActions = useRef<Map<string, {
     type: "delete" | "consume" | "waste"
@@ -399,87 +483,89 @@ useEffect(() => {
     return "border-success/50"
   }
 
-  const handleTouchStart = (e: React.TouchEvent, id: string) => {
-    // If any swipe is currently open, mark that we should suppress the next tap
-    if (Object.keys(openSwipesRef.current).length > 0) {
-      justClosedSwipeRef.current = true
-      // Close all open swipes
-      Object.keys(openSwipesRef.current).forEach((otherId) => {
-        applyCardTransform(otherId, 0, true)
-      })
-      openSwipesRef.current = {}
-    } else {
-      justClosedSwipeRef.current = false
-    }
+  const handlePointerDown = (e: React.PointerEvent, id: string) => {
+    if (!e.isPrimary) return
+    justClosedSwipeRef.current = false
 
-    touchTrackRef.current = {
+    // One open row at a time — spring any other open row shut.
+    let closedOther = false
+    Object.keys(openSwipesRef.current).forEach((other) => {
+      if (other !== id) { springCardTo(other, 0); setSwipeOpenState(other, 0); closedOther = true }
+    })
+    if (closedOther) justClosedSwipeRef.current = true
+
+    // Interrupt this row's own in-flight spring and grab from the live value.
+    const r = swipeRow(id)
+    if (r.raf != null) { cancelAnimationFrame(r.raf); r.raf = null }
+
+    swipeDrag.current = {
       id,
-      startX: e.touches[0].clientX,
-      startY: e.touches[0].clientY,
-      gestureDecided: false,
-      isHorizontal: false,
-      currentDelta: 0,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      grabX: r.x,
+      decided: false,
+      horizontal: false,
+      captured: false,
+      hist: [{ x: r.x, t: e.timeStamp }],
     }
   }
 
-  const handleTouchMove = (e: React.TouchEvent, id: string) => {
-    const track = touchTrackRef.current
-    if (!track || track.id !== id) return
+  const handlePointerMove = (e: React.PointerEvent, id: string) => {
+    const d = swipeDrag.current
+    if (!d || d.id !== id || e.pointerId !== d.pointerId) return
 
-    const deltaX = e.touches[0].clientX - track.startX
-    const deltaY = e.touches[0].clientY - track.startY
+    const dx = e.clientX - d.startX
+    const dy = e.clientY - d.startY
 
-    // Decide gesture direction on first meaningful movement
-    if (!track.gestureDecided) {
-      if (Math.abs(deltaX) < 5 && Math.abs(deltaY) < 5) return
-      track.isHorizontal = Math.abs(deltaX) > Math.abs(deltaY)
-      track.gestureDecided = true
+    // Decide direction on first meaningful movement (10px lock via 5px each axis).
+    if (!d.decided) {
+      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return
+      d.horizontal = Math.abs(dx) > Math.abs(dy)
+      d.decided = true
+      if (!d.horizontal) return // vertical → let the list scroll; stay out of it
+      // Commit to a horizontal drag: capture so tracking survives leaving bounds.
+      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); d.captured = true } catch {}
     }
+    if (!d.horizontal) return
 
-    if (!track.isHorizontal) return
-
-    // Clamp delta to panel widths to prevent over-swiping
-    const clampedDelta = deltaX < 0
-      ? Math.max(-LEFT_PANEL_W, deltaX)
-      : Math.min(RIGHT_PANEL_W, deltaX)
-
-    track.currentDelta = clampedDelta
-    applyCardTransform(id, clampedDelta, false)
+    // 1:1 from the grab point, with progressive resistance past the open bounds.
+    const x = clampWithRubber(id, d.grabX + dx)
+    setCardX(id, x)
+    d.hist.push({ x, t: e.timeStamp })
+    if (d.hist.length > 6) d.hist.shift()
   }
 
-  const handleTouchEnd = (id: string) => {
-    const track = touchTrackRef.current
-    if (!track || track.id !== id) {
-      touchTrackRef.current = null
+  const finishSwipe = (e: React.PointerEvent, id: string, cancelled: boolean) => {
+    const d = swipeDrag.current
+    if (!d || d.id !== id || e.pointerId !== d.pointerId) return
+    swipeDrag.current = null
+    if (d.captured) { try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId) } catch {} }
+
+    if (!d.decided || !d.horizontal) {
+      // Tap (or vertical). A tap on an already-open row closes it and is swallowed.
+      if (Math.abs(swipeRow(id).x) > 0.5) {
+        springCardTo(id, 0); setSwipeOpenState(id, 0); justClosedSwipeRef.current = true
+      }
       return
     }
 
-    const delta = track.currentDelta
-    touchTrackRef.current = null
-
-    if (delta < -SWIPE_THRESHOLD) {
-      // Snap open left panel (Wasted + Delete)
-      applyCardTransform(id, -LEFT_PANEL_W, true)
-      openSwipesRef.current = { ...openSwipesRef.current, [id]: "left" }
-    } else if (delta > SWIPE_THRESHOLD) {
-      // Snap open right panel (Consumed)
-      applyCardTransform(id, RIGHT_PANEL_W, true)
-      openSwipesRef.current = { ...openSwipesRef.current, [id]: "right" }
-    } else {
-      // Snap back to closed
-      applyCardTransform(id, 0, true)
-      const next = { ...openSwipesRef.current }
-      delete next[id]
-      openSwipesRef.current = next
-    }
+    // Project where the flick is heading and snap to the nearest rest point,
+    // then hand the release velocity to the spring so there's no seam.
+    const v = cancelled ? 0 : swipeReleaseVelocity(d.hist)
+    const target = nearestSnap(swipeRow(id).x + v * PROJECT_FACTOR)
+    springCardTo(id, target, v)
+    setSwipeOpenState(id, target)
+    justClosedSwipeRef.current = true // swallow the click synthesised after a drag
   }
+
+  const handlePointerUp = (e: React.PointerEvent, id: string) => finishSwipe(e, id, false)
+  const handlePointerCancel = (e: React.PointerEvent, id: string) => finishSwipe(e, id, true)
 
   const handleSwipeAction = (id: string, action: "consumed" | "waste" | "delete") => {
     // Close the swipe panel before triggering the action
-    applyCardTransform(id, 0, true)
-    const next = { ...openSwipesRef.current }
-    delete next[id]
-    openSwipesRef.current = next
+    springCardTo(id, 0)
+    setSwipeOpenState(id, 0)
 
     const item = items.find((i) => i.id === id)
     if (!item) return
@@ -1269,16 +1355,17 @@ useEffect(() => {
                   isIndented && "ml-4",
                 )}
                 style={{ touchAction: "pan-y" }}
-                onTouchStart={(e) => handleTouchStart(e, item.id)}
-                onTouchMove={(e) => handleTouchMove(e, item.id)}
-                onTouchEnd={() => handleTouchEnd(item.id)}
+                onPointerDown={(e) => handlePointerDown(e, item.id)}
+                onPointerMove={(e) => handlePointerMove(e, item.id)}
+                onPointerUp={(e) => handlePointerUp(e, item.id)}
+                onPointerCancel={(e) => handlePointerCancel(e, item.id)}
               >
                 {/* Left action panel: Wasted + Delete (revealed by swiping LEFT) */}
                 <div className="absolute inset-y-0 right-0 flex z-0">
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 w-24 bg-warning text-warning-foreground active:brightness-90"
-                    onTouchStart={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleSwipeAction(item.id, "waste")}
                   >
                     <Trash className="h-5 w-5" />
@@ -1287,7 +1374,7 @@ useEffect(() => {
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 w-24 bg-destructive text-destructive-foreground active:brightness-90"
-                    onTouchStart={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleSwipeAction(item.id, "delete")}
                   >
                     <Trash2 className="h-5 w-5" />
@@ -1300,7 +1387,7 @@ useEffect(() => {
                   <button
                     type="button"
                     className="flex flex-col items-center justify-center gap-1 h-full w-28 bg-success text-success-foreground active:brightness-90"
-                    onTouchStart={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => handleSwipeAction(item.id, "consumed")}
                   >
                     <Check className="h-5 w-5" />
