@@ -43,13 +43,13 @@ function InventoryMockup() {
             <span className="text-[10px] text-muted-foreground">3 items</span>
           </div>
           {/* Item 1 – expiring */}
-          <div className="rounded-xl border p-2.5 bg-red-50 border-red-100">
+          <div className="rounded-xl border p-2.5 bg-destructive/10 border-destructive/20">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs font-semibold">Greek Yogurt</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Refrigerator · 500g</p>
               </div>
-              <span className="text-[9px] font-medium bg-red-100 text-red-600 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
+              <span className="text-[9px] font-medium bg-destructive/15 text-destructive rounded-full px-1.5 py-0.5 shrink-0 ml-1">
                 2 days
               </span>
             </div>
@@ -61,19 +61,19 @@ function InventoryMockup() {
                 <p className="text-xs font-semibold">Basmati Rice</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Pantry · 2kg</p>
               </div>
-              <span className="text-[9px] font-medium bg-green-100 text-green-700 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
+              <span className="text-[9px] font-medium bg-success/15 text-success rounded-full px-1.5 py-0.5 shrink-0 ml-1">
                 6 mo
               </span>
             </div>
           </div>
           {/* Item 3 – expiring soon */}
-          <div className="rounded-xl border p-2.5 bg-amber-50 border-amber-100">
+          <div className="rounded-xl border p-2.5 bg-warning/10 border-warning/20">
             <div className="flex justify-between items-start">
               <div>
                 <p className="text-xs font-semibold">Spinach</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Refrigerator · 1 bunch</p>
               </div>
-              <span className="text-[9px] font-medium bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 shrink-0 ml-1">
+              <span className="text-[9px] font-medium bg-warning/15 text-warning rounded-full px-1.5 py-0.5 shrink-0 ml-1">
                 5 days
               </span>
             </div>
@@ -89,9 +89,9 @@ function ExpiryMockup() {
     <div className="rounded-xl border bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)] p-3 space-y-2 text-xs w-full">
       <p className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">Expiring soon</p>
       {[
-        { name: "Paneer", loc: "Refrigerator", days: "1 day", color: "bg-red-100 text-red-600" },
-        { name: "Coriander", loc: "Refrigerator", days: "3 days", color: "bg-amber-100 text-amber-700" },
-        { name: "Milk", loc: "Refrigerator", days: "4 days", color: "bg-amber-100 text-amber-700" },
+        { name: "Paneer", loc: "Refrigerator", days: "1 day", color: "bg-destructive/15 text-destructive" },
+        { name: "Coriander", loc: "Refrigerator", days: "3 days", color: "bg-warning/15 text-warning" },
+        { name: "Milk", loc: "Refrigerator", days: "4 days", color: "bg-warning/15 text-warning" },
       ].map((item) => (
         <div key={item.name} className="flex items-center justify-between">
           <div>
@@ -114,7 +114,7 @@ function RecipeMockup() {
       </div>
       <div className="p-3 space-y-2">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-medium">
+          <span className="text-[10px] bg-success/15 text-success rounded-full px-2 py-0.5 font-medium">
             82% pantry match
           </span>
           <span className="text-[10px] bg-purple-100 text-purple-700 rounded-full px-2 py-0.5 font-medium">
@@ -216,11 +216,11 @@ function AIMockup() {
         <div className="rounded border bg-white p-1.5 space-y-1">
           <div className="flex justify-between">
             <span className="font-medium">Milk</span>
-            <span className="text-red-500 font-medium">Tomorrow</span>
+            <span className="text-destructive font-medium">Tomorrow</span>
           </div>
           <div className="flex justify-between">
             <span className="font-medium">Yogurt</span>
-            <span className="text-amber-500 font-medium">3 days</span>
+            <span className="text-warning font-medium">3 days</span>
           </div>
         </div>
       </div>
@@ -355,7 +355,7 @@ export function LandingPage() {
                       <div className="flex items-start gap-2">
                         <h3 className="text-xl font-bold">{feature.title}</h3>
                         {feature.badge && (
-                          <span className="shrink-0 mt-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">
+                          <span className="shrink-0 mt-0.5 text-[10px] font-medium bg-warning/15 text-warning rounded-full px-2 py-0.5">
                             {feature.badge}
                           </span>
                         )}

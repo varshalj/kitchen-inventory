@@ -131,15 +131,15 @@ function AuthorizeInner() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Permissions requested</p>
               {scopes.map((s: string) => (
                 <div key={s} className="flex items-start gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                  <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
                   <span className="text-sm">{scopeDescriptions[s] || s}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <p className="text-xs text-amber-800">
+          <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+            <p className="text-xs text-warning">
               You can revoke access at any time from Profile Settings.
             </p>
           </div>
