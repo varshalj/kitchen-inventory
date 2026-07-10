@@ -17,12 +17,12 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet"
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+} from "@/components/ui/drawer"
 import { useToast } from "@/hooks/use-toast"
 import { startRecipeImport, pollRecipeImport, parseRecipeText, saveRecipeBookmark } from "@/lib/client/api"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
@@ -259,10 +259,10 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[85vh] rounded-t-2xl flex flex-col">
-        <SheetHeader className="shrink-0">
-          <SheetTitle className="flex items-center gap-2">
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[85vh] rounded-t-2xl flex flex-col">
+        <DrawerHeader className="shrink-0">
+          <DrawerTitle className="flex items-center gap-2">
             {(phase === "url-input" || phase === "text-input") && (
               <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => setPhase("choose")}>
                 <ArrowLeft className="h-4 w-4" />
@@ -270,13 +270,13 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
             )}
             {phase === "choose" && <ChefHat className="h-5 w-5" />}
             {phase === "choose" ? "Import a recipe" : phase === "url-input" ? "Import from URL" : phase === "text-input" ? "Paste recipe text" : phase === "importing" ? "Importing your recipe" : phase === "text-parsing" ? "Parsing recipe" : "Import Recipe"}
-          </SheetTitle>
+          </DrawerTitle>
           {phase === "choose" && (
-            <SheetDescription>
+            <DrawerDescription>
               Choose how you want to add your recipe
-            </SheetDescription>
+            </DrawerDescription>
           )}
-        </SheetHeader>
+        </DrawerHeader>
 
         <div className="flex-1 overflow-y-auto px-1 py-4 space-y-3">
           {/* Choose phase */}
@@ -519,7 +519,7 @@ export function RecipeImportSheet({ open, onOpenChange, onRecipeReady, onGoHome,
             </div>
           )}
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   )
 }

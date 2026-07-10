@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { GROCERY_PLATFORMS, buildSearchQuery, type GroceryPlatform } from "@/lib/grocery-platforms"
 import type { ShoppingItem } from "@/lib/types"
 
@@ -105,23 +105,23 @@ export function BuyBottomSheet({
   const defaultTab = previousPlatform?.category ?? "quick"
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-xl max-h-[80vh]">
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="rounded-t-xl max-h-[80vh]">
         <div className="flex-1 min-h-0 overflow-y-auto">
-        <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center gap-2">
+        <DrawerHeader className="text-left">
+          <DrawerTitle className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5" />
             Buy {item.brand ? `${item.brand} ${item.name}` : item.name}
-          </SheetTitle>
-          <SheetDescription>
+          </DrawerTitle>
+          <DrawerDescription>
             Searching for &quot;{query}&quot;
             {item.quantity > 1 && (
               item.unit && item.unit !== "pcs"
                 ? ` (${item.quantity}${item.unit})`
                 : ` (qty: ${item.quantity})`
             )}
-          </SheetDescription>
-        </SheetHeader>
+          </DrawerDescription>
+        </DrawerHeader>
 
         <div className="px-4 pb-6">
           {previousPlatform && (
@@ -148,7 +148,7 @@ export function BuyBottomSheet({
           </Tabs>
         </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   )
 }

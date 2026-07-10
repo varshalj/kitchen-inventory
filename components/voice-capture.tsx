@@ -8,13 +8,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet"
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerFooter,
+} from "@/components/ui/drawer"
 import {
   Select,
   SelectContent,
@@ -474,15 +474,15 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
         </Button>
       )}
 
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" className="max-h-[85vh]">
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerContent className="max-h-[85vh]">
           <div className="flex-1 min-h-0 overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Voice Add</SheetTitle>
-            <SheetDescription>
+          <DrawerHeader>
+            <DrawerTitle>Voice Add</DrawerTitle>
+            <DrawerDescription>
               Speak your items naturally — e.g. &ldquo;milk, eggs and two kilos of potatoes&rdquo;
-            </SheetDescription>
-          </SheetHeader>
+            </DrawerDescription>
+          </DrawerHeader>
 
           <div className="px-4 space-y-4">
             {/* Listening / idle state */}
@@ -800,7 +800,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
           </div>
 
           {phase === "review" && (
-            <SheetFooter>
+            <DrawerFooter>
               <LoadingButton
                 className="w-full"
                 onClick={handleConfirm}
@@ -810,10 +810,10 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
                 <Plus className="h-4 w-4 mr-2" />
                 Add {includedCount} item{includedCount !== 1 ? "s" : ""} to {isInventory ? "inventory" : "list"}
               </LoadingButton>
-            </SheetFooter>
+            </DrawerFooter>
           )}
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
     </>
   )
 }

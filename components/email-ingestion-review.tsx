@@ -5,13 +5,13 @@ import { X, Package, AlertCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet"
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerFooter,
+} from "@/components/ui/drawer"
 import {
   Select,
   SelectContent,
@@ -162,15 +162,15 @@ export function EmailIngestionReview({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[90vh]">
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[90vh]">
         <div className="flex-1 min-h-0 overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
+          <DrawerHeader>
+            <DrawerTitle className="flex items-center gap-2">
               <Package className="h-5 w-5" />
               {ingestion.platform ? `${ingestion.platform} Order` : "Email Order"}
-            </SheetTitle>
-            <SheetDescription>
+            </DrawerTitle>
+            <DrawerDescription>
               {[
                 ingestion.order_date && `Ordered ${new Date(ingestion.order_date).toLocaleDateString()}`,
                 ingestion.order_total && `Total: ${formatPrice(ingestion.order_total)}`,
@@ -178,8 +178,8 @@ export function EmailIngestionReview({
               ]
                 .filter(Boolean)
                 .join(" · ") || "Review items before adding to inventory"}
-            </SheetDescription>
-          </SheetHeader>
+            </DrawerDescription>
+          </DrawerHeader>
 
           <div className="px-4 space-y-3 pb-4">
             <p className="text-sm font-medium">
@@ -289,7 +289,7 @@ export function EmailIngestionReview({
           </div>
         </div>
 
-        <SheetFooter className="px-4 pb-4">
+        <DrawerFooter className="px-4 pb-4">
           <LoadingButton
             className="w-full"
             onClick={handleSave}
@@ -298,8 +298,8 @@ export function EmailIngestionReview({
           >
             Add {includedCount} item{includedCount !== 1 ? "s" : ""} to inventory
           </LoadingButton>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }

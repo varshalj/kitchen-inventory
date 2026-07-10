@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button"
 import { unitInput } from "@/lib/constants"
 import { Badge } from "@/components/ui/badge"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { StarRating } from "@/components/star-rating"
 import { formatQuantityUnit } from "@/components/quantity-with-units"
 import { CURRENCIES } from "@/components/currency-input"
@@ -52,19 +52,19 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete, on
     : null
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-xl max-h-[85vh]">
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="rounded-t-xl max-h-[85vh]">
         <div className="flex-1 min-h-0 overflow-y-auto">
-        <SheetHeader className="text-left">
+        <DrawerHeader className="text-left">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <SheetTitle className="text-xl">
+              <DrawerTitle className="text-xl">
                 {item.brand && <span className="text-muted-foreground font-normal">{item.brand} </span>}
                 {item.name}
-              </SheetTitle>
-              <SheetDescription>
+              </DrawerTitle>
+              <DrawerDescription>
                 {item.location}
-              </SheetDescription>
+              </DrawerDescription>
             </div>
             <Badge
               variant={isExpired ? "destructive" : isMissingExpiry ? "secondary" : "outline"}
@@ -79,7 +79,7 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete, on
                     : "Fresh"}
             </Badge>
           </div>
-        </SheetHeader>
+        </DrawerHeader>
 
         <div className="px-4 pb-6 space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -160,8 +160,8 @@ export function ItemDetailSheet({ item, open, onOpenChange, onEdit, onDelete, on
           </div>
         </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DrawerContent>
+    </Drawer>
   )
 }
 
