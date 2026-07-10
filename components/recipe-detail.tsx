@@ -21,11 +21,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer"
 import { ToastAction } from "@/components/ui/toast"
 import { MainLayout } from "@/components/main-layout"
 import { RecipeReviewScreen } from "@/components/recipe-review-screen"
@@ -593,14 +593,14 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
       )}
 
       {/* Grocery selector bottom sheet */}
-      <Sheet open={showGrocerySheet} onOpenChange={setShowGrocerySheet}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh]">
-          <SheetHeader className="mb-3">
-            <SheetTitle className="flex items-center gap-2">
+      <Drawer open={showGrocerySheet} onOpenChange={setShowGrocerySheet}>
+        <DrawerContent className="rounded-t-2xl max-h-[70vh]">
+          <DrawerHeader className="mb-3">
+            <DrawerTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5" />
               Add to Shopping List
-            </SheetTitle>
-          </SheetHeader>
+            </DrawerTitle>
+          </DrawerHeader>
           <div className="flex items-center justify-between mb-3 px-1">
             <p className="text-sm text-muted-foreground">
               {selectedGroceryItems.size} of {missingIngredients.length} selected
@@ -641,8 +641,8 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
               Add to List
             </LoadingButton>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
 
     </MainLayout>
   )

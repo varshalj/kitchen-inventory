@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { ToastAction } from "@/components/ui/toast"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 import {
   Select,
   SelectContent,
@@ -808,17 +808,17 @@ export function ShoppingList() {
         userOrderSources={settings?.orderSources || []}
       />
 
-      {/* Item Detail Sheet */}
-      <Sheet open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
-        <SheetContent side="bottom" className="rounded-t-xl pb-8">
-          <SheetHeader className="mb-4">
-            <SheetTitle className="text-left">
+      {/* Item Detail Drawer */}
+      <Drawer open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
+        <DrawerContent className="rounded-t-xl pb-8">
+          <DrawerHeader className="mb-4">
+            <DrawerTitle className="text-left">
               {detailItem?.brand && (
                 <span className="text-muted-foreground font-normal">{detailItem.brand} </span>
               )}
               {detailItem?.name}
-            </SheetTitle>
-          </SheetHeader>
+            </DrawerTitle>
+          </DrawerHeader>
           {detailItem && (
             <div className="space-y-3 px-4">
               {/* Row 1: Quantity always left; Category only in right if present */}
@@ -892,23 +892,22 @@ export function ShoppingList() {
               )}
             </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
 
       {/* Copy for Instamart sheet */}
-      <Sheet open={showInstamartSheet} onOpenChange={setShowInstamartSheet}>
-        <SheetContent
-          side="bottom"
+      <Drawer open={showInstamartSheet} onOpenChange={setShowInstamartSheet}>
+        <DrawerContent
           className="rounded-t-2xl max-h-[70vh]"
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
-          <SheetHeader className="mb-3">
-            <SheetTitle className="flex items-center gap-2">
+          <DrawerHeader className="mb-3">
+            <DrawerTitle className="flex items-center gap-2">
               <Copy className="h-5 w-5" />
               Copy list for Instamart
-            </SheetTitle>
-          </SheetHeader>
+            </DrawerTitle>
+          </DrawerHeader>
           <p className="text-sm text-muted-foreground mb-3 px-1">
             Select items, copy, then paste into Swiggy&apos;s &ldquo;Have a shopping list?&rdquo; feature.
           </p>
@@ -957,8 +956,8 @@ export function ShoppingList() {
               Copy {selectedInstamartItems.size > 0 ? `${selectedInstamartItems.size} items` : ""}
             </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DrawerContent>
+      </Drawer>
 
       {/* Edit Item Dialog */}
       {editItem && (
