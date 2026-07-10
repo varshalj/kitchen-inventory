@@ -96,6 +96,12 @@
   --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   --radius: 0.5rem;
+  /* Derive the rounded-* scale from --radius so it's the single lever for
+     corner radius (shadcn v4 convention). Near-identical to Tailwind defaults. */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -146,6 +152,18 @@
   textarea,
   select {
     font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+  /* Size-specific tracking (skill §15): large display text reads too loose at
+     default spacing, so tighten it as it grows. Body sizes are left at 0.
+     Any explicit `tracking-*` utility still overrides this. */
+  .text-2xl,
+  .text-3xl {
+    letter-spacing: -0.02em;
+  }
+  .text-4xl,
+  .text-5xl,
+  .text-6xl {
+    letter-spacing: -0.025em;
   }
 }
 
