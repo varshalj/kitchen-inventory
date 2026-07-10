@@ -24,7 +24,7 @@ import { AnimatedItem } from "@/components/ui/animated-list"
 import { LoadingTip } from "@/components/loading-tip"
 import { QuantityWithUnits, formatQuantityUnit } from "@/components/quantity-with-units"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
-import { buildSearchQuery } from "@/lib/grocery-platforms"
+import { buildSearchQuery, getComparisonProvider } from "@/lib/grocery-platforms"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import {
@@ -806,6 +806,9 @@ export function ShoppingList() {
         onOpenChange={(open) => !open && setBuyItem(null)}
         enabledPlatformIds={settings?.deliveryPlatforms || []}
         userOrderSources={settings?.orderSources || []}
+        comparisonProvider={
+          settings?.country === "IN" ? getComparisonProvider(settings?.priceComparison) : null
+        }
       />
 
       {/* Item Detail Drawer */}
