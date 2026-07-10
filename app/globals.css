@@ -79,3 +79,22 @@
   from { transform: translateY(0); }
   to   { transform: translateY(100%); }
 }
+
+/*
+ * Reduced motion (skill §14): strip vestibular motion — slides, snaps, loops,
+ * parallax — across the app. Durations collapse to ~instant and looping
+ * animations (ping, pulse, spin, toast progress) run once. Opacity/colour
+ * transitions are preserved so appearance/disappearance stays legible, and
+ * the swipe snap in the dashboard still resolves — it just jumps instead of
+ * sliding. Framer Motion is JS-driven and handled separately in the component.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
