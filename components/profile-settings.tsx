@@ -40,6 +40,7 @@ import { fetchWithAuth } from "@/lib/api-client"
 import { GROCERY_PLATFORMS } from "@/lib/grocery-platforms"
 import { BugReportDialog } from "@/components/bug-report-dialog"
 import { useOnboarding } from "@/hooks/use-onboarding"
+import { useTheme } from "@/components/theme-provider"
 
 interface EmailAccount {
   id: string
@@ -164,6 +165,7 @@ function ConnectToAISection() {
 export function ProfileSettings() {
   const router = useRouter()
   const { settings, updateSettings } = useUserSettings()
+  const { theme, setTheme } = useTheme()
   const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
 
   useEffect(() => {
@@ -357,6 +359,31 @@ export function ProfileSettings() {
             </div>
           </div>
         </CardHeader>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center">
+            <Globe className="mr-2 h-4 w-4" />
+            Appearance
+          </CardTitle>
+          <CardDescription>Choose how Kitchen Inventory looks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="theme-select">Theme</Label>
+            <Select value={theme} onValueChange={(v) => setTheme(v as "light" | "dark" | "system")}>
+              <SelectTrigger id="theme-select" className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+                <SelectItem value="system">System</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
       </Card>
 
       <Card className="mb-6">

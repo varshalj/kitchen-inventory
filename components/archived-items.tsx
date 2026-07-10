@@ -156,7 +156,7 @@ export function ArchivedItems() {
                         <div className="flex items-center gap-2 min-w-0">
                           <CardTitle className="text-base truncate">{item.name}</CardTitle>
                           {item.rating && item.rating > 0 && (
-                            <span className="flex items-center gap-0.5 text-amber-500 shrink-0">
+                            <span className="flex items-center gap-0.5 text-warning shrink-0">
                               <Star className="h-3.5 w-3.5 fill-current" />
                               <span className="text-xs font-medium">{item.rating}</span>
                             </span>
@@ -165,12 +165,12 @@ export function ArchivedItems() {
                         <div className="flex items-center gap-2 shrink-0">
                           <Badge variant="outline">
                             {item.archiveReason === "consumed" ? (
-                              <span className="flex items-center text-green-600">
+                              <span className="flex items-center text-success">
                                 <ShoppingCart className="mr-1 h-3 w-3" />
                                 Consumed
                               </span>
                             ) : item.archiveReason === "wasted" ? (
-                              <span className="flex items-center text-red-600">
+                              <span className="flex items-center text-destructive">
                                 <Trash className="mr-1 h-3 w-3" />
                                 Wasted
                               </span>
