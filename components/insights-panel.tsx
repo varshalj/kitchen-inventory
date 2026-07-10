@@ -122,7 +122,7 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <p className="text-2xl font-bold text-amber-500">{insights.expiringSoon}</p>
+            <p className="text-2xl font-bold text-warning">{insights.expiringSoon}</p>
           </div>
 
           <div className="space-y-1">
@@ -143,7 +143,7 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
             </div>
             <div className="flex items-center">
               <p className="text-lg font-medium">{insights.consumptionTrend}</p>
-              <TrendingUp className="ml-2 h-4 w-4 text-green-500" />
+              <TrendingUp className="ml-2 h-4 w-4 text-success" />
             </div>
           </div>
 
@@ -165,7 +165,7 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
             </div>
             <div className="flex items-center">
               <p className="text-lg font-medium">{insights.potentialWaste > 0 ? `${insights.potentialWaste.toFixed(0)}` : "N/A"}</p>
-              <DollarSign className="ml-2 h-4 w-4 text-amber-500" />
+              <DollarSign className="ml-2 h-4 w-4 text-warning" />
             </div>
           </div>
 
@@ -192,10 +192,10 @@ export function InsightsPanel({ items }: InsightsPanelProps) {
                 <div
                   className={`h-full ${
                     insights.healthScore > 80
-                      ? "bg-green-500"
+                      ? "bg-success"
                       : insights.healthScore > 50
-                        ? "bg-amber-500"
-                        : "bg-red-500"
+                        ? "bg-warning"
+                        : "bg-destructive"
                   }`}
                   style={{ width: `${insights.healthScore}%` }}
                 />

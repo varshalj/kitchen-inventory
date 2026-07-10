@@ -539,7 +539,7 @@ export function ShoppingList() {
                         >
                           <span>{suggestion}</span>
                           {inList && (
-                            <span className="ml-2 text-xs text-amber-600 font-medium shrink-0">In list</span>
+                            <span className="ml-2 text-xs text-warning font-medium shrink-0">In list</span>
                           )}
                         </button>
                       )

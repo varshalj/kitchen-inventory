@@ -37,9 +37,9 @@ import { KITCHEN_RECIPES_CHANGED, type KitchenRecipesChangedDetail } from "@/lib
 import type { Recipe, RecipeIngredient, ParsedRecipe, PantryMatch, PantryMatchStatus } from "@/lib/types"
 
 const STATUS_CONFIG: Record<PantryMatchStatus, { label: string; color: string; icon: typeof Check }> = {
-  available: { label: "In pantry", color: "bg-green-100 text-green-800 border-green-200", icon: Check },
-  expiring: { label: "Expiring soon", color: "bg-amber-100 text-amber-800 border-amber-200", icon: AlertTriangle },
-  expired: { label: "Expired", color: "bg-red-100 text-red-800 border-red-200", icon: X },
+  available: { label: "In pantry", color: "bg-success/15 text-success border-success/30", icon: Check },
+  expiring: { label: "Expiring soon", color: "bg-warning/15 text-warning border-warning/30", icon: AlertTriangle },
+  expired: { label: "Expired", color: "bg-destructive/15 text-destructive border-destructive/30", icon: X },
   missing: { label: "Missing", color: "bg-muted text-muted-foreground border-border", icon: ShoppingCart },
 }
 
@@ -54,7 +54,7 @@ interface IngredientWithMatch extends RecipeIngredient {
 }
 
 function CompatibilityBar({ score }: { score: number }) {
-  const color = score >= 70 ? "bg-green-500" : score >= 40 ? "bg-amber-500" : "bg-red-500"
+  const color = score >= 70 ? "bg-success" : score >= 40 ? "bg-warning" : "bg-destructive"
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">
@@ -94,7 +94,7 @@ function IngredientRow({ ingredient }: { ingredient: IngredientWithMatch }) {
           <p className="text-xs text-muted-foreground">{ingredient.preparation}</p>
         )}
         {ingredient.pantryStatus === "expiring" && ingredient.daysUntilExpiry != null && (
-          <p className="text-xs text-amber-600">
+          <p className="text-xs text-warning">
             Expires in {ingredient.daysUntilExpiry} day{ingredient.daysUntilExpiry !== 1 ? "s" : ""}
           </p>
         )}
@@ -425,7 +425,7 @@ export function RecipeDetail({ id }: RecipeDetailProps) {
   return (
     <MainLayout>
       {pendingRemoval && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+        <div className="mb-4 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
           Pending removal — use <span className="font-semibold">Undo</span> in the toast to keep this recipe.
           Leaving this page cancels removal.
         </div>

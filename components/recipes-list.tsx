@@ -58,10 +58,10 @@ function ScoreBadge({ score }: { score?: number }) {
   }
   const color =
     score >= 70
-      ? "bg-green-100 text-green-800 border-green-200"
+      ? "bg-success/15 text-success border-success/30"
       : score >= 40
-      ? "bg-amber-100 text-amber-800 border-amber-200"
-      : "bg-red-100 text-red-700 border-red-200"
+      ? "bg-warning/15 text-warning border-warning/30"
+      : "bg-destructive/15 text-destructive border-destructive/30"
   return (
     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium", color)}>
       {score}% ready
@@ -128,7 +128,7 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {recipe.isBookmark ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+              <span className="inline-flex items-center gap-1 rounded-full border border-warning/40 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
                 <Bookmark className="h-3 w-3" />
                 Bookmark
               </span>
@@ -456,9 +456,9 @@ export function RecipesList() {
 
       {/* Staleness nudge banner */}
       {anyStale && !isLoading && (
-        <div className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="text-amber-800 flex-1">
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+          <span className="text-warning flex-1">
             Your pantry may have changed — tap{" "}
             <button
               onClick={handleRefresh}

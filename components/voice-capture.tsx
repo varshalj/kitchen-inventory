@@ -514,7 +514,7 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
                     className={cn(
                       "h-20 w-20 rounded-full flex items-center justify-center transition-all z-10",
                       phase === "listening"
-                        ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                        ? "bg-destructive text-white shadow-lg shadow-destructive/30"
                         : "bg-muted hover:bg-muted/80 text-foreground"
                     )}
                     aria-label={phase === "listening" ? "Stop recording" : "Start recording"}
@@ -591,17 +591,17 @@ export function VoiceCapture({ target, onConfirm, existingNames = [], fullWidth 
                       className={cn(
                         "rounded-lg border p-3 transition-all space-y-2",
                         item.included ? "bg-background" : "opacity-60 bg-muted/30",
-                        matchedName && !item.included ? "border-amber-300" : ""
+                        matchedName && !item.included ? "border-warning/40" : ""
                       )}
                     >
                       {matchedName && (
-                        <div className="flex items-center justify-between rounded-md bg-amber-50 border border-amber-200 px-2 py-1.5">
-                          <p className="text-xs text-amber-700">
+                        <div className="flex items-center justify-between rounded-md bg-warning/10 border border-warning/30 px-2 py-1.5">
+                          <p className="text-xs text-warning">
                             Similar to <span className="font-semibold">{matchedName}</span> already in list
                           </p>
                           <button
                             type="button"
-                            className="text-xs text-amber-700 underline ml-2 shrink-0"
+                            className="text-xs text-warning underline ml-2 shrink-0"
                             onClick={() => toggleItem(index)}
                           >
                             {item.included ? "Undo" : "Add anyway"}
