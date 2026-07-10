@@ -71,7 +71,10 @@ export const viewport: Viewport = {
   themeColor: "#f97316",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // No maximumScale / userScalable:false — capping zoom fails WCAG 1.4.4
+  // (Resize Text) and ignores the user's text-size need. iOS auto-zoom on
+  // input focus is already prevented by the 16px font-size on form controls
+  // in globals.css, so the cap isn't needed for that either.
 }
 
 export default function RootLayout({
