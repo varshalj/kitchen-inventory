@@ -386,6 +386,36 @@ export function ProfileSettings() {
         </CardContent>
       </Card>
 
+      {settings?.country === "IN" && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center">
+              <ShoppingBag className="mr-2 h-4 w-4" />
+              Price comparison
+            </CardTitle>
+            <CardDescription>Compare prices across quick-commerce apps before you buy</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="price-comparison-select">Provider</Label>
+              <Select
+                value={settings?.priceComparison ?? "quickcompare"}
+                onValueChange={(v) => updateSettings({ priceComparison: v as "off" | "quickcompare" | "comparify" })}
+              >
+                <SelectTrigger id="price-comparison-select" className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">Off</SelectItem>
+                  <SelectItem value="quickcompare">QuickCompare</SelectItem>
+                  <SelectItem value="comparify">Comparify</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center">

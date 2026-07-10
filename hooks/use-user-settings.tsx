@@ -15,6 +15,8 @@ export type UserSettings = {
   storageLocations: string[]
   country: string
   deliveryPlatforms: string[]
+  /** Price-comparison aggregator for the Buy sheet (IN only). "off" hides it. */
+  priceComparison: "off" | "quickcompare" | "comparify"
 }
 
 const defaultSettings: UserSettings = {
@@ -26,6 +28,9 @@ const defaultSettings: UserSettings = {
   storageLocations: DEFAULT_STORAGE_LOCATIONS,
   country: "IN",
   deliveryPlatforms: GROCERY_PLATFORMS.map((p) => p.id),
+  // On by default so the feature is discoverable; the setting exists to switch
+  // provider or turn it off. mergeWithDefaults backfills this for existing users.
+  priceComparison: "quickcompare",
 }
 
 // Merge saved settings with defaults so new keys introduced in future deploys

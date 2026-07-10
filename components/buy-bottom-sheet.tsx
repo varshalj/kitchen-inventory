@@ -1,6 +1,6 @@
 "use client"
 
-import { ExternalLink, ShoppingBag, Star, Zap, ShoppingCart, Store } from "lucide-react"
+import { ExternalLink, ShoppingBag, Star, Zap, ShoppingCart, Store, Scale } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,7 +11,13 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer"
-import { GROCERY_PLATFORMS, buildSearchQuery, type GroceryPlatform } from "@/lib/grocery-platforms"
+import {
+  GROCERY_PLATFORMS,
+  buildSearchQuery,
+  buildComparisonQuery,
+  type GroceryPlatform,
+  type PriceComparisonProvider,
+} from "@/lib/grocery-platforms"
 import type { ShoppingItem } from "@/lib/types"
 
 interface BuyBottomSheetProps {
@@ -20,6 +26,8 @@ interface BuyBottomSheetProps {
   onOpenChange: (open: boolean) => void
   enabledPlatformIds: string[]
   userOrderSources: string[]
+  /** Resolved comparison provider, or null when off / region not supported. */
+  comparisonProvider: PriceComparisonProvider | null
 }
 
 function matchesPlatform(platform: GroceryPlatform, orderSource: string): boolean {
@@ -41,6 +49,7 @@ export function BuyBottomSheet({
   onOpenChange,
   enabledPlatformIds,
   userOrderSources,
+  comparisonProvider,
 }: BuyBottomSheetProps) {
   if (!item) return null
 
@@ -128,6 +137,28 @@ export function BuyBottomSheet({
             <div className="flex items-center gap-2 text-sm text-muted-foreground pb-3 mb-3 border-b">
               <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500" />
               <span>Previously ordered from <strong>{item.orderedFrom}</strong></span>
+            </div>
+          )}
+
+          {comparisonProvider && (
+            <div className="mb-4">
+              <Button
+                className="w-full h-auto py-3 flex items-center justify-center gap-2"
+                onClick={() =>
+                  window.open(
+                    comparisonProvider.searchUrl(buildComparisonQuery(item)),
+                    "_blank",
+                    "noopener,noreferrer",
+                  )
+                }
+              >
+                <Scale className="h-4 w-4" />
+                <span className="font-medium">Compare prices</span>
+                <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+              </Button>
+              <p className="mt-2 text-center text-xs text-muted-foreground">
+                via {comparisonProvider.name} — or buy directly below
+              </p>
             </div>
           )}
 

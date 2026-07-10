@@ -134,3 +134,64 @@ export function getPlatformsForCountry(country: string): GroceryPlatform[] {
   if (country === "IN") return GROCERY_PLATFORMS
   return []
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Price comparison — aggregators that show a product's price across several
+ * quick-commerce apps at once. Modelled the same way as GroceryPlatform: a
+ * destination that takes a query. Selected via the `priceComparison` user
+ * setting (region-gated to IN); see buy-bottom-sheet.tsx.
+ * ────────────────────────────────────────────────────────────────────────── */
+export interface PriceComparisonProvider {
+  id: "quickcompare" | "comparify"
+  name: string
+  searchUrl: (query: string) => string
+  website: string
+  country: "IN"
+}
+
+export const PRICE_COMPARISON_PROVIDERS: PriceComparisonProvider[] = [
+  {
+    id: "quickcompare",
+    name: "QuickCompare",
+    searchUrl: (q) => `https://quickcompare.in/search-results?q=${encodeURIComponent(q)}`,
+    website: "quickcompare.in",
+    country: "IN",
+  },
+  {
+    id: "comparify",
+    name: "Comparify",
+    searchUrl: (q) => `https://comparify.pro/?query=${encodeURIComponent(q)}`,
+    website: "comparify.pro",
+    country: "IN",
+  },
+]
+
+export function getComparisonProvider(id: string | undefined | null): PriceComparisonProvider | null {
+  if (!id || id === "off") return null
+  return PRICE_COMPARISON_PROVIDERS.find((p) => p.id === id) ?? null
+}
+
+// Fresh / staple categories where a generic name matches best across stores.
+const COMMODITY_CATEGORIES = new Set([
+  "vegetables",
+  "fruits",
+  "produce",
+  "dairy",
+  "bakery",
+  "staples",
+  "grains",
+  "meat",
+  "seafood",
+])
+
+/**
+ * Query for price-comparison aggregators. Commodities (no brand, or a fresh
+ * category) match best on the generic name ("apple", "tomato"); branded
+ * packaged goods need the brand ("NATUF Tahini"). Kept separate from
+ * buildSearchQuery, which targets a single store and wants the exact product.
+ * This is only a starting point — the aggregator page has its own search box.
+ */
+export function buildComparisonQuery(item: { name: string; brand?: string; category?: string }): string {
+  const isCommodity = !item.brand || COMMODITY_CATEGORIES.has((item.category ?? "").toLowerCase())
+  return (isCommodity ? item.name : `${item.brand} ${item.name}`).trim()
+}
