@@ -25,7 +25,6 @@ import { LoadingTip } from "@/components/loading-tip"
 import { QuantityWithUnits, formatQuantityUnit } from "@/components/quantity-with-units"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
 import { buildSearchQuery, getComparisonProvider } from "@/lib/grocery-platforms"
-import { useIsStandalonePWA } from "@/hooks/use-is-standalone"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import {
@@ -47,7 +46,6 @@ type SortBy = "recent" | "name" | "quantity"
 export function ShoppingList() {
   const { toast } = useToast()
   const { settings } = useUserSettings()
-  const isStandalonePWA = useIsStandalonePWA()
   const { setIncompleteCount } = useShoppingCount()
   const [items, setItems] = useState<ShoppingItem[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
@@ -809,11 +807,10 @@ export function ShoppingList() {
         enabledPlatformIds={settings?.deliveryPlatforms || []}
         userOrderSources={settings?.orderSources || []}
         comparisonProvider={
-          // Gated: hidden in the installed PWA (isolated web view drops the
-          // aggregator's saved location → wrong/no prices), available in-browser.
-          settings?.country === "IN" && !isStandalonePWA
-            ? getComparisonProvider(settings?.priceComparison)
-            : null
+          // PROBE (docs/known-limitations.md #1): standalone-PWA hide temporarily
+          // lifted to test whether the anchor-tap deeplink hands off to the
+          // provider's native app. Still opt-in (setting defaults to off).
+          settings?.country === "IN" ? getComparisonProvider(settings?.priceComparison) : null
         }
       />
 
