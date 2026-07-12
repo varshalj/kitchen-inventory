@@ -142,19 +142,19 @@ export function BuyBottomSheet({
 
           {comparisonProvider && (
             <div className="mb-4">
-              <Button
-                className="w-full h-auto py-3 flex items-center justify-center gap-2"
-                onClick={() =>
-                  window.open(
-                    comparisonProvider.searchUrl(buildComparisonQuery(item)),
-                    "_blank",
-                    "noopener,noreferrer",
-                  )
-                }
-              >
-                <Scale className="h-4 w-4" />
-                <span className="font-medium">Compare prices</span>
-                <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+              {/* Real anchor (not window.open) so iOS/Android can hand off to
+                  the provider's native app via universal links, where the user's
+                  location is already set. See docs/known-limitations.md #1. */}
+              <Button asChild className="w-full h-auto py-3 flex items-center justify-center gap-2">
+                <a
+                  href={comparisonProvider.searchUrl(buildComparisonQuery(item))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Scale className="h-4 w-4" />
+                  <span className="font-medium">Compare prices</span>
+                  <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+                </a>
               </Button>
               <p className="mt-2 text-center text-xs text-muted-foreground">
                 via {comparisonProvider.name} — or buy directly below
