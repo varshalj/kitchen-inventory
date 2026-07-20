@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import Link from "next/link"
 import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic, Package, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
@@ -449,6 +450,26 @@ export function ShoppingList() {
 
   const displayedItems = applySearchAndSort(showCompleted ? items : activeItems)
 
+  // Phase 2: cross-reference the list against current inventory (by normalized
+  // name) so we can flag "already in your kitchen". Only non-archived stock with
+  // quantity > 0; when several rows match, keep the earliest-expiring (use first).
+  const inventoryByName = useMemo(() => {
+    const m = new Map<string, InventoryItem>()
+    for (const inv of inventoryItems) {
+      if (inv.archived || (inv.quantity ?? 0) <= 0) continue
+      const key = normalizeName(inv.name)
+      const cur = m.get(key)
+      if (!cur) {
+        m.set(key, inv)
+        continue
+      }
+      const curExp = cur.expiryDate ? new Date(cur.expiryDate).getTime() : Infinity
+      const invExp = inv.expiryDate ? new Date(inv.expiryDate).getTime() : Infinity
+      if (invExp < curExp) m.set(key, inv)
+    }
+    return m
+  }, [inventoryItems])
+
   const openInstamartSheet = () => {
     setSelectedInstamartItems(new Set(activeItems.map((i) => i.id)))
     setShowInstamartSheet(true)
@@ -684,7 +705,10 @@ export function ShoppingList() {
         ) : (
           /* Feature 5 — Natural page scroll, no ScrollArea */
           <div className="space-y-3">
-            {displayedItems.map((item, i) => (
+            {displayedItems.map((item, i) => {
+              const invMatch = item.completed ? undefined : inventoryByName.get(normalizeName(item.name))
+              const displayCategory = item.category || invMatch?.category
+              return (
               <AnimatedItem key={item.id} index={i}>
               <Card className={item.completed ? "bg-muted/50" : ""}>
                 <CardContent className="p-3">
@@ -721,9 +745,9 @@ export function ShoppingList() {
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0 ml-2">
-                          {item.category && (
+                          {displayCategory && (
                             <Badge variant="outline" className="text-xs">
-                              {item.category}
+                              {displayCategory}
                             </Badge>
                           )}
 
@@ -784,12 +808,33 @@ export function ShoppingList() {
                           Added automatically when item was consumed
                         </div>
                       )}
+
+                      {invMatch && (
+                        <div className="mt-1.5 flex items-center gap-2 rounded-md bg-success/10 px-2 py-1 text-xs">
+                          <Package className="h-3.5 w-3.5 shrink-0 text-success" />
+                          <span className="flex-1 truncate text-success">
+                            Already in your kitchen · {formatQuantityUnit(invMatch.quantity, invMatch.unit)}
+                            {invMatch.location ? ` in ${invMatch.location}` : ""}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem(item)}
+                            className="shrink-0 font-medium text-success underline"
+                          >
+                            Remove
+                          </button>
+                          <Link href="/dashboard" className="shrink-0 font-medium underline">
+                            View
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
               </AnimatedItem>
-            ))}
+              )
+            })}
           </div>
         )}
 
