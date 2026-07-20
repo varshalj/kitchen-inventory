@@ -25,6 +25,7 @@ import { LoadingTip } from "@/components/loading-tip"
 import { QuantityWithUnits, formatQuantityUnit } from "@/components/quantity-with-units"
 import { BuyBottomSheet } from "@/components/buy-bottom-sheet"
 import { buildSearchQuery, getComparisonProvider } from "@/lib/grocery-platforms"
+import { useIsStandalonePWA } from "@/hooks/use-is-standalone"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { triggerHaptic, HAPTIC_SUCCESS, HAPTIC_ERROR } from "@/lib/haptics"
 import {
@@ -46,6 +47,7 @@ type SortBy = "recent" | "name" | "quantity"
 export function ShoppingList() {
   const { toast } = useToast()
   const { settings } = useUserSettings()
+  const isStandalonePWA = useIsStandalonePWA()
   const { setIncompleteCount } = useShoppingCount()
   const [items, setItems] = useState<ShoppingItem[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
@@ -807,10 +809,13 @@ export function ShoppingList() {
         enabledPlatformIds={settings?.deliveryPlatforms || []}
         userOrderSources={settings?.orderSources || []}
         comparisonProvider={
-          // PROBE (docs/known-limitations.md #1): standalone-PWA hide temporarily
-          // lifted to test whether the anchor-tap deeplink hands off to the
-          // provider's native app. Still opt-in (setting defaults to off).
-          settings?.country === "IN" ? getComparisonProvider(settings?.priceComparison) : null
+          // Gated: hidden in the installed PWA. The anchor-tap probe (#84) is
+          // ruled out — the aggregators publish no universal-links association
+          // (docs/known-limitations.md #1), so no app handoff is possible and the
+          // deeplink lands in the location-less web view. Works in a browser tab.
+          settings?.country === "IN" && !isStandalonePWA
+            ? getComparisonProvider(settings?.priceComparison)
+            : null
         }
       />
 
