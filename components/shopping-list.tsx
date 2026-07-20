@@ -63,6 +63,7 @@ export function ShoppingList() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<SortBy>("recent")
+  const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [showInstamartSheet, setShowInstamartSheet] = useState(false)
@@ -470,6 +471,35 @@ export function ShoppingList() {
     return m
   }, [inventoryItems])
 
+  // Phase 3: category filter chips. Effective category falls back to the matched
+  // inventory item's category (phase-2 backfill), so items added without one are
+  // still filterable.
+  const catOf = (it: ShoppingItem) =>
+    it.category || inventoryByName.get(normalizeName(it.name))?.category || ""
+
+  const listCategories = (() => {
+    const set = new Set<string>()
+    let hasOther = false
+    for (const it of activeItems) {
+      const c = catOf(it)
+      if (c) set.add(c)
+      else hasOther = true
+    }
+    const arr = Array.from(set).sort((a, b) => a.localeCompare(b))
+    if (hasOther && arr.length > 0) arr.push("Other")
+    return arr
+  })()
+
+  // Recover gracefully if the selected category no longer exists (list changed).
+  const activeCategoryFilter = listCategories.includes(categoryFilter) ? categoryFilter : "all"
+
+  const visibleItems =
+    activeCategoryFilter === "all"
+      ? displayedItems
+      : displayedItems.filter((it) =>
+          activeCategoryFilter === "Other" ? !catOf(it) : catOf(it) === activeCategoryFilter,
+        )
+
   const openInstamartSheet = () => {
     setSelectedInstamartItems(new Set(activeItems.map((i) => i.id)))
     setShowInstamartSheet(true)
@@ -664,6 +694,30 @@ export function ShoppingList() {
           )}
         </div>
 
+        {listCategories.length >= 2 && (
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide mb-3 -mx-1 px-1">
+            <Button
+              variant={activeCategoryFilter === "all" ? "default" : "outline"}
+              size="sm"
+              className="min-w-fit"
+              onClick={() => setCategoryFilter("all")}
+            >
+              All
+            </Button>
+            {listCategories.map((cat) => (
+              <Button
+                key={cat}
+                variant={activeCategoryFilter === cat ? "default" : "outline"}
+                size="sm"
+                className="min-w-fit"
+                onClick={() => setCategoryFilter(cat)}
+              >
+                {cat}
+              </Button>
+            ))}
+          </div>
+        )}
+
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2].map((i) => (
@@ -694,7 +748,7 @@ export function ShoppingList() {
               </CardContent>
             </Card>
           </div>
-        ) : displayedItems.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             {searchQuery
               ? `No items match "${searchQuery}".`
@@ -705,7 +759,7 @@ export function ShoppingList() {
         ) : (
           /* Feature 5 — Natural page scroll, no ScrollArea */
           <div className="space-y-3">
-            {displayedItems.map((item, i) => {
+            {visibleItems.map((item, i) => {
               const invMatch = item.completed ? undefined : inventoryByName.get(normalizeName(item.name))
               const displayCategory = item.category || invMatch?.category
               return (
