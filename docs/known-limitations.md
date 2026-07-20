@@ -36,20 +36,32 @@ to their app where the location is already set.
   a standalone iOS PWA to open a link in the real Safari or share its storage.
 - **Native-app handoff via `window.open`** — web views suppress universal-link
   routing; unreliable.
+- **Native-app handoff via a real `<a href>` tap** (probe #84) — **ruled out by
+  evidence** (2026-07-12). Whether an https link opens an app is the destination
+  domain's responsibility: it must publish a universal-links association
+  (iOS `/.well-known/apple-app-site-association`, Android `/.well-known/assetlinks.json`)
+  and the app must declare the associated domain. Checked:
+  - `blinkit.com` → **valid AASA** (appIDs `…com.grofers.consumer`, paths incl.
+    `/s/*` search) → its links open the Blinkit app. Same for the other mature
+    commerce apps (Swiggy, Zepto, Flipkart, Amazon) — which is *why* those hand off.
+  - `comparify.pro` → **404, no AASA**. `quickcompare.in` → **no AASA** (serves its
+    HTML page). No association ⇒ nothing for the OS to route to ⇒ the link can only
+    open the website. **No client-side change (anchor, scheme, etc.) can fix this**
+    — it requires the aggregators to publish universal-links config or an API.
 
-### Current mitigation (PR #83)
+### Current mitigation (PR #83, re-affirmed after #84)
 - `priceComparison` setting defaults to `off` (opt-in).
 - The action is **hidden in standalone-PWA mode** (`useIsStandalonePWA`) and only
   shown in a real browser tab, where storage is shared with the user's context.
 - Settings copy states the browser-only limitation.
+- The Compare deeplink uses a real `<a href>` (kept from probe #84) rather than
+  `window.open` — harmless and marginally better, though it doesn't change the
+  outcome here since the providers publish no universal-links association.
 
-Both the default and the standalone gate are one-line reversible once a reliable
+The default and the standalone gate are one-line reversible once a reliable
 approach exists.
 
 ### Avenues to explore / ask the community
-- **Genuine `<a href>` tap vs `window.open`** — anchor taps route universal links
-  more reliably; worth testing whether it opens the aggregators' native apps on
-  iOS/Android (where location is already set). Low cost, not yet tried.
 - **Native shell** (Capacitor/Tauri wrapper) with an in-app-browser plugin or
   `_system` target that opens the real browser / shares cookies — changes the
   distribution model, but would remove the web-view isolation entirely.
