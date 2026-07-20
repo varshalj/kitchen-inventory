@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import Link from "next/link"
-import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic, Package, Copy } from "lucide-react"
+import { Check, Edit, Plus, Trash2, ShoppingCart, ShoppingBag, Search, X, ArrowUpDown, Mic, Package, Copy, Clock, Repeat, Hourglass } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,6 +35,7 @@ import {
   deleteShoppingItem,
   addToShoppingList,
   getInventoryItems,
+  getArchivedItems,
   addInventoryItem,
   deleteInventoryItem,
 } from "@/lib/client/api"
@@ -43,7 +44,7 @@ import { useShoppingCount } from "@/contexts/shopping-count-context"
 import { cn, findFuzzyMatch, normalizeName } from "@/lib/utils"
 import { VoiceCapture, type VoiceParsedItem } from "@/components/voice-capture"
 
-type SortBy = "recent" | "name" | "quantity"
+type SortBy = "smart" | "recent" | "name" | "quantity"
 
 export function ShoppingList() {
   const { toast } = useToast()
@@ -62,8 +63,11 @@ export function ShoppingList() {
   const [showCompleted, setShowCompleted] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<SortBy>("recent")
+  const [sortBy, setSortBy] = useState<SortBy>("smart")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  // Consume frequency by normalized name (from archived "consumed" history),
+  // powering the "Buy often" signal in the smart sort.
+  const [consumeFreq, setConsumeFreq] = useState<Map<string, number>>(new Map())
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [showInstamartSheet, setShowInstamartSheet] = useState(false)
@@ -76,12 +80,21 @@ export function ShoppingList() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [shoppingItems, invItems] = await Promise.all([
+        const [shoppingItems, invItems, archived] = await Promise.all([
           getShoppingItems(),
           getInventoryItems(),
+          getArchivedItems().catch(() => [] as InventoryItem[]),
         ])
         setItems(shoppingItems)
         setInventoryItems(invItems)
+        // Consume frequency = how many times each product was consumed historically.
+        const freq = new Map<string, number>()
+        for (const a of archived) {
+          if (a.archiveReason !== "consumed") continue
+          const key = normalizeName(a.name)
+          freq.set(key, (freq.get(key) ?? 0) + 1)
+        }
+        setConsumeFreq(freq)
         setIncompleteCount(shoppingItems.filter((i) => !i.completed).length)
       } catch {
         setItems([])
@@ -500,6 +513,53 @@ export function ShoppingList() {
           activeCategoryFilter === "Other" ? !catOf(it) : catOf(it) === activeCategoryFilter,
         )
 
+  // Phase 4: smart sort. A transparent priority + the single reason behind it,
+  // so ordering is explainable (the chip is the explanation), not a hidden score.
+  const DAY_MS = 86_400_000
+  const smartInfo = (
+    it: ShoppingItem,
+  ): { score: number; reason: { label: string; cls: string; Icon: typeof Clock } | null } => {
+    const key = normalizeName(it.name)
+    const inv = inventoryByName.get(key)
+    const freq = consumeFreq.get(key) ?? 0
+    const ageDays = it.addedOn ? (Date.now() - new Date(it.addedOn).getTime()) / DAY_MS : 0
+    let expDays = Infinity
+    if (inv?.expiryDate) {
+      const t = new Date(inv.expiryDate).getTime()
+      if (!Number.isNaN(t)) expDays = (t - Date.now()) / DAY_MS
+    }
+    const expiringSoon = !!inv && expDays <= 3
+
+    // In stock and fine → you're covered; sink to the bottom. The green
+    // "in your kitchen" hint already explains it, so no chip.
+    if (inv && !expiringSoon) return { score: -100, reason: null }
+
+    if (expiringSoon) {
+      return { score: 100, reason: { label: "Expiring soon", cls: "bg-warning/10 text-warning", Icon: Clock } }
+    }
+
+    // Not in stock — rank by how likely you are to want it next.
+    let score = 50 + Math.min(freq, 10)
+    let reason: { label: string; cls: string; Icon: typeof Clock } | null = null
+    if (freq >= 3) {
+      score += 30
+      reason = { label: "Buy often", cls: "bg-brand/10 text-brand", Icon: Repeat }
+    } else if (ageDays >= 14) {
+      score += 10
+      reason = { label: `On list ${Math.floor(ageDays / 7)}w`, cls: "text-muted-foreground", Icon: Hourglass }
+    }
+    return { score, reason }
+  }
+
+  const orderedItems =
+    sortBy === "smart"
+      ? [...visibleItems].sort((a, b) => {
+          const d = smartInfo(b).score - smartInfo(a).score
+          if (d !== 0) return d
+          return new Date(b.addedOn).getTime() - new Date(a.addedOn).getTime()
+        })
+      : visibleItems
+
   const openInstamartSheet = () => {
     setSelectedInstamartItems(new Set(activeItems.map((i) => i.id)))
     setShowInstamartSheet(true)
@@ -668,6 +728,7 @@ export function ShoppingList() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="smart">Smart</SelectItem>
               <SelectItem value="recent">Recently Added</SelectItem>
               <SelectItem value="name">By Name</SelectItem>
               <SelectItem value="quantity">By Quantity</SelectItem>
@@ -748,7 +809,7 @@ export function ShoppingList() {
               </CardContent>
             </Card>
           </div>
-        ) : visibleItems.length === 0 ? (
+        ) : orderedItems.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             {searchQuery
               ? `No items match "${searchQuery}".`
@@ -759,9 +820,10 @@ export function ShoppingList() {
         ) : (
           /* Feature 5 — Natural page scroll, no ScrollArea */
           <div className="space-y-3">
-            {visibleItems.map((item, i) => {
+            {orderedItems.map((item, i) => {
               const invMatch = item.completed ? undefined : inventoryByName.get(normalizeName(item.name))
               const displayCategory = item.category || invMatch?.category
+              const reason = sortBy === "smart" && !item.completed ? smartInfo(item).reason : null
               return (
               <AnimatedItem key={item.id} index={i}>
               <Card className={item.completed ? "bg-muted/50" : ""}>
@@ -842,6 +904,20 @@ export function ShoppingList() {
                       {(item.quantity > 1 || (item.unit && item.unit !== "pcs")) && (
                         <div className="text-sm text-muted-foreground mt-0.5">
                           {formatQuantityUnit(item.quantity, item.unit)}
+                        </div>
+                      )}
+
+                      {reason && (
+                        <div className="mt-1.5">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+                              reason.cls,
+                            )}
+                          >
+                            <reason.Icon className="h-3 w-3" />
+                            {reason.label}
+                          </span>
                         </div>
                       )}
 
