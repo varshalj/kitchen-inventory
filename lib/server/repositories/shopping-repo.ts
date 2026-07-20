@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { ShoppingItem } from "@/lib/types"
+import { normalizeName } from "@/lib/utils"
 
 const TABLE = "shopping_items"
 
@@ -92,44 +93,32 @@ export const shoppingRepo = {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error("Unauthorized")
 
-    const { data: existing, error: findError } = await supabase
+    // Roll-up: merge into an existing ACTIVE item with the same normalized name
+    // (so "Onion"/"onions"/"Onions" collapse into one row) AND a matching unit.
+    // Different units stay separate — we don't sum 2 kg with 3 pcs. Matching is
+    // conservative (normalized-exact), so it only ever under-merges, never
+    // combines genuinely different products ("tomato" vs "local tomato").
+    const target = normalizeName(item.name)
+    const incomingUnit = item.unit ?? null
+
+    const { data: activeItems, error: findError } = await supabase
       .from(TABLE)
       .select("*")
-      .eq("name", item.name)
       .eq("completed", false)
       .eq("user_id", user.id)
-      .limit(1)
 
     if (findError) throw findError
 
-    if (existing?.[0]) {
-      const existingUnit = existing[0].unit ?? null
-      const incomingUnit = item.unit ?? null
-      const unitMatches = existingUnit === incomingUnit
+    const mergeTarget = (activeItems ?? []).find(
+      (r) => normalizeName(r.name) === target && (r.unit ?? null) === incomingUnit,
+    )
 
-      if (!unitMatches) {
-        // Different units — create a separate row instead of merging
-        const { data, error } = await supabase
-          .from(TABLE)
-          .insert({
-            id: crypto.randomUUID(),
-            ...toDb(item),
-            user_id: user.id,
-          })
-          .select()
-
-        if (error) throw error
-        if (!data?.[0]) throw new Error("Insert failed")
-        return toDomain(data[0])
-      }
-
-      const mergedQuantity =
-        (existing[0].quantity ?? 0) + (item.quantity ?? 1)
-
+    if (mergeTarget) {
+      const mergedQuantity = (mergeTarget.quantity ?? 0) + (item.quantity ?? 1)
       const { data: updated, error: updateError } = await supabase
         .from(TABLE)
         .update({ quantity: mergedQuantity })
-        .eq("id", existing[0].id)
+        .eq("id", mergeTarget.id)
         .eq("user_id", user.id)
         .select()
 

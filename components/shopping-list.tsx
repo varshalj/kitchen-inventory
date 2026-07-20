@@ -39,7 +39,7 @@ import {
 } from "@/lib/client/api"
 import type { ShoppingItem, InventoryItem } from "@/lib/types"
 import { useShoppingCount } from "@/contexts/shopping-count-context"
-import { cn, findFuzzyMatch } from "@/lib/utils"
+import { cn, findFuzzyMatch, normalizeName } from "@/lib/utils"
 import { VoiceCapture, type VoiceParsedItem } from "@/components/voice-capture"
 
 type SortBy = "recent" | "name" | "quantity"
@@ -146,8 +146,10 @@ export function ShoppingList() {
     const name = newItem.name.trim()
     if (!name) return
 
-    // Check for duplicates in current list
-    const existing = items.find((i) => i.name.toLowerCase() === name.toLowerCase())
+    // Check for duplicates in current list — normalized so "onion"/"onions"
+    // collapse (matches the server-side roll-up in shopping-repo).
+    const target = normalizeName(name)
+    const existing = items.find((i) => normalizeName(i.name) === target)
 
     if (existing) {
       if (!existing.completed) {
