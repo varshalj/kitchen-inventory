@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { logAIInteraction } from "@/lib/server/ai-store"
 import { requireUser } from "@/lib/server/require-user"
-import { getLLM, primaryModelId } from "@/lib/server/llm"
+import { getLLM, primaryModelId, parseModelJson } from "@/lib/server/llm"
 
 // Bump this any time the system prompt is meaningfully edited so we can filter
 // training data by prompt era. See migration 202605270001.
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
     const modelRawText = completion.choices[0]?.message?.content ?? null
     if (!modelRawText) throw new Error("Empty response from OpenAI")
 
-    const rawParsed = JSON.parse(modelRawText)
+    const rawParsed = parseModelJson(modelRawText)
     const normalized = normalizeModelOutput(rawParsed)
     const validated = modelOutputSchema.safeParse(normalized)
 

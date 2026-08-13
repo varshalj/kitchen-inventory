@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getLLM } from "@/lib/server/llm"
+import { getLLM, parseModelJson } from "@/lib/server/llm"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { computePantryMatches, computeCompatibilityScore } from "@/lib/server/pantry-match"
@@ -83,8 +83,9 @@ export async function POST(request: NextRequest) {
 
     let parsed: any
     try {
-      parsed = JSON.parse(raw)
+      parsed = parseModelJson(raw)
     } catch {
+      console.error("recipe parse: unparseable model output:", raw.slice(0, 500))
       return NextResponse.json(
         { error: "AI returned invalid JSON. Please try again." },
         { status: 500 },
