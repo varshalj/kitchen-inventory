@@ -489,9 +489,47 @@ Each stage shippable independently — Stage 1 alone is already a major UX upgra
 
 ---
 
+## ADR 011 — LLM access: provider-agnostic client + env-driven models (OpenRouter)
+
+**Date:** 2026-08-13
+**Status:** Accepted
+
+### Context
+
+Every AI route (`propose-items` scan, `parse-voice`, `meal-plan`, `recipes/parse-text`) instantiated `new OpenAI({ apiKey })` inline and hardcoded `model: "gpt-4o-mini"`. Two problems surfaced: (1) an exhausted OpenAI billing account took all AI features down with no fallback, and (2) trying a different model — free or paid — meant editing and redeploying code in four places. We wanted to switch providers/models (including free-first with a paid fallback) and keep spend controllable, without a code change per switch.
+
+### Decision
+
+Introduce a single factory, [`lib/server/llm.ts`](lib/server/llm.ts) → `getLLM(modelEnv, default)`, that all routes call instead of constructing a client. It selects the provider by key precedence (**`OPENROUTER_API_KEY` → OpenRouter**, else `OPENAI_API_KEY` → direct OpenAI), sets the matching `baseURL`, and resolves a per-route model from env (`LLM_MODEL_SCAN` / `_VOICE` / `_MEAL_PLAN` / `_RECIPE`). Each env var is a comma-separated list — first id is primary, the rest become OpenRouter's `models` fallback chain. Default stays `openai/gpt-4o-mini` so the migration is behaviourally a no-op until a route is deliberately repointed. The `openai/` prefix is stripped automatically on the direct-OpenAI path.
+
+### Rationale
+
+- Both providers are OpenAI-wire-compatible, so this is a `baseURL` + key swap — no SDK rewrite, and we keep the existing `openai` npm client, message/vision types, and `response_format: json_object` usage untouched.
+- OpenRouter gives one key across hundreds of models, per-key spend caps, and native fallback — matching "switch freely" + "costs under control" without us building routing.
+- Env-driven model ids mean free/paid moves happen from the hosting dashboard, per route, no redeploy.
+- Provenance logging (SLM training data) now records the *actual* resolved model via `primaryModelId(...)` instead of a hardcoded constant, so training rows stay accurate across model changes.
+
+### Alternatives considered
+
+- **Vercel AI Gateway.** Also OpenAI-compatible and strong if we commit to Vercel's dashboard for observability/failover. Rejected as the default because OpenRouter has the wider free-model catalog and isn't coupled to our host — but the abstraction is provider-neutral, so pointing `LLM_BASE_URL` at the gateway is a config change, not code.
+- **Migrate to the Vercel `ai` SDK (`generateText`/`generateObject`).** Cleaner multi-provider ergonomics, but a larger rewrite of working routes (vision message shapes, JSON-mode, provenance capture) for no capability we can't get via `baseURL`.
+- **Keep inline clients, just add env for the model string.** Doesn't solve provider failover or give one place to reason about keys/baseURL; would re-fragment the moment a second provider is added.
+
+### Known trade-off
+
+OpenRouter's fallback triggers on availability (error / rate-limit), **not** answer quality — a free model returning confidently-wrong JSON is a "success" and won't fail over. So free models are safe to default only on the text routes; the vision scan (`LLM_MODEL_SCAN`) stays on paid `gpt-4o-mini` until a free vision model is A/B-tested against real receipts/shelf photos. Free-tier prompts may also be used for training by some providers — a privacy consideration since scans include receipts.
+
+### Revisit when
+
+- We standardise on Vercel for hosting and want its gateway's observability → flip `LLM_BASE_URL` / keys, no route changes.
+- A free vision model passes an A/B against real scans → move `LLM_MODEL_SCAN` to `<free>,openai/gpt-4o-mini`.
+- The per-user BYO-key path ([`lib/server/ai-provider-validation.ts`](lib/server/ai-provider-validation.ts)) needs to route through a gateway too — it still validates against OpenAI directly and is intentionally out of scope here.
+
+---
+
 ## How to add a new decision
 
-1. Increment the ADR number (next one is ADR 011).
+1. Increment the ADR number (next one is ADR 012).
 2. Use the template above: Date, Status, Context, Decision, Rationale, Alternatives, Revisit triggers.
 3. Don't edit historical entries to "fix" the rationale in hindsight. Add a new ADR that supersedes the old one — keeps the reasoning history honest.
 4. Update the entry's Status if it's later superseded: `Status: Superseded by ADR 0XX`.

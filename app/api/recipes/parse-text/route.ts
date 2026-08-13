@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import OpenAI from "openai"
+import { getLLM } from "@/lib/server/llm"
 import { createSupabaseFromRequest } from "@/lib/server/create-supabase-server"
 import { inventoryRepo } from "@/lib/server/repositories/inventory-repo"
 import { computePantryMatches, computeCompatibilityScore } from "@/lib/server/pantry-match"
@@ -50,24 +50,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const apiKey = process.env.OPENAI_API_KEY
-    if (!apiKey) {
+    const llm = getLLM(process.env.LLM_MODEL_RECIPE)
+    if (!llm) {
       return NextResponse.json(
         { error: "AI service not configured." },
         { status: 503 },
       )
     }
 
-    const openai = new OpenAI({ apiKey })
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await llm.client.chat.completions.create({
+      model: llm.model,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `Extract the recipe from this text:\n\n---\n${text.substring(0, 8000)}` },
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
+      ...(llm.models ? { models: llm.models } : {}),
     })
 
     const raw = completion.choices[0]?.message?.content
