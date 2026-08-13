@@ -3,12 +3,13 @@ import { z } from "zod"
 import { getUserConfidenceThreshold, logAIInteraction } from "@/lib/server/ai-store"
 import { requireUser } from "@/lib/server/require-user"
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin"
+import { getLLM, primaryModelId, type ResolvedLLM } from "@/lib/server/llm"
 import OpenAI from "openai"
 
 // Bump this any time the system prompt is meaningfully edited so we can filter
 // training data by prompt era. See migration 202605270001.
 const PROMPT_VERSION = "propose-items-v3-categories-expanded"
-const MODEL_VERSION = "gpt-4o-mini"
+const MODEL_ENV = process.env.LLM_MODEL_SCAN
 const STORAGE_BUCKET = "ai-scan-images"
 
 const requestSchema = z.object({
@@ -97,12 +98,6 @@ Example response:
 {"proposals":[{"name":"Butter","brand":"Amul","category":"Dairy","expiryDate":"${new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0]}","quantity":1,"unit":"pcs","name_raw":"Amul Butter Salted","brand_raw":"AMUL","quantity_raw":"500g","price_source":null}],"confidence":0.9,"reasoning":"Detected Amul Butter on shelf"}`
 }
 
-function getOpenAIClient(): OpenAI | null {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return null
-  return new OpenAI({ apiKey })
-}
-
 /**
  * GPT sometimes returns variations like "items" instead of "proposals",
  * or wraps the array in a different key, or omits confidence/reasoning.
@@ -178,7 +173,7 @@ function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unkn
 }
 
 async function callModel(
-  client: OpenAI,
+  llm: ResolvedLLM,
   userInput: string,
   imageBase64?: string,
   imagesBase64?: string[],
@@ -217,12 +212,13 @@ async function callModel(
     messages.push({ role: "user", content: userInput })
   }
 
-  const completion = await client.chat.completions.create({
-    model: MODEL_VERSION,
+  const completion = await llm.client.chat.completions.create({
+    model: llm.model,
     messages,
     response_format: { type: "json_object" },
     max_tokens: imagesBase64 && imagesBase64.length > 1 ? 4096 : 2048,
     temperature: 0.3,
+    ...(llm.models ? { models: llm.models } : {}),
   })
 
   const rawText = completion.choices[0]?.message?.content ?? ""
@@ -319,12 +315,15 @@ export async function POST(req: NextRequest) {
   // Pre-generate id so we can use it for the image storage path; the row is
   // inserted via logAIInteraction at the end with the same id.
   const interactionId = crypto.randomUUID()
+  // Resolved up front so provenance logging in the catch block records the same
+  // model the request used.
+  const modelVersion = primaryModelId(MODEL_ENV)
 
   try {
-    const client = getOpenAIClient()
+    const llm = getLLM(MODEL_ENV)
 
-    // ── Dev fallback: no OPENAI_API_KEY. Skip image upload + logging. ──
-    if (!client) {
+    // ── Dev fallback: no LLM key configured. Skip image upload + logging. ──
+    if (!llm) {
       if (process.env.NODE_ENV === "production") {
         throw new Error("OPENAI_API_KEY is not configured")
       }
@@ -349,7 +348,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Call the model and capture the LITERAL string before any parsing. ──
-    const { rawText, normalized } = await callModel(client, userInput, imageBase64, imagesBase64)
+    const { rawText, normalized } = await callModel(llm, userInput, imageBase64, imagesBase64)
     const parsedOutput = modelOutputSchema.safeParse(normalized)
 
     if (!parsedOutput.success) {
@@ -364,7 +363,7 @@ export async function POST(req: NextRequest) {
         parsedResponse: null,
         status: "error",
         errorMessage: parsedOutput.error.message,
-        modelVersion: MODEL_VERSION,
+        modelVersion,
         promptVersion: PROMPT_VERSION,
         surface: "photo",
         imagePaths: imagePaths.length > 0 ? imagePaths : null,
@@ -384,7 +383,7 @@ export async function POST(req: NextRequest) {
       modelNormalizedResponse: normalized,
       parsedResponse: parsedOutput.data,
       status: "success",
-      modelVersion: MODEL_VERSION,
+      modelVersion,
       promptVersion: PROMPT_VERSION,
       surface: "photo",
       imagePaths: imagePaths.length > 0 ? imagePaths : null,
@@ -411,7 +410,7 @@ export async function POST(req: NextRequest) {
       parsedResponse: null,
       status: "error",
       errorMessage: message,
-      modelVersion: MODEL_VERSION,
+      modelVersion,
       promptVersion: PROMPT_VERSION,
       surface: "photo",
     })

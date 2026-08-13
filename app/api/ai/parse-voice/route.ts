@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { logAIInteraction } from "@/lib/server/ai-store"
 import { requireUser } from "@/lib/server/require-user"
-import OpenAI from "openai"
+import { getLLM, primaryModelId } from "@/lib/server/llm"
 
 // Bump this any time the system prompt is meaningfully edited so we can filter
 // training data by prompt era. See migration 202605270001.
 const PROMPT_VERSION = "voice-v3-categories-expanded"
-const MODEL_VERSION = "gpt-4o-mini"
+const MODEL_ENV = process.env.LLM_MODEL_VOICE
 
 const requestSchema = z.object({
   transcript: z.string().min(1),
@@ -74,12 +74,6 @@ Examples:
 - "aadha litre doodh" → [{"name":"Milk","quantity":0.5,"unit":"L","name_raw":"doodh","quantity_raw":"aadha litre"}]`
 }
 
-function getOpenAIClient(): OpenAI | null {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return null
-  return new OpenAI({ apiKey })
-}
-
 function normalizeModelOutput(raw: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...raw }
 
@@ -126,11 +120,14 @@ export async function POST(req: NextRequest) {
 
   const { transcript, target, lang } = parsed.data
   const userId = user.id
+  // Resolved up front so it's available for provenance logging in the catch
+  // block even if the client call throws.
+  const modelVersion = primaryModelId(MODEL_ENV)
 
   try {
-    const client = getOpenAIClient()
+    const llm = getLLM(MODEL_ENV)
 
-    if (!client) {
+    if (!llm) {
       if (process.env.NODE_ENV === "production") {
         throw new Error("OPENAI_API_KEY is not configured")
       }
@@ -146,8 +143,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const completion = await client.chat.completions.create({
-      model: MODEL_VERSION,
+    const completion = await llm.client.chat.completions.create({
+      model: llm.model,
       messages: [
         { role: "system", content: buildVoicePrompt(target) },
         { role: "user", content: `Parse this spoken grocery list (language hint: ${lang || "en-IN"}):\n\n"${transcript}"` },
@@ -155,6 +152,7 @@ export async function POST(req: NextRequest) {
       response_format: { type: "json_object" },
       max_tokens: 768,
       temperature: 0.2,
+      ...(llm.models ? { models: llm.models } : {}),
     })
 
     // ── Capture literal model output BEFORE JSON.parse / normalise (leg b). ──
@@ -174,7 +172,7 @@ export async function POST(req: NextRequest) {
         parsedResponse: null,
         status: "error",
         errorMessage: validated.error.message,
-        modelVersion: MODEL_VERSION,
+        modelVersion,
         promptVersion: PROMPT_VERSION,
         surface: "voice",
       })
@@ -191,7 +189,7 @@ export async function POST(req: NextRequest) {
       modelNormalizedResponse: normalized,
       parsedResponse: validated.data,
       status: "success",
-      modelVersion: MODEL_VERSION,
+      modelVersion,
       promptVersion: PROMPT_VERSION,
       surface: "voice",
     })
@@ -212,7 +210,7 @@ export async function POST(req: NextRequest) {
       parsedResponse: null,
       status: "error",
       errorMessage: message,
-      modelVersion: MODEL_VERSION,
+      modelVersion,
       promptVersion: PROMPT_VERSION,
       surface: "voice",
     })

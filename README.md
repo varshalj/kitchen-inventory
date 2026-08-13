@@ -27,7 +27,7 @@ An AI-powered PWA that tracks pantry items and expiry dates, matches imported re
 | Framework | Next.js 16 (App Router) |
 | Database | Supabase (PostgreSQL + Row Level Security) |
 | Auth | Supabase Auth (Google OAuth + magic link) |
-| AI | OpenAI GPT-4o-mini (vision + text) |
+| AI | OpenRouter / OpenAI-compatible, GPT-4o-mini default (vision + text) |
 | UI | Tailwind CSS 4, shadcn/ui, Radix UI, Framer Motion |
 | Deployment | Vercel |
 
@@ -76,7 +76,7 @@ OAuth-protected resource discovery available at `/.well-known/oauth-protected-re
 - Node.js 22+
 - pnpm 10+
 - Supabase project
-- OpenAI API key (for AI scan and recipe import)
+- An LLM provider key — OpenRouter (recommended) or OpenAI (for AI scan, voice, and recipe import)
 
 ### Setup
 
@@ -102,7 +102,9 @@ pnpm dev
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service role key (server-side only) |
-| `OPENAI_API_KEY` | For AI features | GPT-4o-mini for scan and recipe import |
+| `OPENROUTER_API_KEY` | One LLM key required | Recommended provider — powers scan, voice, meal plan, recipes. Takes precedence over `OPENAI_API_KEY` |
+| `OPENAI_API_KEY` | One LLM key required | Legacy direct-OpenAI path; used only if `OPENROUTER_API_KEY` is unset |
+| `LLM_MODEL_SCAN` / `_VOICE` / `_MEAL_PLAN` / `_RECIPE` | No | Per-route model override (comma-separated = primary + OpenRouter fallbacks). Default `openai/gpt-4o-mini`. See `.env.example` |
 | `KMS_MASTER_KEY` | For key vault | Encryption key for per-user API keys |
 | `EMAIL_CALLBACK_SECRET` | For email ingestion | Authenticates webhook calls from Relay.app |
 

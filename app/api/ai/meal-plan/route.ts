@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireUser } from "@/lib/server/require-user"
-import OpenAI from "openai"
+import { getLLM } from "@/lib/server/llm"
 
 export async function POST(req: NextRequest) {
   const { user } = await requireUser()
@@ -8,9 +8,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
-    return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 503 })
+  const llm = getLLM(process.env.LLM_MODEL_MEAL_PLAN)
+  if (!llm) {
+    return NextResponse.json({ error: "AI service not configured" }, { status: 503 })
   }
 
   const body = await req.json().catch(() => null)
@@ -20,10 +20,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const client = new OpenAI({ apiKey })
-
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const completion = await llm.client.chat.completions.create({
+      model: llm.model,
       messages: [
         {
           role: "system",
@@ -32,6 +30,7 @@ export async function POST(req: NextRequest) {
         { role: "user", content: prompt },
       ],
       max_tokens: 2048,
+      ...(llm.models ? { models: llm.models } : {}),
     })
 
     const mealPlan = completion.choices[0]?.message?.content
