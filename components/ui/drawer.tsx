@@ -5,9 +5,13 @@ import { Drawer as DrawerPrimitive } from 'vaul'
 import { XIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { useVisualViewportKeyboard } from '@/hooks/use-visual-viewport-keyboard'
 
 function Drawer({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root data-slot="drawer" {...props} />
+  // Vaul's own input repositioning is unreliable in installed iOS PWAs; we lift
+  // the sheet above the keyboard ourselves in DrawerContent (see below), so turn
+  // theirs off to avoid a double-shift. Callers can still override.
+  return <DrawerPrimitive.Root data-slot="drawer" repositionInputs={false} {...props} />
 }
 
 function DrawerTrigger({ ...props }: React.ComponentProps<typeof DrawerPrimitive.Trigger>) {
@@ -41,8 +45,10 @@ function DrawerOverlay({
 function DrawerContent({
   className,
   children,
+  style,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
+  const keyboardInset = useVisualViewportKeyboard()
   return (
     <DrawerPortal>
       <DrawerOverlay />
@@ -54,6 +60,10 @@ function DrawerContent({
           'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto max-h-[85vh] flex-col rounded-t-xl border-t shadow-lg',
           className,
         )}
+        // Lift the whole sheet above the on-screen keyboard when one is open, so
+        // bottom-anchored inputs aren't occluded (iOS PWA — see the hook). No-op
+        // when no keyboard (inset 0). `bottom` composes with Vaul's drag transform.
+        style={{ ...style, bottom: keyboardInset || undefined }}
         {...props}
       >
         {/* Drag handle — the grabber users pull down to dismiss. */}
