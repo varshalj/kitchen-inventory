@@ -525,6 +525,10 @@ OpenRouter's fallback triggers on availability (error / rate-limit), **not** ans
 - A free vision model passes an A/B against real scans → move `LLM_MODEL_SCAN` to `<free>,openai/gpt-4o-mini`.
 - The per-user BYO-key path ([`lib/server/ai-provider-validation.ts`](lib/server/ai-provider-validation.ts)) needs to route through a gateway too — it still validates against OpenAI directly and is intentionally out of scope here.
 
+### Runtime gotchas (learned in production)
+
+The provider swap surfaced several runtime seams `tsc`/build can't catch — 402 pre-flight cost errors from omitted `max_tokens`, non-OpenAI models wrapping JSON in markdown fences, BYOK silently falling back to the paid pool, and fast-drifting model slugs. All captured, with fixes, in the portable [OpenRouter integration playbook](openrouter-integration-playbook.md).
+
 ---
 
 ## How to add a new decision
