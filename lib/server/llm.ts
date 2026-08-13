@@ -41,6 +41,47 @@ export interface ResolvedLLM {
   viaOpenRouter: boolean
 }
 
+/**
+ * Parse a model's text output into JSON, tolerating provider quirks.
+ *
+ * OpenAI in `json_object` mode returns bare JSON, but other providers — notably
+ * Gemini via OpenRouter — routinely wrap it in a ```json … ``` markdown fence or
+ * prefix a line of prose, which makes a naive `JSON.parse` throw. This tries, in
+ * order: the raw string, the contents of a fenced code block, then the substring
+ * between the first `{`/`[` and the last `}`/`]`. Throws SyntaxError only if all
+ * fail. Callers should still log the *literal* raw text for provenance.
+ */
+export function parseModelJson(raw: string): any {
+  const text = raw.trim()
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    // fall through to tolerant strategies
+  }
+
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fenced?.[1]) {
+    try {
+      return JSON.parse(fenced[1].trim())
+    } catch {
+      // fall through
+    }
+  }
+
+  const start = text.search(/[{[]/)
+  const end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"))
+  if (start !== -1 && end > start) {
+    try {
+      return JSON.parse(text.slice(start, end + 1))
+    } catch {
+      // fall through
+    }
+  }
+
+  throw new SyntaxError("Model output was not valid JSON")
+}
+
 function parseModelIds(modelEnv: string | undefined, defaultModel: string): string[] {
   const ids = (modelEnv ?? defaultModel)
     .split(",")

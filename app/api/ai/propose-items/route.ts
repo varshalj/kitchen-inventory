@@ -3,7 +3,7 @@ import { z } from "zod"
 import { getUserConfidenceThreshold, logAIInteraction } from "@/lib/server/ai-store"
 import { requireUser } from "@/lib/server/require-user"
 import { getSupabaseAdmin } from "@/lib/server/supabase-admin"
-import { getLLM, primaryModelId, type ResolvedLLM } from "@/lib/server/llm"
+import { getLLM, primaryModelId, parseModelJson, type ResolvedLLM } from "@/lib/server/llm"
 import OpenAI from "openai"
 
 // Bump this any time the system prompt is meaningfully edited so we can filter
@@ -224,7 +224,7 @@ async function callModel(
   const rawText = completion.choices[0]?.message?.content ?? ""
   if (!rawText) throw new Error("Empty response from OpenAI")
 
-  const parsed = JSON.parse(rawText)
+  const parsed = parseModelJson(rawText)
   return { rawText, normalized: normalizeModelOutput(parsed) }
 }
 
