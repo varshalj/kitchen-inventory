@@ -39,7 +39,11 @@ regardless — full rationale and patterns are in
   mid-animation). See the swipe engine in `components/inventory-dashboard.tsx`.
   Don't snap with fixed-duration CSS transitions.
 - **Bottom sheets → `components/ui/drawer.tsx` (Vaul)**, not raw Radix Dialog —
-  so they drag/flick to dismiss.
+  so they drag/flick to dismiss. The shared `DrawerContent` lifts itself above
+  the on-screen keyboard via `useVisualViewportKeyboard` (Vaul's own
+  `repositionInputs` is off — it's unreliable in installed iOS PWAs and would
+  double-shift). Don't re-enable it or remove the lift; inputs in a bottom-
+  anchored sheet get occluded otherwise.
 - **Motion respects `prefers-reduced-motion`.** CSS is handled globally in
   `globals.css`; JS/Framer Motion must check it (`useReducedMotion`, or the
   `swipeReduceMotion` pattern). Haptics go through `triggerHaptic` (already gated).
@@ -47,6 +51,10 @@ regardless — full rationale and patterns are in
   `bg-*/xx + backdrop-blur + supports-[backdrop-filter]:…`.
 - **Type & zoom.** Sizes are rem (scale with the user's setting); never pin the
   root font-size, and never cap viewport zoom (`maximumScale` / `userScalable:false`).
+  **Form controls must be ≥16px on mobile** or iOS force-zooms on focus — a
+  mobile `@media` guard in `globals.css` enforces this with enough specificity to
+  beat Tailwind `text-*` utilities. Don't weaken it; the fix for zoom-on-focus is
+  font-size, never zoom-capping.
 - **Feedback.** Optimistic UI with undo for destructive actions; respond on
   press, not release.
 

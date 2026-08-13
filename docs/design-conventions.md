@@ -87,6 +87,22 @@ Do **not** animate gesture-driven motion with fixed-duration CSS transitions or
   (`components/ui/sheet.tsx` remains only for the sidebar's side panel.)
 - Enter and exit along the same path; anchor popovers/menus to their trigger.
 
+### Gotcha: bottom sheets must clear the on-screen keyboard
+
+A `fixed bottom-0` sheet is covered by the mobile keyboard when an input inside
+it is focused — a *short* sheet (e.g. "Import from URL") ends up **entirely**
+behind it, so the field is invisible. Vaul's built-in `repositionInputs` is
+supposed to handle this but is unreliable in an installed iOS PWA.
+
+Fix (already in place — don't undo): the shared `DrawerContent` reads the
+keyboard inset via [`useVisualViewportKeyboard`](../hooks/use-visual-viewport-keyboard.ts)
+(VisualViewport API) and applies it as a `bottom` offset, lifting the whole sheet
+above the keyboard; Vaul's `repositionInputs` is turned **off** on the `Drawer`
+root so the two don't double-shift. Every input-bearing sheet inherits this for
+free — build new sheets on the shared drawer and don't re-enable `repositionInputs`.
+This is `VisualViewport`-dependent, so **verify on a real device / installed PWA**,
+not just a desktop browser.
+
 ---
 
 ## 4. Materials & depth
@@ -118,8 +134,16 @@ dialogs). Never stack one light translucent surface directly on another.
 - Sizes are rem (Tailwind defaults) and the root font-size is **not** pinned, so
   text scales with the user's browser/OS setting. Keep it that way.
 - Never cap viewport zoom (`maximumScale`, `userScalable: false`) — it fails
-  WCAG 1.4.4. iOS auto-zoom on input focus is prevented by the `16px` font-size
-  on form controls in `globals.css`; keep inputs ≥16px to avoid focus-zoom.
+  WCAG 1.4.4. The fix for iOS's zoom-on-focus is always font-size, never
+  zoom-capping.
+- **Form controls must be ≥16px on mobile**, or iOS force-zooms the viewport when
+  they're focused (and the zoomed state then pushes a bottom sheet off-screen). A
+  bare `input { font-size: 16px }` rule is **not enough** — any Tailwind `text-*`
+  utility on the input outranks it (class > element specificity) and re-breaks it,
+  which is exactly how a `text-sm` (14px) number field shipped the bug. `globals.css`
+  now re-asserts 16px inside a `@media (max-width: 767px)` block with a selector
+  specific enough to win (`input:not([type="checkbox"], [type="radio"])`); desktop
+  keeps its `md:text-*` sizes. Don't weaken that guard.
 - Size-specific tracking: large display sizes (`text-2xl`+) get negative
   letter-spacing via a base rule in `globals.css`; body stays at 0. Corner radii
   derive from `--radius` (the `--radius-{sm,md,lg,xl}` scale) — change the token,
