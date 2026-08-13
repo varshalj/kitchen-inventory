@@ -153,6 +153,18 @@
   select {
     font-size: 16px; /* Prevents iOS zoom on focus */
   }
+  /* The bare element rule above is beaten by any Tailwind text-* utility on an
+     input (class specificity > element), which re-introduces iOS's <16px
+     focus-zoom — e.g. a `text-sm` number field. On phones, re-assert the 16px
+     minimum with a selector specific enough to win (`input:not(...)` clears the
+     .text-sm bar). Desktop keeps its smaller input text via `md:text-*`. */
+  @media (max-width: 767px) {
+    input:not([type="checkbox"], [type="radio"]),
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
   /* Size-specific tracking (skill §15): large display text reads too loose at
      default spacing, so tighten it as it grows. Body sizes are left at 0.
      Any explicit `tracking-*` utility still overrides this. */
