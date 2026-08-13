@@ -66,6 +66,10 @@ export async function POST(request: NextRequest) {
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
+      // Cap output so OpenRouter's pre-flight cost check doesn't assume the
+      // model's full max output (e.g. Gemini Flash's 65k) and 402 on low
+      // balances. 4096 is ample for a recipe JSON (ingredients + steps).
+      max_tokens: 4096,
       ...(llm.models ? { models: llm.models } : {}),
     })
 
