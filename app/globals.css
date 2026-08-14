@@ -153,16 +153,20 @@
   select {
     font-size: 16px; /* Prevents iOS zoom on focus */
   }
-  /* The bare element rule above is beaten by any Tailwind text-* utility on an
-     input (class specificity > element), which re-introduces iOS's <16px
-     focus-zoom — e.g. a `text-sm` number field. On phones, re-assert the 16px
-     minimum with a selector specific enough to win (`input:not(...)` clears the
-     .text-sm bar). Desktop keeps its smaller input text via `md:text-*`. */
+  /* The bare element rule above is beaten by any Tailwind text-* utility on the
+     control (class specificity > element) — a `text-sm` input OR textarea then
+     re-triggers iOS's <16px focus-zoom. On phones, force 16px with !important so
+     no utility can out-rank it (specificity tricks are fragile — bare `textarea`/
+     `select` still lose to `.text-sm`). Chained single-arg `:not()` is used
+     deliberately: a `:not()` selector *list* (`:not(a, b)`) is unsupported on
+     older iOS Safari and one invalid selector drops the whole grouped rule,
+     silently disabling the guard. Desktop keeps its `md:text-*` sizes. DON'T
+     weaken this — the recurrence of the zoom bug traces straight back here. */
   @media (max-width: 767px) {
-    input:not([type="checkbox"], [type="radio"]),
+    input:not([type="checkbox"]):not([type="radio"]),
     textarea,
     select {
-      font-size: 16px;
+      font-size: 16px !important;
     }
   }
   /* Size-specific tracking (skill §15): large display text reads too loose at

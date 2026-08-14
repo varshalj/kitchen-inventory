@@ -5,6 +5,9 @@ integration onto OpenRouter (see [ADR 011](decisions.md) for the *why*). Every
 item below is something we actually hit in production; the goal is that the next
 project skips the same debugging loop.
 
+Companion doc: the [mobile-webview playbook](mobile-webview-playbook.md) collates
+the iOS/PWA runtime gotchas (input auto-zoom, keyboard occlusion) in the same style.
+
 OpenRouter is an OpenAI-wire-compatible gateway: one key, many providers
 (OpenAI, Google, Anthropic, DeepSeek, …), per-key spend caps, model fallback,
 and **BYOK** (route requests to *your own* provider key). The failure modes below

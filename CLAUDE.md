@@ -52,9 +52,11 @@ regardless — full rationale and patterns are in
 - **Type & zoom.** Sizes are rem (scale with the user's setting); never pin the
   root font-size, and never cap viewport zoom (`maximumScale` / `userScalable:false`).
   **Form controls must be ≥16px on mobile** or iOS force-zooms on focus — a
-  mobile `@media` guard in `globals.css` enforces this with enough specificity to
-  beat Tailwind `text-*` utilities. Don't weaken it; the fix for zoom-on-focus is
-  font-size, never zoom-capping.
+  mobile `@media` guard in `globals.css` enforces this with `!important` (a bare
+  element rule loses to Tailwind `text-*`, and `:not(a, b)` list syntax silently
+  drops the rule on older iOS — both caused a recurrence). Don't weaken it; the
+  fix for zoom-on-focus is font-size, never zoom-capping. Full write-up:
+  [docs/mobile-webview-playbook.md](docs/mobile-webview-playbook.md).
 - **Feedback.** Optimistic UI with undo for destructive actions; respond on
   press, not release.
 
