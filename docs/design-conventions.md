@@ -139,11 +139,14 @@ dialogs). Never stack one light translucent surface directly on another.
 - **Form controls must be ≥16px on mobile**, or iOS force-zooms the viewport when
   they're focused (and the zoomed state then pushes a bottom sheet off-screen). A
   bare `input { font-size: 16px }` rule is **not enough** — any Tailwind `text-*`
-  utility on the input outranks it (class > element specificity) and re-breaks it,
-  which is exactly how a `text-sm` (14px) number field shipped the bug. `globals.css`
-  now re-asserts 16px inside a `@media (max-width: 767px)` block with a selector
-  specific enough to win (`input:not([type="checkbox"], [type="radio"])`); desktop
-  keeps its `md:text-*` sizes. Don't weaken that guard.
+  utility outranks it (class > element specificity). `globals.css` forces 16px
+  inside a `@media (max-width: 767px)` block with **`!important`** (so no utility
+  can out-rank it) and **chained single-arg `:not()`** (`:not(a):not(b)` — the
+  `:not(a, b)` list form is unsupported on older iOS and drops the whole rule).
+  This bug **recurred once** because the first fix used bare `textarea`/`select`
+  selectors and the fragile list syntax — see
+  [docs/mobile-webview-playbook.md](mobile-webview-playbook.md) §1. Don't weaken
+  the guard; the fix for zoom-on-focus is always font-size, never zoom-capping.
 - Size-specific tracking: large display sizes (`text-2xl`+) get negative
   letter-spacing via a base rule in `globals.css`; body stays at 0. Corner radii
   derive from `--radius` (the `--radius-{sm,md,lg,xl}` scale) — change the token,
