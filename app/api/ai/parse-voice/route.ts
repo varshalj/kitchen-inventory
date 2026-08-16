@@ -150,7 +150,9 @@ export async function POST(req: NextRequest) {
         { role: "user", content: `Parse this spoken grocery list (language hint: ${lang || "en-IN"}):\n\n"${transcript}"` },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 768,
+      // Headroom for a long spoken list plus any model reasoning tokens, so the
+      // JSON doesn't truncate mid-array.
+      max_tokens: 1536,
       temperature: 0.2,
       ...(llm.models ? { models: llm.models } : {}),
     })
@@ -159,7 +161,13 @@ export async function POST(req: NextRequest) {
     const modelRawText = completion.choices[0]?.message?.content ?? null
     if (!modelRawText) throw new Error("Empty response from OpenAI")
 
-    const rawParsed = parseModelJson(modelRawText)
+    let rawParsed: any
+    try {
+      rawParsed = parseModelJson(modelRawText)
+    } catch (err) {
+      console.error("parse-voice: unparseable model output (first 1000 chars):", modelRawText.slice(0, 1000))
+      throw err
+    }
     const normalized = normalizeModelOutput(rawParsed)
     const validated = modelOutputSchema.safeParse(normalized)
 

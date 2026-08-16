@@ -216,7 +216,11 @@ async function callModel(
     model: llm.model,
     messages,
     response_format: { type: "json_object" },
-    max_tokens: imagesBase64 && imagesBase64.length > 1 ? 4096 : 2048,
+    // Generous cap: a rich multi-item shelf/receipt scan carries a lot of
+    // provenance per item, and "thinking" models (e.g. Gemini Flash) spend
+    // output budget on reasoning first — too low and the JSON truncates
+    // mid-object, which reads downstream as "not valid JSON".
+    max_tokens: imagesBase64 && imagesBase64.length > 1 ? 8192 : 4096,
     temperature: 0.3,
     ...(llm.models ? { models: llm.models } : {}),
   })
@@ -224,7 +228,16 @@ async function callModel(
   const rawText = completion.choices[0]?.message?.content ?? ""
   if (!rawText) throw new Error("Empty response from OpenAI")
 
-  const parsed = parseModelJson(rawText)
+  let parsed: any
+  try {
+    parsed = parseModelJson(rawText)
+  } catch (err) {
+    // Capture the raw output — otherwise this path throws before the row is
+    // logged with modelRawText, and nothing reaches the logs (the 500 request
+    // line carries no message), leaving the failure a black box.
+    console.error("propose-items: unparseable model output (first 1000 chars):", rawText.slice(0, 1000))
+    throw err
+  }
   return { rawText, normalized: normalizeModelOutput(parsed) }
 }
 
