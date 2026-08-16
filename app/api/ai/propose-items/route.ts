@@ -216,12 +216,15 @@ async function callModel(
     model: llm.model,
     messages,
     response_format: { type: "json_object" },
-    // Generous cap: a rich multi-item shelf/receipt scan carries a lot of
-    // provenance per item, and "thinking" models (e.g. Gemini Flash) spend
-    // output budget on reasoning first — too low and the JSON truncates
-    // mid-object, which reads downstream as "not valid JSON".
-    max_tokens: imagesBase64 && imagesBase64.length > 1 ? 8192 : 4096,
+    // With reasoning disabled (below) the output is pure JSON, so a modest cap
+    // both avoids truncation and keeps under OpenRouter's pre-flight cost gate.
+    max_tokens: imagesBase64 && imagesBase64.length > 1 ? 4096 : 3072,
     temperature: 0.3,
+    // Turn off the model's "thinking" budget (OpenRouter → Gemini thinkingBudget
+    // 0). Reasoning tokens are pure waste for structured extraction: they eat
+    // into max_tokens (truncation) and inflate the pre-flight cost estimate.
+    // OpenRouter-only param; omitted on the direct-OpenAI path.
+    ...(llm.viaOpenRouter ? { reasoning: { max_tokens: 0 } } : {}),
     ...(llm.models ? { models: llm.models } : {}),
   })
 

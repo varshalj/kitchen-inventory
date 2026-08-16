@@ -150,10 +150,11 @@ export async function POST(req: NextRequest) {
         { role: "user", content: `Parse this spoken grocery list (language hint: ${lang || "en-IN"}):\n\n"${transcript}"` },
       ],
       response_format: { type: "json_object" },
-      // Headroom for a long spoken list plus any model reasoning tokens, so the
-      // JSON doesn't truncate mid-array.
       max_tokens: 1536,
       temperature: 0.2,
+      // Disable the model's thinking budget — reasoning is wasted on structured
+      // extraction and eats into max_tokens / pre-flight cost. OpenRouter-only.
+      ...(llm.viaOpenRouter ? { reasoning: { max_tokens: 0 } } : {}),
       ...(llm.models ? { models: llm.models } : {}),
     })
 
