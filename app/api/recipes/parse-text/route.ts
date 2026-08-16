@@ -70,6 +70,9 @@ export async function POST(request: NextRequest) {
       // model's full max output (e.g. Gemini Flash's 65k) and 402 on low
       // balances. 4096 is ample for a recipe JSON (ingredients + steps).
       max_tokens: 4096,
+      // Disable the model's thinking budget — reasoning is wasted on structured
+      // extraction and eats into max_tokens / pre-flight cost. OpenRouter-only.
+      ...(llm.viaOpenRouter ? { reasoning: { max_tokens: 0 } } : {}),
       ...(llm.models ? { models: llm.models } : {}),
     })
 
